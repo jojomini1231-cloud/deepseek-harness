@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { join } from 'node:path'
 
 const { verifyDesktopRuntime } = vi.hoisted(() => ({
   verifyDesktopRuntime: vi.fn<(root: string, expected: string) => Promise<void>>(async () => undefined),
@@ -59,5 +60,31 @@ describe('packaged runtime verification', () => {
     expect(config.extraMetadata).toMatchObject({ version: `${productVersion}.20260921.1` })
     await config.afterPack(CONTEXT as never)
     expect(verifyDesktopRuntime.mock.calls[0]?.[1]).toBe(productVersion)
+  })
+
+  it('configures the local Linux AppImage target without update or policy metadata', async () => {
+    const productVersion = (JSON.parse(
+      await import('node:fs/promises').then(async fs => fs.readFile(new URL('../package.json', import.meta.url), 'utf8')),
+    ) as { version: string }).version
+    const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
+    verifyDesktopRuntime.mockClear()
+    const environment = {
+      DSH_DESKTOP_APP_ID: 'com.deepseek.harness',
+      DSH_DESKTOP_TARGET_PLATFORM: 'linux',
+      DSH_DESKTOP_TARGET_ARCH: 'x64',
+      DSH_DESKTOP_UNSIGNED: '1',
+    }
+    const config = createElectronBuilderConfig(environment, 'linux', 'x64')
+    expect(config.linux).toMatchObject({ category: 'Development', executableName: 'deepseek-harness', target: ['AppImage'] })
+    // Linux ships unpacked, so the kit's engine probe sees real directories and its WASM fallback works.
+    expect(config.asar).toBe(false)
+    expect(config.artifactName).toBe('deepseek-harness-${version}-${os}-${arch}-unsigned.${ext}')
+    expect(config.publish).toBeNull()
+    expect(config.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
+    expect(config.directories.output).toContain(join('targets', 'linux-x64', 'unsigned-artifacts'))
+    await config.afterPack(CONTEXT as never)
+    expect(verifyDesktopRuntime.mock.calls[0]).toEqual([
+      expect.any(String), productVersion, { platform: 'linux', arch: 'x64' },
+    ])
   })
 })

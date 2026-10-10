@@ -27,6 +27,8 @@ export interface Config {
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
   await ctx.plugin(workspaceDependencies, config)
+  // The ASAR layout redirects Office kit resolution into its unpacked twin; an unpacked
+  // application directory already holds physical paths, so the manifest resolves directly.
   const archive = runtimeArchivePath(config.runtimeDir) === undefined ? undefined : dirname(realpathSync(config.runtimeDir))
   const manifest = fileURLToPath(import.meta.resolve('@deepseek-ai/libreoffice-kit/package.json'))
   const packageRoot = dirname(archive === undefined ? manifest : join(`${archive}.unpacked`, relative(archive, manifest)))

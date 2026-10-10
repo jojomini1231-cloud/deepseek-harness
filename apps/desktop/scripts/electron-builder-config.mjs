@@ -60,7 +60,8 @@ export function createElectronBuilderConfig(
   const unsigned = env.DSH_DESKTOP_UNSIGNED === '1'
   const packagesMacOS = targetPlatform === 'darwin' || (targetPlatform === undefined && hostPlatform === 'darwin')
   const packagesWindows = resolvedPlatform === 'win32'
-  const policy = packagesMacOS && unsigned ? undefined : resolveDesktopPolicyEnvironment(env)
+  const packagesLinux = resolvedPlatform === 'linux'
+  const policy = unsigned && (packagesMacOS || packagesLinux) ? undefined : resolveDesktopPolicyEnvironment(env)
   if (resolvedPlatform === 'win32') installWindowsDirectoryInstaller()
   const macOSSigning = packagesMacOS && !unsigned ? resolveMacOSSigningEnvironment(env) : undefined
   if (packagesMacOS && !unsigned) resolveMacOSNotarizationEnvironment(env)
@@ -109,7 +110,9 @@ export function createElectronBuilderConfig(
     // Unsigned builds carry their own suffix so a shared file can never pass for a release artifact.
     artifactName: `deepseek-harness-\${version}-\${os}-\${arch}${unsigned ? '-unsigned' : ''}.\${ext}`,
     directories: { output: unsigned ? buildPaths.unsignedArtifacts : buildPaths.artifacts },
-    asar: true,
+    // Linux ships unpacked: Electron's ASAR filesystem misreports missing native Office engines
+    // to the kit's directory probe (electron#46323-adjacent), which aborts the WASM fallback.
+    asar: !packagesLinux,
     electronDist: buildPaths.electron,
     electronFuses: { runAsNode: true },
     beforeBuild: async () => {
@@ -168,6 +171,7 @@ export function createElectronBuilderConfig(
       writeUpdateInfo: false,
     },
     beforePack: async context => {
+      // With asar disabled, electron-builder ignores asarUnpack and the office closure stays flat.
       const office = await officePackageDirectories(buildPaths.dsh, { platform: resolvedPlatform, arch: resolvedArch })
       const patterns = office.map(directory => `**/${relative(buildPaths.dsh, directory).split(sep).join('/')}/**/*`)
       const existing = context.packager.config.asarUnpack ?? []
@@ -231,7 +235,10 @@ export function createElectronBuilderConfig(
       target: ['nsis'],
     },
     linux: {
+      icon: fileURLToPath(new URL('../resources/icon-macos.png', import.meta.url)),
       category: 'Development',
+      // Without this, electron-builder derives the executable name from the package name.
+      executableName: 'deepseek-harness',
       target: ['AppImage'],
     },
     nsis: {

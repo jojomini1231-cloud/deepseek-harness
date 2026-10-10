@@ -79,4 +79,17 @@ describe('desktop build version discovery', () => {
     await expect(suggestDesktopBuildVersion({ productVersion: PRERELEASE, target: 'win-x64', environment: {}, date: DATE, artifactsRoot }))
       .resolves.toBe(`${PRERELEASE}.${DATE}.3`)
   })
+
+  it('numbers the local Linux build from its AppImage names without a published bucket', async () => {
+    const artifactsRoot = await artifactsWith([
+      `deepseek-harness-${PRERELEASE}.${DATE}.2-linux-x86_64-unsigned.AppImage`,
+    ])
+    // A configured update destination would try to reach the bucket; the Linux target has none to list.
+    await expect(suggestDesktopBuildVersion({
+      productVersion: PRERELEASE, target: 'linux-x64', environment: {
+        DSH_DESKTOP_AUTO_UPDATE_ENV: 'test', DOWNLOAD_TEST_ORIGIN: 'https://updates.example.com',
+        DOWNLOAD_TEST_COS_SECRET_ID: 'id', DOWNLOAD_TEST_COS_SECRET_KEY: 'key',
+      }, date: DATE, artifactsRoot,
+    })).resolves.toBe(`${PRERELEASE}.${DATE}.3`)
+  })
 })

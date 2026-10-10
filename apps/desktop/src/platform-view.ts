@@ -50,10 +50,10 @@ export class DesktopPlatformView {
   /**
    * @param preload - bundled sandboxed Platform preload path.
    * @param getLocale - current resolved Desktop language.
-   * @param platform - operating system this shell runs on, reported to Platform.
+   * @param platform - operating system this shell runs on, reported to Platform; null when the host platform has no Desktop wire identity.
    */
   constructor(private readonly preload: string, private readonly getLocale: () => PlatformLocale,
-    private readonly platform: 'darwin' | 'win32') {}
+    private readonly platform: 'darwin' | 'win32' | null) {}
 
   /** @param next - private Host credentials; identity enrichment preserves an already open temporary document. */
   setSession(next: PlatformSession | null): void {

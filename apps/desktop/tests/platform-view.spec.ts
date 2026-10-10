@@ -149,6 +149,21 @@ it('injects the deployment and client identity headers only at the Platform orig
   manager.close()
 })
 
+it('reports the web identity when the host platform has no Desktop wire identity', async () => {
+  const owner = Object.assign(new EventEmitter(), {
+    webContents: new EventEmitter(), contentView: { addChildView: vi.fn(), removeChildView: vi.fn() }, isDestroyed: () => false,
+  })
+  // Linux has no desktop-* wire value, so the view carries the same web identity as the Host composition.
+  const manager = new DesktopPlatformView('/bundled/preload.cjs', () => 'en_US', null)
+  manager.setSession({ origin: 'https://platform.deepseek.com', userId: null, token: 'fixture-secret' })
+  await manager.open(owner, 'usage', bounds)
+  const request = { Cookie: 'route=user', 'x-client-platform': 'stale' }
+  expect(interceptHeaders(1, 'https://platform.deepseek.com/api/v0/users/current', request)).toMatchObject({
+    'x-client-platform': 'web',
+  })
+  manager.close()
+})
+
 it('samples the language and UTC offset on every Platform request', async () => {
   let locale: 'en_US' | 'zh_CN' = 'en_US'
   const owner = Object.assign(new EventEmitter(), {

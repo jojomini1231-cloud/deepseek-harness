@@ -3,7 +3,7 @@ import { createRequire, type ModuleHooks } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, sep } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
-import { installOfficeEngineResolution } from '../src/office-engine.ts'
+import { installOfficeEngineResolution, packagedApplicationPath } from '../src/office-engine.ts'
 import { PackageManifests } from '../../../packages/boot/hmr/src/package-manifest.ts'
 
 const roots: string[] = []
@@ -96,6 +96,18 @@ it('leaves a prepared runtime without an archive unchanged', () => {
   const root = mkdtempSync(join(tmpdir(), 'desktop-office-prepared-'))
   roots.push(root)
   expect(installOfficeEngineResolution(join(root, 'dsh'))).toBeUndefined()
+})
+
+it('treats an unpacked application directory as packaged while installing no engine redirection', () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'desktop-office-unpacked-')))
+  roots.push(root)
+  const runtime = join(root, 'app', 'dsh')
+  mkdirSync(runtime, { recursive: true })
+  // Linux ships without ASAR: the application is packaged, but engine files resolve physically.
+  expect(packagedApplicationPath(runtime)).toBe(join(root, 'app'))
+  expect(installOfficeEngineResolution(runtime)).toBeUndefined()
+  expect(packagedApplicationPath(join(root, 'app.asar', 'dsh'))).toBe(join(root, 'app.asar'))
+  expect(packagedApplicationPath(join(root, 'profiles', 'desktop'))).toBeUndefined()
 })
 
 it('preserves a renamed runtime directory when locating the unpacked engine', () => {

@@ -106,11 +106,19 @@ function checkKoffi() {
   }
 }
 
-/** Encode and decode a pixel through the packaged libvips binary. */
+/**
+ * Encode a pixel through the packaged libvips binary; on Linux Electron, additionally decode it back.
+ * Linux skips the decode half: Electron's Linux binaries leak glib symbols into the process
+ * (electron#46323), and sharp's second libvips call from a decode pipeline crashes on the clash.
+ */
 async function checkSharp() {
   const sharp = requireRuntime('sharp')
   const pixel = Buffer.from([17, 103, 231])
   const png = await sharp(pixel, { raw: { width: 1, height: 1, channels: 3 } }).png().toBuffer()
+  if (process.platform === 'linux') {
+    console.error('runtime payload: sharp decode skipped (electron#46323)')
+    return
+  }
   const decoded = await sharp(png).raw().toBuffer({ resolveWithObject: true })
   assert.equal(decoded.info.width, 1)
   assert.equal(decoded.info.height, 1)

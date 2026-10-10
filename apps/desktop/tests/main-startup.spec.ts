@@ -57,6 +57,8 @@ const harness = await vi.hoisted(async () => {
   const platformDispose = vi.fn(() => platformDisposeDeferred?.promise ?? Promise.resolve())
   let platformCloseDeferred: ReturnType<typeof deferred> | undefined
   const platformCloseAndWait = vi.fn(() => platformCloseDeferred?.promise ?? Promise.resolve())
+  // The shell-side Platform identity each startup constructed, so platform reporting stays observable.
+  const platformViewPlatforms: Array<'darwin' | 'win32' | null> = []
   const readLoginShell = async (base: NodeJS.ProcessEnv) => ({
     environment: { ...base, DSH_TEST_LOGIN_SHELL: 'login' }, failures: [{ shell: '/account/shell', reason: 'timeout' }],
   })
@@ -196,6 +198,7 @@ const harness = await vi.hoisted(async () => {
     menu, popup, socketHeaders: vi.fn(), loginShell, readLoginShell, updateCheck, updateDownload, updateInstall,
     platformDispose,
     platformCloseAndWait,
+    platformViewPlatforms,
 
     get analyticsEnabled() { return analyticsEnabled },
     set analyticsEnabled(value: boolean) { analyticsEnabled = value; analyticsEnabledListener?.(value) },
@@ -352,6 +355,9 @@ vi.mock('../src/update-coordinator.ts', () => ({ DesktopUpdateCoordinator: class
 vi.mock('../src/platform-view.ts', async importOriginal => ({
   ...await importOriginal<typeof import('../src/platform-view.ts')>(),
   DesktopPlatformView: class {
+    constructor(_preload: string, _getLocale: () => unknown, public readonly platform: 'darwin' | 'win32' | null) {
+      harness.platformViewPlatforms.push(platform)
+    }
     notifyLocaleChanged() {}
     setSession() {}
     setBounds() {}
@@ -398,6 +404,7 @@ function applicationMenuItems(): MenuItemConstructorOptions[] {
 beforeEach(() => {
   vi.resetModules()
   vi.clearAllMocks()
+  harness.platformViewPlatforms.length = 0
   harness.dialog.showMessageBox.mockReset()
   harness.dialog.showMessageBox.mockResolvedValue({ response: 1 })
   testAuth.login.mockReset()
@@ -1192,6 +1199,8 @@ describe('desktop main startup', () => {
   ] as const)('raises the first workspace only for a Windows installer restart (%s, %j)', async (platform, args, raises) => {
     vi.stubGlobal('process', { ...process, platform, argv: ['desktop', ...args] })
     await import('../src/main.ts')
+    // The shell-side Platform identity matches the host; Linux has no desktop-* wire value.
+    expect(harness.platformViewPlatforms).toEqual([platform === 'darwin' ? 'darwin' : platform === 'win32' ? 'win32' : null])
     await harness.preparing.promise
     const window = harness.windows[0]!
     expect(window.moveTop).not.toHaveBeenCalled()

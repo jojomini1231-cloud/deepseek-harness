@@ -7,6 +7,7 @@ import { expect, it, vi } from 'vitest'
 const state = vi.hoisted(() => ({ root: '', directory: '' }))
 vi.mock('../scripts/desktop-package-environment.mjs', () => ({
   loadDesktopPackageEnvironment: () => ({ DSH_DESKTOP_WINDOWS_TOKEN_PIN: 'credential-sentinel' }),
+  localUnsignedPackageEnvironment: () => ({}),
   validateDesktopPackageEnvironment: () => {},
 }))
 vi.mock('../scripts/macos-signing-keychain.mjs', () => ({
@@ -27,6 +28,9 @@ vi.mock('../scripts/packaging-run.mjs', async (importOriginal) => {
   } }
 })
 
+// The injected rmSync failure only fires where packageTarget removes a stale release record, which
+// the signed win32 and darwin modes reach before any subprocess. The local Linux build strips every
+// release setting (its environment carries no secrets to redact), so it has no equivalent failure site.
 it.each(['win32', 'darwin'] as const)('records and prints redacted parent failures on %s', async (platform) => {
   state.root = await mkdtemp(join(tmpdir(), 'package-errors-'))
   const savedPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!

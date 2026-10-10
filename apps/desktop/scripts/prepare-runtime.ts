@@ -27,15 +27,18 @@ async function prepareElectron({ platform, arch }: DesktopTarget): Promise<strin
     () => downloadArtifact({ version, platform, arch, artifactName: 'electron', cacheRoot: BUILD_PATHS.downloads }))
   rmSync(BUILD_PATHS.electron, { recursive: true, force: true })
   await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'extract:electron', () => extractZip(archive, { dir: BUILD_PATHS.electron }))
-  const executable = join(BUILD_PATHS.electron, platform === 'win32' ? 'electron.exe' : 'Electron.app/Contents/MacOS/Electron')
+  const executable = join(BUILD_PATHS.electron,
+    platform === 'win32' ? 'electron.exe' : platform === 'darwin' ? 'Electron.app/Contents/MacOS/Electron' : 'electron')
   return execFileSync(executable, ['-p', 'process.versions.node'], {
     encoding: 'utf8', env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
   }).trim()
 }
 
 function prepareCli({ platform, arch }: DesktopTarget): void {
-  cpSync(join(import.meta.dirname, 'node-bin'), join(RUNTIME_ROOT, 'bin'), { recursive: true })
-  chmodSync(join(RUNTIME_ROOT, 'bin', 'node'), 0o755)
+  // The Windows batch wrapper is meaningless elsewhere, so only the POSIX shell script ships on Unix targets.
+  cpSync(join(import.meta.dirname, 'node-bin', 'node'), join(RUNTIME_ROOT, 'bin', 'node'))
+  if (platform === 'win32') cpSync(join(import.meta.dirname, 'node-bin', 'node.cmd'), join(RUNTIME_ROOT, 'bin', 'node.cmd'))
+  if (platform !== 'win32') chmodSync(join(RUNTIME_ROOT, 'bin', 'node'), 0o755)
   const cli = join(RUNTIME_ROOT, 'cli')
   prepareDesktopCli(cli, platform)
   if (platform === 'darwin') {

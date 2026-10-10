@@ -17,6 +17,7 @@ export interface DesktopElectronBuilderConfig {
     { readonly from: string, readonly to: 'dsh/node_modules', readonly filter: readonly ['**/*'] },
   ]
   readonly extraMetadata: { readonly dshDesktopAppId: string }
+  readonly asar: boolean
   readonly asarUnpack: readonly string[]
   readonly extraResources: readonly [
     { readonly from: string, readonly to: 'runtime' },
@@ -51,6 +52,12 @@ export interface DesktopElectronBuilderConfig {
     readonly allowElevation: false
     readonly allowToChangeInstallationDirectory: false
     readonly installerLanguages: readonly ['en_US', 'zh_CN']
+  }
+  readonly linux: {
+    readonly icon: string
+    readonly category: 'Development'
+    readonly executableName: 'deepseek-harness'
+    readonly target: readonly ['AppImage']
   }
   readonly beforeBuild: () => Promise<boolean>
   readonly beforePack: (context: BeforePackContext) => Promise<void>

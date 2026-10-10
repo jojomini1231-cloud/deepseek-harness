@@ -108,6 +108,8 @@ Architecture-specific builds report actual component-level compressed and instal
 
 `dev:desktop` builds the current workspace, projects the built CLI and private Desktop Host packages plus their dependency links into a disposable project, uses an isolated Harness home, opens the Main, Renderer, and Host debuggers, and starts unpackaged Electron without preparing release resources. The development runtime supplies workspace links to a separate plugin profile; plugin management and recovery use the same flow as packaged applications. Fixed macOS arm64, macOS x64, and Windows x64 package commands pass one target through runtime preparation, dsh preparation, and electron-builder; each also has an unpacked-directory variant for release-path verification before installer generation.
 
+The Linux x64 target exists only as a local unsigned AppImage build: no signing, notarization, update feed, release record, or upload path applies, and the Office engine falls back to WASM because no native LibreOffice kit is published for Linux. Linux ships without ASAR — Electron's ASAR filesystem misreports missing native Office engines to the kit's directory probe, which aborts the WASM fallback — and the payload smoke skips sharp's decode half because Electron's Linux binaries leak glib symbols that crash sharp's libvips pipeline ([electron#46323](https://github.com/electron/electron/issues/46323)).
+
 ## Alternatives considered
 
 **Use Electron's Node.js for dsh.** This saves package size but couples dsh to Electron's Node patches, fuses, native ABI, TLS behavior, and process lifecycle. A bundled upstream Node.js keeps dsh on its supported runtime.
@@ -157,7 +159,7 @@ Architecture-specific builds report actual component-level compressed and instal
 | Desktop profile | One Electron-owned reserved profile for external plugins and shared package links |
 | Plugin management | Shared Web Plugins page and Host service with launcher-supplied bundled pnpm |
 | Activation | Shared manager applies configuration through HMR when enabled; otherwise changes require restart |
-| Initial platforms | macOS arm64/x64 and Windows x64; Linux has no supported release target |
+| Initial platforms | macOS arm64/x64 and Windows x64; Linux builds locally as an unsigned AppImage and has no release target |
 | Update behavior | Background check, explicit confirmation before differential download and restart, startup dsh reconciliation |
 
 ## Risks

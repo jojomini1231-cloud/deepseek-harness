@@ -20,15 +20,19 @@ function fixture() {
     await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   })
   const application = join(root, 'Application 中文 with spaces.app')
-  const platform = process.platform === 'win32' ? 'win32' : 'darwin'
+  const platform = process.platform === 'win32' ? 'win32' : process.platform === 'linux' ? 'linux' : 'darwin'
   const resources = join(application, ...platform === 'darwin' ? ['Contents', 'Resources'] : ['resources'])
   const cli = join(resources, 'runtime', 'cli')
   prepareDesktopCli(cli, platform)
-  const electron = join(application, ...platform === 'darwin' ? ['Contents', 'MacOS', 'DeepSeek Harness'] : ['DeepSeek Harness.exe'])
+  const electron = join(application, ...platform === 'darwin'
+    ? ['Contents', 'MacOS', 'DeepSeek Harness']
+    : platform === 'linux' ? ['deepseek-harness'] : ['DeepSeek Harness.exe'])
   mkdirSync(dirname(electron), { recursive: true })
   if (platform === 'win32') copyFileSync(process.execPath, electron)
   else symlinkSync(process.execPath, electron)
-  const entry = join(resources, 'app.asar', 'dsh', 'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'cli.js')
+  // Linux ships unpacked, so the dsh tree is a plain app directory instead of app.asar.
+  const entry = join(resources, ...platform === 'linux' ? ['app', 'dsh'] : ['app.asar', 'dsh'],
+    'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'cli.js')
   mkdirSync(dirname(entry), { recursive: true })
   writeFileSync(join(dirname(entry), 'package.json'), '{"type":"module"}\n')
   writeFileSync(entry, [

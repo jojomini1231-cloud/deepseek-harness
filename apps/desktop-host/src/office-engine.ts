@@ -7,11 +7,22 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 /**
  * Locate the archive containing a packaged runtime.
  * @param runtimeDir - Prepared or ASAR-contained runtime directory.
- * @returns Parent archive path, or undefined for a prepared directory.
+ * @returns Parent archive path, or undefined for a prepared or unpacked-application directory.
  */
 export function runtimeArchivePath(runtimeDir: string): string | undefined {
   const parent = dirname(runtimeDir)
   return basename(parent) === 'app.asar' ? parent : undefined
+}
+
+/**
+ * Locate the packaged application directory containing a runtime, ASAR or unpacked.
+ * Linux ships without ASAR, so its packaged runtime sits in a plain `app` directory.
+ * @param runtimeDir - Prepared, ASAR-contained, or unpacked-application runtime directory.
+ * @returns Parent application archive or directory, or undefined for a prepared directory.
+ */
+export function packagedApplicationPath(runtimeDir: string): string | undefined {
+  const parent = dirname(runtimeDir)
+  return basename(parent) === 'app.asar' || basename(parent) === 'app' ? parent : undefined
 }
 
 /**

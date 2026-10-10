@@ -134,6 +134,28 @@ it.each([
   expect(writeFileSync).not.toHaveBeenCalled()
 })
 
+it.each([false, true])('builds the local Linux AppImage with directory=%s without signing, update, or a release record', async (directory) => {
+  const { run, stages } = supervisor()
+  await packageTarget(parseDesktopPackageInvocation(['linux-x64', '--unsigned', ...(directory ? ['--dir'] : [])], 'linux', 'x64'), {
+    ...environment, CSC_LINK: 'unused.p12', APPLE_API_KEY: 'unused.p8',
+    DSH_DESKTOP_WINDOWS_TOKEN_PIN: 'unused-pin',
+  }, run)
+  expect(stages.at(-2)).toBe(`exec electron-builder --config electron-builder.config.mjs --linux --x64 --publish never${directory ? ' --dir' : ''}`)
+  expect(stages.at(-1)).toBe('exec tsx scripts/smoke-packaged-runtime.ts --unsigned')
+  expect(stages).not.toContain('preflight:windows-signing')
+  expect(stages).not.toContain('run sign:primary-runtime')
+  for (const call of run.run.mock.calls) {
+    expect(call[3].env).toMatchObject({ DSH_DESKTOP_UNSIGNED: '1', CSC_IDENTITY_AUTO_DISCOVERY: 'false' })
+    for (const key of ['CSC_LINK', 'APPLE_API_KEY', 'DSH_DESKTOP_WINDOWS_TOKEN_PIN']) {
+      expect(call[3].env).not.toHaveProperty(key)
+    }
+  }
+  expect(withMacOSNotarizationProxy).not.toHaveBeenCalled()
+  expect(packageMacOSArtifacts).not.toHaveBeenCalled()
+  expect(withWindowsSigningStage).not.toHaveBeenCalled()
+  expect(writeFileSync).not.toHaveBeenCalled()
+})
+
 it('fails unsigned macOS packaging when the assembled runtime cannot run', async () => {
   const { run, stages } = supervisor('exec tsx scripts/smoke-packaged-runtime.ts --unsigned')
   await expect(packageTarget(parseDesktopPackageInvocation(['mac-arm64', '--unsigned'], 'darwin', 'arm64'), environment, run))
