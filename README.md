@@ -40,6 +40,22 @@ pnpm dsh web
 
 `pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
 
+### Run the Desktop app
+
+The Electron desktop shell wraps the same bundled runtime in a native window. From a repository checkout, launch the development shell after `pnpm install`:
+
+```sh
+pnpm run dev:desktop
+```
+
+The command prepares the bundled interpreter payload on first use (which may download locked dependencies) and launches with an isolated development home; see the [Desktop README](apps/desktop/README.md) for the development flow. On a Linux x64 host you can also build a local unsigned AppImage that runs the same application without a checkout:
+
+```sh
+pnpm run package:desktop:linux:x64:unsigned
+```
+
+The AppImage requires FUSE at run time and needs no `.env` file or signing configuration. Image-attachment decoding is unreliable inside the packaged application until [electron#46323](https://github.com/electron/electron/issues/46323) is fixed upstream; the [Desktop README](apps/desktop/README.md) documents this and the remaining Linux limitations.
+
 ## Community and support
 
 - Submit feedback or bug reports through [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions).

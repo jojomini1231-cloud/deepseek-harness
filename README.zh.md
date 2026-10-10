@@ -44,6 +44,24 @@ pnpm dsh web
 
 `pnpm run build` 会准备仓库产物。`pnpm dsh web` 会直接使用这些已构建产物，不会重新构建。
 
+<a id="run-the-desktop-app"></a>
+
+### 运行 Desktop 应用
+
+Electron 桌面壳把同一内置运行时封装进原生窗口。在仓库检出中，执行 `pnpm install` 后启动开发壳：
+
+```sh
+pnpm run dev:desktop
+```
+
+该命令首次使用时会准备内置解释器负载（可能下载锁定的依赖），并使用隔离的开发 home 启动；开发流程详见 [Desktop README](apps/desktop/README.zh.md)。在 Linux x64 主机上，还可以构建无需检出即可运行的本地无签名 AppImage：
+
+```sh
+pnpm run package:desktop:linux:x64:unsigned
+```
+
+AppImage 运行时需要 FUSE，且无需 `.env` 文件或签名配置。上游 [electron#46323](https://github.com/electron/electron/issues/46323) 修复前，打包应用中的图片附件解码不可靠；[Desktop README](apps/desktop/README.zh.md) 记录了这一点以及其余 Linux 限制。
+
 ## 社区与支持
 
 - 通过 [GitHub Discussions](https://github.com/deepseek-ai/deepseek-harness/discussions) 提交反馈或 bug 报告。
