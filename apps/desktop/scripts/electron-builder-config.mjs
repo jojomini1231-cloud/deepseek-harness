@@ -235,10 +235,13 @@ export function createElectronBuilderConfig(
       target: ['nsis'],
     },
     linux: {
-      icon: fileURLToPath(new URL('../resources/icon-macos.png', import.meta.url)),
+      icon: fileURLToPath(new URL('../resources/icon.svg', import.meta.url)),
       category: 'Development',
       // Without this, electron-builder derives the executable name from the package name.
       executableName: 'deepseek-harness',
+      // The .desktop basename and StartupWMClass must equal the desktopName in package.json,
+      // which Electron uses as the X11 WM_CLASS / Wayland app_id the overview matches.
+      syncDesktopName: true,
       target: ['AppImage'],
     },
     nsis: {

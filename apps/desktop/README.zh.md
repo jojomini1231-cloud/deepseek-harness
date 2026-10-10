@@ -270,6 +270,8 @@ pnpm run package:desktop:linux:x64:unsigned
 
 这些命令忽略继承的发布配置，不读取任何 dotenv 文件，使用 `com.deepseek.harness` 作为应用 ID，并省略自动更新和强制更新配置。构建工具、标准网络代理与 `DSH_DESKTOP_NPM_REGISTRY` 仍可从 shell 提供。Office 引擎回退到 WASM，因为没有为 Linux 发布原生 LibreOffice kit。准备阶段和组装后的应用仍执行运行时完整性与冒烟检查；负载冒烟在 Linux 上跳过 sharp 的解码部分，因为 Electron 的 Linux 二进制泄漏的 glib 符号会使 sharp 的 libvips 管线崩溃（[electron#46323](https://github.com/electron/electron/issues/46323)），上游修复该冲突之前，打包应用中的图片附件解码不可靠。打包的 CLI 启动器为 `resources/runtime/cli/bin/dsh`；Linux 上不提供菜单驱动的命令安装。本地构建不生成更新源和发布完成记录，上传命令无法发布这些产物。运行 AppImage 需要 FUSE（libfuse2）；在无 FUSE 的环境传入 `--appimage-extract-and-run`。Linux 不是 Desktop 发布目标——这些命令仅构建本地无签名产物。
 
+AppImage 内置桌面图标的可缩放矢量副本，应用条目通过 `desktopName` 声明 `com.deepseek.harness` 桌面标识，因此应用总览能在任意尺寸解析图标，并把运行中的窗口与条目分组（Electron 把 `desktopName` 用作 X11 的 WM_CLASS 和 Wayland 的 app_id；打包的 `.desktop` 基础名和 `StartupWMClass` 经 `linux.syncDesktopName` 与其保持一致）。
+
 ### 用回环 registry 安装本地 Official 包
 
 测试 DMG 不包含 Official 按需目录所宣传的 provider 运行时，而正式发布才会把对应版本的 bundle 发到 npm。要在发布前安装本地构建的 bundle，请启动一个回环 registry，它会打包并提供该目录的完整本地依赖闭包：

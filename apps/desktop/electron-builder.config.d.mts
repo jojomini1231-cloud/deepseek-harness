@@ -57,6 +57,7 @@ export interface DesktopElectronBuilderConfig {
     readonly icon: string
     readonly category: 'Development'
     readonly executableName: 'deepseek-harness'
+    readonly syncDesktopName: true
     readonly target: readonly ['AppImage']
   }
   readonly beforeBuild: () => Promise<boolean>

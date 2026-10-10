@@ -75,7 +75,9 @@ describe('packaged runtime verification', () => {
       DSH_DESKTOP_UNSIGNED: '1',
     }
     const config = createElectronBuilderConfig(environment, 'linux', 'x64')
-    expect(config.linux).toMatchObject({ category: 'Development', executableName: 'deepseek-harness', target: ['AppImage'] })
+    expect(config.linux).toMatchObject({ category: 'Development', executableName: 'deepseek-harness', syncDesktopName: true, target: ['AppImage'] })
+    // The scalable SVG source keeps every icon size crisp in the application overview.
+    expect(config.linux.icon).toContain(join('resources', 'icon.svg'))
     // Linux ships unpacked, so the kit's engine probe sees real directories and its WASM fallback works.
     expect(config.asar).toBe(false)
     expect(config.artifactName).toBe('deepseek-harness-${version}-${os}-${arch}-unsigned.${ext}')
