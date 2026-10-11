@@ -22,30 +22,30 @@
   transition: none;
 }
 
-/* The Windows caption row remains outside every conversation and file panel. */
-:global([data-windows-titlebar]) .frame {
-  --dsh-windows-content-radius: 16px;
+/* The Desktop caption row remains outside every conversation and file panel. */
+:global([data-desktop-caption]) .frame {
+  --dsh-desktop-caption-radius: 16px;
   box-sizing: border-box;
-  padding-top: var(--dsh-windows-titlebar-height);
+  padding-top: var(--dsh-desktop-caption-height);
   background: var(--dsw-specific-sidebar-fill);
 }
 
-:global([data-windows-titlebar]) .centerCol {
+:global([data-desktop-caption]) .centerCol {
   background: var(--dsw-alias-bg-base);
-  border-radius: var(--dsh-windows-content-radius) 0 0 0;
+  border-radius: var(--dsh-desktop-caption-radius) 0 0 0;
   corner-shape: round;
 }
 
-:global([data-windows-titlebar]) .frame::before {
+:global([data-desktop-caption]) .frame::before {
   content: '';
   position: absolute;
   inset: 0 0 auto;
-  height: var(--dsh-windows-titlebar-height);
+  height: var(--dsh-desktop-caption-height);
   background: var(--dsw-specific-sidebar-fill);
   -webkit-app-region: drag;
 }
 
-:global([data-windows-titlebar]) .sidebarCol {
+:global([data-desktop-caption]) .sidebarCol {
   border-right: none;
 }
 
@@ -89,20 +89,20 @@
   --dsh-frame-top-clearance: 48px;
 }
 
-/* In-frame Windows content already clears the caption through .frame padding. */
-:global(html[data-windows-titlebar]) {
-  --dsh-frame-top-clearance: var(--dsh-windows-titlebar-height);
-  --dsh-frame-chrome-top: var(--dsh-windows-titlebar-height);
+/* In-frame content already clears the caption through .frame padding. */
+:global(html[data-desktop-caption]) {
+  --dsh-frame-top-clearance: var(--dsh-desktop-caption-height);
+  --dsh-frame-chrome-top: var(--dsh-desktop-caption-height);
 }
 
 /* Portalled overlays share a viewport inset without adding space to entry pages. */
 :global(html[data-platform='darwin']),
-:global(html[data-windows-titlebar]) {
+:global(html[data-desktop-caption]) {
   --dsh-frame-overlay-top: calc(var(--dsh-frame-top-clearance) + 20px);
 }
 
 :global(html[data-platform='darwin'][data-fullscreen]),
-:global(html[data-windows-titlebar][data-fullscreen]) {
+:global(html[data-desktop-caption][data-fullscreen]) {
   --dsh-frame-overlay-top: 20px;
   --dsh-frame-chrome-top: 0px;
 }

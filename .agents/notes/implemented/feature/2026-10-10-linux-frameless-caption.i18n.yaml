@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for 2026-10-10-linux-frameless-caption.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-10-linux-frameless-caption.md
+/agent-note-one-desktop-caption-across-windows-and-linux:
+  en: 8afa0517fe6ba93a
+  zh: 24787990a3c968ac
+/agent-note-one-desktop-caption-across-windows-and-linux/problem:
+  en: 58db9535bcbc34e3
+  zh: 2e08fbffe671d99b
+/agent-note-one-desktop-caption-across-windows-and-linux/decision:
+  en: 69807b073ea855b7
+  zh: 128012ecd62032d6
+/agent-note-one-desktop-caption-across-windows-and-linux/alternatives-considered:
+  en: 79e5b0ae8377f917
+  zh: cc757ce65f7a2b7b
+/agent-note-one-desktop-caption-across-windows-and-linux/consequences:
+  en: ee0fc6d62e7c86c5
+  zh: d6da2d7990addab7
+/agent-note-one-desktop-caption-across-windows-and-linux/related:
+  en: a1c8c6ac95f0281c
+  zh: c703ada1e83758f9
+/agent-note-one-desktop-caption-across-windows-and-linux/testing:
+  en: 33915e3643e5baf0
+  zh: 8ed0f75568d267b5

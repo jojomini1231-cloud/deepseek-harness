@@ -72,8 +72,39 @@ body {
 }
 
 .titlebar {
+  display: flex;
   flex: 0 0 36px;
+  align-items: center;
+  justify-content: flex-end;
   app-region: drag;
+}
+
+/* Drawn only where the platform supplies no window controls (Linux); the
+   document's caption strip is otherwise an empty drag surface. */
+.titlebar-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  app-region: no-drag;
+  cursor: default;
+  transition: background-color var(--ds-transition-duration) var(--ds-ease-in-out),
+    color var(--ds-transition-duration) var(--ds-ease-in-out);
+}
+
+.titlebar-close:hover {
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.titlebar-close:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: -2px;
 }
 
 .welcome {

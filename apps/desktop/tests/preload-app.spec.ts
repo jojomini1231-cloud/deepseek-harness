@@ -2,7 +2,7 @@
 import { JSDOM } from 'jsdom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installMandatoryUpdateOverlay } from '../src/preload-mandatory-overlay.ts'
-import { syncWindowsAppearance } from '../src/preload-windows.ts'
+import { syncDesktopCaption } from '../src/preload-caption.ts'
 import { DESKTOP_IPC, type DshDesktopProductApi } from '../src/ipc.ts'
 
 const electron = vi.hoisted(() => ({
@@ -13,7 +13,7 @@ const electron = vi.hoisted(() => ({
 vi.mock('electron', () => electron)
 vi.mock('../src/preload-platform.ts', () => ({ markDocumentPlatform: vi.fn(), syncWindowFullscreen: vi.fn() }))
 vi.mock('../src/preload-theme.ts', () => ({ syncNativeTheme: vi.fn() }))
-vi.mock('../src/preload-windows.ts', () => ({ syncWindowsAppearance: vi.fn() }))
+vi.mock('../src/preload-caption.ts', () => ({ syncDesktopCaption: vi.fn() }))
 vi.mock('../src/preload-mandatory-overlay.ts', () => ({ installMandatoryUpdateOverlay: vi.fn() }))
 
 beforeEach(() => { vi.stubGlobal('process', { ...process, isMainFrame: true }) })
@@ -131,7 +131,7 @@ it.each(['dsh-app://app/', 'dsh-app://shell/plugin-manager.html', 'https://examp
   'installs Windows appearance only for the application document (%s)', async (url) => {
     vi.stubGlobal('location', new URL(url))
     await import('../src/preload-app.ts')
-    expect(syncWindowsAppearance).toHaveBeenCalledTimes(url === 'dsh-app://app/' ? 1 : 0)
+    expect(syncDesktopCaption).toHaveBeenCalledTimes(url === 'dsh-app://app/' ? 1 : 0)
   },
 )
 

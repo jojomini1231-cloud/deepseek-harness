@@ -26,10 +26,10 @@ const SHELL_SHEET = 'client/web/src/base.css'
 const SHELL_DRAG_SELECTOR = "html[data-platform='darwin'] [data-window-drag]"
 
 /** The frame's Windows caption row, relative to packages/; the other platform's chrome. */
-const WINDOWS_CAPTION = 'client/ui-layout/src/client/AppFrame.module.css'
+const CAPTION = 'client/ui-layout/src/client/AppFrame.module.css'
 
 /** That caption row's selector, as authored. */
-const WINDOWS_CAPTION_SELECTOR = ':global([data-windows-titlebar]) .frame::before'
+const CAPTION_SELECTOR = ':global([data-desktop-caption]) .frame::before'
 
 /** The mark a chrome row puts on the element that owns its drag. */
 const DRAG_MARK = 'data-window-drag'
@@ -244,7 +244,7 @@ describe('window drag-region ownership', () => {
     // Windows caption row, which is that platform's own chrome. A third
     // declaration, a per-sheet row rule, or a darwin band on the frame fails here.
     expect(dragOwners()).toEqual([
-      { file: WINDOWS_CAPTION, selectors: [WINDOWS_CAPTION_SELECTOR] },
+      { file: CAPTION, selectors: [CAPTION_SELECTOR] },
       { file: SHELL_SHEET, selectors: [SHELL_DRAG_SELECTOR] },
     ])
   })

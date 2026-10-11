@@ -36,62 +36,62 @@
 }
 
 /* The brand stays in the sidebar; fixed caption controls survive zero-width collapse. */
-:global([data-windows-titlebar]) .root .logoRow {
+:global([data-desktop-caption]) .root .logoRow {
   height: 40px;
   margin: 0;
   padding: 0;
 }
 
-:global([data-windows-titlebar]) .toggle {
+:global([data-desktop-caption]) .toggle {
   position: fixed;
-  top: calc((var(--dsh-windows-titlebar-height) - 28px) / 2);
+  top: calc((var(--dsh-desktop-caption-height) - 28px) / 2);
   left: 12px;
   z-index: 30;
   -webkit-app-region: no-drag;
 }
 
-:global([data-windows-titlebar]) .root.collapsed .logoRow {
+:global([data-desktop-caption]) .root.collapsed .logoRow {
   height: 0;
 }
 
-:global([data-windows-titlebar]) .root:not(.collapsed) .brand {
+:global([data-desktop-caption]) .root:not(.collapsed) .brand {
   padding-left: 4px;
 }
 
-:global([data-windows-titlebar]) .brandIdentity {
+:global([data-desktop-caption]) .brandIdentity {
   transform: translateY(1px);
 }
 
-:global([data-windows-titlebar]) .brandMark {
+:global([data-desktop-caption]) .brandMark {
   transform: translateX(1px);
 }
 
-:global([data-windows-titlebar]) .brandName {
+:global([data-desktop-caption]) .brandName {
   font-weight: 400;
 }
 
-:global([data-windows-titlebar]) .root.collapsed {
+:global([data-desktop-caption]) .root.collapsed {
   padding: 0;
 }
 
-:global([data-windows-titlebar]) .root:not(.collapsed) .newSession {
+:global([data-desktop-caption]) .root:not(.collapsed) .newSession {
   margin-top: 8px;
   margin-left: 0;
 }
 
-:global([data-windows-titlebar]) .collapsed .panelList,
-:global([data-windows-titlebar]) .collapsed .regionArea,
-:global([data-windows-titlebar]) .collapsed .footArea {
+:global([data-desktop-caption]) .collapsed .panelList,
+:global([data-desktop-caption]) .collapsed .regionArea,
+:global([data-desktop-caption]) .collapsed .footArea {
   display: none;
 }
 
-:global(html[data-windows-titlebar]:has([data-sidebar-collapsed='true'])) {
+:global(html[data-desktop-caption]:has([data-sidebar-collapsed='true'])) {
   --dsh-windows-menu-start: 84px;
 }
 
-:global([data-windows-titlebar]) .collapsed .newSession {
+:global([data-desktop-caption]) .collapsed .newSession {
   position: fixed;
-  top: calc((var(--dsh-windows-titlebar-height) - 28px) / 2);
+  top: calc((var(--dsh-desktop-caption-height) - 28px) / 2);
   left: 48px;
   margin: 0;
   padding: 0;
@@ -100,20 +100,20 @@
   -webkit-app-region: no-drag;
 }
 
-:global([data-windows-titlebar]) .railIn .iconButton,
-:global([data-windows-titlebar]) .railIn .newSession {
+:global([data-desktop-caption]) .railIn .iconButton,
+:global([data-desktop-caption]) .railIn .newSession {
   animation: none;
 }
 
-:global([data-windows-titlebar]) .collapsed .toggle,
-:global([data-windows-titlebar]) .collapsed .newSession {
+:global([data-desktop-caption]) .collapsed .toggle,
+:global([data-desktop-caption]) .collapsed .newSession {
   width: 28px;
   height: 28px;
   border-radius: var(--dsw-radius-sm);
   color: var(--dsw-alias-label-secondary);
 }
 
-:global([data-windows-titlebar]) .collapsed .toggle .panelIcon {
+:global([data-desktop-caption]) .collapsed .toggle .panelIcon {
   display: inline;
 }
 

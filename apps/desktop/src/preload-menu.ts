@@ -14,7 +14,7 @@ export function installWindowsMenu(): { update(): void; dispose(): void } {
   const style = document.createElement('style')
   style.textContent = `
     :host { position: fixed; top: 0; left: var(--dsh-windows-menu-start, 48px); z-index: 1100;
-      height: var(--dsh-windows-titlebar-height); display: flex; align-items: center;
+      height: var(--dsh-desktop-caption-height); display: flex; align-items: center;
       font-family: var(--dsw-font-family); -webkit-app-region: no-drag; }
     [role=menubar] { display: flex; gap: 2px; }
     button { height: 28px; padding: 0 10px; border: 0; border-radius: 6px;

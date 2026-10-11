@@ -1,21 +1,35 @@
-import { WINDOWS_TITLEBAR_HEIGHT } from './windows-layout.ts'
-/** Synchronizes Windows context menus and caption colors with the application document. */
+/** Synchronizes the Desktop caption marker, the Windows caption menus, and the Linux caption controls. */
 import { ipcRenderer } from 'electron'
+import { DESKTOP_CAPTION_HEIGHT } from './desktop-layout.ts'
 import { DESKTOP_IPC } from './ipc.ts'
+import { installCaptionControls } from './preload-caption-controls.ts'
 import { installWindowsMenu } from './preload-menu.ts'
 
-/** Install the Windows-only titlebar marker and observe application language and palette changes. */
-export function syncWindowsAppearance(): void {
-  if (process.platform !== 'win32') return
+/**
+ * Install the caption marker on the platforms whose window carries a caption
+ * band, then start that platform's caption observers.
+ *
+ * Windows keeps native window controls over the band, so it observes the
+ * application language and palette and reports them to the shell. Linux draws
+ * its own controls. macOS draws neither: its traffic lights sit in the sidebar
+ * and the frame publishes no caption band.
+ */
+export function syncDesktopCaption(): void {
+  const platform = process.platform
+  if (platform !== 'win32' && platform !== 'linux') return
   const mark = (): void => {
     const root = document.documentElement
-    root.dataset.windowsTitlebar = ''
-    root.style.setProperty('--dsh-windows-titlebar-height', `${WINDOWS_TITLEBAR_HEIGHT}px`)
+    root.dataset.desktopCaption = ''
+    root.style.setProperty('--dsh-desktop-caption-height', `${DESKTOP_CAPTION_HEIGHT}px`)
   }
   // The root can be absent before the HTML parser creates it.
   if ((document.documentElement as HTMLElement | null) !== null) mark()
   const install = (): void => {
     mark()
+    if (platform === 'linux') {
+      installCaptionControls()
+      return
+    }
     const root = document.documentElement
     const menu = installWindowsMenu()
     const probe = document.createElement('span')
