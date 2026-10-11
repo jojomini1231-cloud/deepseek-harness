@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Toast } from '@deepseek-ai/dsh-client-ui-primitives/src/Toast.tsx'
 import { StateDot } from '@deepseek-ai/dsh-client-ui-primitives/src/StateDot.tsx'
+import { IconCloseOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives/src/icons/index.tsx'
 import type { AccountView } from '@deepseek-ai/dsh-deepseek-account/types'
 import type { WelcomeApi } from '../welcome-api.ts'
 
@@ -173,7 +174,14 @@ export function Welcome({ api }: { api: WelcomeApi }) {
 
   return <>
     {expiryNotice && <Toast text={m.welcomeSessionExpired} onDone={() => { setExpiryNotice(false) }} />}
-    <div className="titlebar" aria-hidden="true" />
+    <div className="titlebar">
+      {api.drawsCloseControl && (
+        <button className="titlebar-close" type="button" aria-label={m.windowClose} title={m.windowClose}
+          onClick={() => { void api.closeWindow() }}>
+          <IconCloseOutlineRegular size={16} />
+        </button>
+      )}
+    </div>
     <main className="welcome" aria-labelledby={heading}>
       <img className="brand" src="assets/welcome-brand.svg" alt={m.welcomeBrand} width="472" height="40" />
       <div id="tagline" className="tagline" hidden={page !== 'entry'}>

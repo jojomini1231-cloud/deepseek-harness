@@ -25,5 +25,8 @@ const api: WelcomeApi = {
   },
   saveApiKey: (value: string) => ipcRenderer.invoke(WELCOME_IPC.saveApiKey, value) as Promise<WelcomeSaveResult>,
   skip: () => ipcRenderer.invoke(WELCOME_IPC.skip) as Promise<void>,
+  // GTK supplies no window-controls overlay, so Linux draws the window's close control itself.
+  drawsCloseControl: process.platform === 'linux',
+  closeWindow: () => ipcRenderer.invoke(WELCOME_IPC.closeWindow) as Promise<void>,
 }
 contextBridge.exposeInMainWorld('dshWelcome', api)

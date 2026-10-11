@@ -29,9 +29,14 @@ export const DESKTOP_IPC = {
   updatesPresentation: 'dsh-desktop:updates-presentation',
   nativeThemeSet: 'dsh-desktop:native-theme-set',
   windowFullscreen: 'dsh-desktop:window-fullscreen',
+  windowControl: 'dsh-desktop:window-control',
+  windowMaximized: 'dsh-desktop:window-maximized',
   windowsAppearance: 'dsh-desktop:windows-appearance',
   windowsMenu: 'dsh-desktop:windows-menu',
 } as const
+
+/** Window commands the shell's drawn caption can request; the shell validates the value over IPC. */
+export type DesktopWindowControl = 'minimize' | 'maximize-toggle' | 'close'
 
 /** Desktop release update state rendered by desktop-owned UI. */
 export type DesktopUpdatePreparationFailureKind = 'stop-failed' | 'tasks-changed' | 'tasks-unavailable'

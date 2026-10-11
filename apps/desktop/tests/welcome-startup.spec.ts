@@ -37,6 +37,7 @@ const state = vi.hoisted(() => ({
   contents: undefined as { mainFrame: { url: string } } | undefined,
   windowOptions: undefined as BrowserWindowConstructorOptions | undefined,
   menu: vi.fn(),
+  applyMenu: vi.fn(),
   operations: undefined as WelcomeOperations | undefined,
   nativeTheme: { themeSource: 'system', shouldUseDarkColors: false },
 }))
@@ -95,7 +96,7 @@ vi.mock('electron', () => ({
     on: (name: string, callback: (...args: unknown[]) => void) => { state.listeners.set(name, callback) },
   },
   dialog: { showErrorBox: vi.fn(), showMessageBox: vi.fn() },
-  Menu: { buildFromTemplate: state.menu, setApplicationMenu: vi.fn() },
+  Menu: { buildFromTemplate: state.menu, setApplicationMenu: state.applyMenu },
   nativeImage: { createFromPath: (path: string) => ({ path }) },
 }))
 // The Windows tray relabels through Menu as well; keep the menu call counts below platform-neutral.
@@ -256,13 +257,15 @@ it.each([false, true])('starts welcome onboarding without carrying update focus 
   state.preference = 'en'
   expect(await bootstrap(event)).toEqual({ languages: ['en-US'], preference: 'en' })
   const changed = state.listeners.get(DESKTOP_IPC.localeChanged)!
-  const initialMenus = state.menu.mock.calls.length
+  // A language change re-applies the application menu. Linux applies no menu,
+  // so the observable outcome is the application itself, not a built template.
+  const initialMenus = state.applyMenu.mock.calls.length
   changed({ ...event, senderFrame: {} }, 'en')
   changed(event, 42)
-  expect(state.menu).toHaveBeenCalledTimes(initialMenus)
+  expect(state.applyMenu).toHaveBeenCalledTimes(initialMenus)
   changed(event, 'en')
   expect(state.dialogLocale!().id).toBe('en')
-  expect(state.menu).toHaveBeenCalledTimes(initialMenus + 1)
+  expect(state.applyMenu).toHaveBeenCalledTimes(initialMenus + 1)
   expect(await bootstrap(event)).toEqual({ languages: ['en-US'], preference: 'en' })
   const welcomeCount = state.beforeWelcome.mock.calls.length
   state.hasApiKey = true

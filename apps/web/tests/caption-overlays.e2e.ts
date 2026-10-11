@@ -18,8 +18,8 @@ it('keeps settings and expanded plugin dialogs clear of the Windows caption acro
       await page.goto(scaffold.authenticatedUrl)
       await page.waitForSelector('[class*="frame"]')
       await page.evaluate(() => {
-        document.documentElement.setAttribute('data-windows-titlebar', '')
-        document.documentElement.style.setProperty('--dsh-windows-titlebar-height', '40px')
+        document.documentElement.setAttribute('data-desktop-caption', '')
+        document.documentElement.style.setProperty('--dsh-desktop-caption-height', '40px')
       })
       const reopenSidebar = page.getByRole('button', { name: '打开侧边栏', exact: true })
       if (await reopenSidebar.isVisible()) await reopenSidebar.click()
@@ -79,7 +79,7 @@ it('keeps settings and expanded plugin dialogs clear of the Windows caption acro
       await plugin.waitFor({ state: 'hidden' })
       for (const platform of ['darwin', 'browser']) {
         await page.evaluate((value) => {
-          document.documentElement.removeAttribute('data-windows-titlebar')
+          document.documentElement.removeAttribute('data-desktop-caption')
           document.documentElement.removeAttribute('data-fullscreen')
           if (value === 'darwin') document.documentElement.setAttribute('data-platform', value)
           else document.documentElement.removeAttribute('data-platform')

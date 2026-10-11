@@ -36,6 +36,13 @@ export function welcomeWindowOptions(platform: NodeJS.Platform, locale: DesktopL
       titleBarOverlay: { color: '#00000000', symbolColor: '#0F1115', height: 42 },
       backgroundMaterial: 'acrylic',
     } as const : {}),
+    ...(platform === 'linux' ? {
+      // Linux has no window-controls overlay, so the hidden title bar drops the
+      // GTK decoration and the welcome document draws the window's close control
+      // in its own caption strip. The window is fixed size and not resizable, so
+      // it needs neither a minimize nor a maximize control.
+      titleBarStyle: 'hidden',
+    } as const : {}),
     webPreferences: {
       preload: fileURLToPath(new URL('./preload-welcome.cjs', import.meta.url)),
       additionalArguments: [`--dsh-welcome-locale=${locale.id}`],
@@ -66,7 +73,7 @@ export async function openWelcomeWindow(locale: DesktopLocale, operations: Welco
     active = false
     for (const channel of [
       WELCOME_IPC.analyticsEnabled, WELCOME_IPC.analytics, WELCOME_IPC.takeNotice, WELCOME_IPC.saveApiKey,
-      WELCOME_IPC.skip, WELCOME_IPC.start, WELCOME_IPC.cancel, WELCOME_IPC.copyLink,
+      WELCOME_IPC.skip, WELCOME_IPC.start, WELCOME_IPC.cancel, WELCOME_IPC.copyLink, WELCOME_IPC.closeWindow,
     ]) {
       ipcMain.removeHandler(channel)
     }
@@ -112,6 +119,14 @@ export async function openWelcomeWindow(locale: DesktopLocale, operations: Welco
     assertSender(event)
     if (typeof id !== 'string') throw new Error('desktop welcome: invalid attempt')
     return operations.copySignInLink(id as SignInAttemptId)
+  })
+  // The drawn control closes only this window; the closed handler above decides
+  // whether that quits the application or leaves the workspace running. Closing
+  // is synchronous, so this handler is too: Electron rejects the renderer's
+  // invoke when a handler throws.
+  ipcMain.handle(WELCOME_IPC.closeWindow, (event) => {
+    assertSender(event)
+    window.close()
   })
   window.once('closed', disposeHandlers)
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))

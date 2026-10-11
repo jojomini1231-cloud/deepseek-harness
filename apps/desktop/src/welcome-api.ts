@@ -15,6 +15,7 @@ export const WELCOME_IPC = {
   copyLink: 'dsh-welcome:copy-link',
   state: 'dsh-welcome:state',
   takeNotice: 'dsh-welcome:take-notice',
+  closeWindow: 'dsh-welcome:close-window',
 } as const
 
 /** Credential writes return a safe outcome without exposing Host diagnostics. */
@@ -54,9 +55,23 @@ export interface WelcomeOperations {
 }
 
 /** The renderer receives localized copy, login operations, and safe account snapshots. */
-export type WelcomeApi = DesktopLocale & WelcomeOperations & {
+export type WelcomeApi = DesktopLocale & WelcomeOperations & WelcomeWindowControls & {
   /** @param listener - safe account snapshot recipient. @returns subscription disposer. */
   onAccountState(listener: (state: AccountView) => void): () => void
+}
+
+/**
+ * Window control facts for platforms whose window supplies no native controls.
+ *
+ * The welcome window is fixed size and not resizable, so the only control it can
+ * need is a close; macOS traffic lights and the Windows window-controls overlay
+ * cover every other platform.
+ */
+export interface WelcomeWindowControls {
+  /** Whether the document must draw the window's close control because the platform provides none. */
+  readonly drawsCloseControl: boolean
+  /** Close the welcome window; the shell decides whether that quits or leaves the workspace running. */
+  closeWindow(): Promise<void>
 }
 
 /** Authentication facts supplied at cold start or after a completed sign-out. */

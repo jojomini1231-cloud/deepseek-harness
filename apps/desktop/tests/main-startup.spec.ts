@@ -1,5 +1,5 @@
 import type { AccountView } from '@deepseek-ai/dsh-deepseek-account/types'
-import { WINDOWS_TITLEBAR_HEIGHT } from '../src/windows-layout.ts'
+import { DESKTOP_CAPTION_HEIGHT } from '../src/desktop-layout.ts'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
@@ -112,6 +112,11 @@ const harness = await vi.hoisted(async () => {
     visible = true
     isVisible() { return this.visible }
     isFocused() { return true }
+    maximized = false
+    isMaximized() { return this.maximized }
+    readonly minimize = vi.fn()
+    maximize = vi.fn(() => { this.maximized = true; this.emit('maximize') })
+    unmaximize = vi.fn(() => { this.maximized = false; this.emit('unmaximize') })
     async loadURL(url: string) {
       this.urls.push(url)
       this.webContents.mainFrame.url = url
@@ -821,7 +826,7 @@ describe('desktop main startup', () => {
     }
   })
 
-  it.each(['darwin', 'win32', 'linux'] as const)('limits native titlebar styling to macOS on %s', async (platform) => {
+  it.each(['darwin', 'win32', 'linux'] as const)('applies window decoration options for %s', async (platform) => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
     await import('../src/main.ts')
     await harness.preparing.promise
@@ -830,15 +835,20 @@ describe('desktop main startup', () => {
     if (platform === 'darwin') {
       expect(window.options).toMatchObject({ titleBarStyle: 'hiddenInset', vibrancy: 'sidebar', backgroundColor: '#00000000' })
     } else if (platform === 'win32') {
-      expect(window.options).toMatchObject({ titleBarStyle: 'hidden', titleBarOverlay: { height: WINDOWS_TITLEBAR_HEIGHT } })
+      expect(window.options).toMatchObject({ titleBarStyle: 'hidden', titleBarOverlay: { height: DESKTOP_CAPTION_HEIGHT } })
       expect(window.options).not.toHaveProperty('vibrancy')
       expect(harness.menu.mock.calls[0]![0]).toEqual([
         { role: 'toggleDevTools', visible: false },
         { role: 'toggleDevTools', visible: false, accelerator: 'F12' },
       ])
     } else {
-      expect(window.options).not.toHaveProperty('titleBarStyle')
+      // The hidden title bar drops the GTK client-side decoration; omitting the
+      // overlay is what keeps Electron from drawing native controls beside the
+      // ones the shell draws.
+      expect(window.options).toMatchObject({ titleBarStyle: 'hidden' })
+      expect(window.options).not.toHaveProperty('titleBarOverlay')
       expect(window.options).not.toHaveProperty('vibrancy')
+      expect(harness.menu.setApplicationMenu).toHaveBeenLastCalledWith(null)
     }
     expect(harness.hosts).toHaveLength(0)
   })
@@ -878,8 +888,10 @@ describe('desktop main startup', () => {
     expect(sent()).toHaveLength(relayed)
   })
 
-  it.each(['linux'] as const)('registers no fullscreen relay on %s', async (platform) => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
+  it('registers no fullscreen relay on linux', async () => {
+    // Linux keeps its caption and controls visible in fullscreen, so it has no
+    // clearance to drop and nothing to relay.
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
     await import('../src/main.ts')
     await harness.preparing.promise
     const window = harness.windows[0]!
@@ -995,8 +1007,8 @@ describe('desktop main startup', () => {
     await edit
   })
 
-  it.each(['darwin', 'linux'] as const)('adds the product File menu and standard window commands only on macOS (%s)', async (platform) => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
+  it('adds the product File menu and standard window commands only on macOS', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     await import('../src/main.ts')
     await harness.preparing.promise
     const describeItem = (item: MenuItemConstructorOptions): string | undefined =>
@@ -1005,14 +1017,82 @@ describe('desktop main startup', () => {
       .map(call => call[0])
       .find(items => items.some(item => item.role === 'editMenu'))
     if (template === undefined) throw new Error('application menu missing')
-    expect(template.map(describeItem)).toEqual(platform === 'darwin'
-      ? ['Desktop test', en.fileMenu, 'editMenu', 'windowMenu']
-      : ['Application', 'editMenu'])
+    expect(template.map(describeItem)).toEqual(['Desktop test', en.fileMenu, 'editMenu', 'windowMenu'])
     const application = template[0]!.submenu as MenuItemConstructorOptions[]
-    expect(application.filter(item => item.visible !== false).map(describeItem)).toEqual(platform === 'darwin'
-      ? ['about', 'separator', en.checkUpdatesMenu, en.cliCommandMenu, 'separator', 'hide', 'hideOthers', 'unhide', 'separator', 'quit']
-      : ['about', 'separator', en.checkUpdatesMenu, 'separator', 'quit'])
+    expect(application.filter(item => item.visible !== false).map(describeItem))
+      .toEqual(['about', 'separator', en.checkUpdatesMenu, en.cliCommandMenu, 'separator', 'hide', 'hideOthers', 'unhide', 'separator', 'quit'])
     expect(harness.menu.setApplicationMenu).toHaveBeenCalledOnce()
+  })
+
+  it('keeps no application menu on Linux', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    // Null rather than an empty template: Electron would otherwise install its
+    // built-in default menu, which reappears on Alt.
+    expect(harness.menu.setApplicationMenu).toHaveBeenLastCalledWith(null)
+    expect(harness.menu.buildFromTemplate).not.toHaveBeenCalled()
+  })
+
+  it('drives minimize, maximize, and close from the drawn Linux controls', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    const window = harness.windows[0]!
+    const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame }
+    const handler = harness.handlers.get(DESKTOP_IPC.windowControl)!
+    expect(() => handler({ ...event, sender: {} }, 'minimize')).toThrow('rejected sender')
+    // An app-origin frame that is not the window's top frame fails ownership.
+    expect(() => handler({ sender: window.webContents, senderFrame: { url: 'dsh-app://app/other.html' } }, 'minimize'))
+      .toThrow('rejected sender')
+    expect(() => handler(event, 'arbitrary-command')).toThrow('invalid control')
+    handler(event, 'minimize')
+    expect(window.minimize).toHaveBeenCalledOnce()
+    handler(event, 'maximize-toggle')
+    expect(window.maximize).toHaveBeenCalledOnce()
+    expect(window.webContents.send).toHaveBeenLastCalledWith(DESKTOP_IPC.windowMaximized, true)
+    handler(event, 'maximize-toggle')
+    expect(window.unmaximize).toHaveBeenCalledOnce()
+    expect(window.webContents.send).toHaveBeenLastCalledWith(DESKTOP_IPC.windowMaximized, false)
+    handler(event, 'close')
+    expect(harness.app.quit).toHaveBeenCalled()
+  })
+
+  it('relays the Linux maximize state after each change and page load', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    const window = harness.windows[0]!
+    const sent = (): unknown[] => window.webContents.send.mock.calls.filter(([channel]) => channel === DESKTOP_IPC.windowMaximized)
+    expect(sent()).toHaveLength(0)
+    window.maximized = true
+    window.emit('maximize')
+    expect(sent().at(-1)).toEqual([DESKTOP_IPC.windowMaximized, true])
+    // A reload re-registers the preload listener; the finished load resends the
+    // current state so the glyph cannot fall back to windowed.
+    window.webContents.emit('did-finish-load')
+    expect(sent().at(-1)).toEqual([DESKTOP_IPC.windowMaximized, true])
+    window.maximized = false
+    window.emit('unmaximize')
+    expect(sent().at(-1)).toEqual([DESKTOP_IPC.windowMaximized, false])
+    const relayed = sent().length
+    window.destroyed = true
+    window.emit('maximize')
+    expect(sent()).toHaveLength(relayed)
+  })
+
+  it('quits rather than hides when the Linux window is closed', async () => {
+    // Linux ships no tray, so a hidden window would leave a running application
+    // the user cannot get back.
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    const window = harness.windows[0]!
+    const event = { preventDefault: vi.fn() }
+    window.emit('close', event)
+    expect(event.preventDefault).toHaveBeenCalled()
+    expect(harness.app.quit).toHaveBeenCalled()
+    expect(window.hide).not.toHaveBeenCalled()
   })
 
   it.each(['en-US', 'zh-CN'])('localizes macOS application commands without changing the application name (%s)', async (locale) => {

@@ -32,6 +32,7 @@ function createWindow() {
     loadFile: vi.fn<(path: string) => Promise<undefined>>().mockResolvedValue(undefined),
     isDestroyed: vi.fn().mockReturnValue(false),
     destroy: vi.fn(),
+    close: vi.fn(),
     show: vi.fn(),
     once: vi.fn<(name: string, callback: () => void) => void>(),
   }
@@ -72,7 +73,26 @@ describe('desktop welcome window', () => {
       expect(options.backgroundColor).toBe('#FFFFFF')
       expect(options.vibrancy).toBeUndefined()
       expect(options.backgroundMaterial).toBeUndefined()
+      // GTK offers no window-controls overlay, so the hidden title bar drops the
+      // decoration outright and the document draws its own close control.
+      expect(options.titleBarStyle).toBe('hidden')
+      expect(options.titleBarOverlay).toBeUndefined()
     }
+  })
+
+  it('closes only its own window from the drawn close control', async () => {
+    const window = createWindow()
+    electron.create.mockReturnValue(window)
+    await openWelcomeWindow(resolveDesktopLocale('en'), operations)
+    const own = { sender: window.webContents, senderFrame: window.webContents.mainFrame }
+    const close = electron.handlers.get(WELCOME_IPC.closeWindow)!
+    // Closing needs no await, so this handler is synchronous; Electron turns its
+    // throw into a rejected invoke, which is what the renderer observes.
+    expect(() => close({ sender: {}, senderFrame: {} })).toThrow('unowned frame')
+    expect(() => close({ ...own, senderFrame: {} })).toThrow('unowned frame')
+    expect(window.close).not.toHaveBeenCalled()
+    await close(own)
+    expect(window.close).toHaveBeenCalledOnce()
   })
 
   it('waits for its local document and blocks renderer navigation', async () => {

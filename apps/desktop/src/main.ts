@@ -1,5 +1,5 @@
 import type { ProductEventMap, ProductEvent } from '@deepseek-ai/dsh-client-product-analytics/types'
-import { WINDOWS_TITLEBAR_HEIGHT } from './windows-layout.ts'
+import { DESKTOP_CAPTION_HEIGHT } from './desktop-layout.ts'
 /** Electron shell: desktop project ownership, custom protocol, windows, and lifecycle. */
 
 import { readFile, writeFile } from 'node:fs/promises'
@@ -213,8 +213,16 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
     show,
     ...(process.platform === 'win32' && primary ? {
       titleBarStyle: 'hidden' as const,
-      titleBarOverlay: { height: WINDOWS_TITLEBAR_HEIGHT, color: chromeFallbackFill(),
+      titleBarOverlay: { height: DESKTOP_CAPTION_HEIGHT, color: chromeFallbackFill(),
         symbolColor: nativeTheme.shouldUseDarkColors ? '#f9fafb' : '#0f1115' },
+    } : {}),
+    // Linux has no window-controls overlay: the same hidden title bar drops the
+    // GTK client-side decoration, and the shell draws minimize, maximize, and
+    // close itself (preload-caption-controls.ts). Omitting titleBarOverlay is
+    // what keeps native buttons from appearing beside the drawn ones. Frameless
+    // Linux windows survive with resize edges, so the default resizable stays.
+    ...(process.platform === 'linux' && primary ? {
+      titleBarStyle: 'hidden' as const,
     } : {}),
     // hiddenInset places traffic lights inside the sidebar; sidebar vibrancy
     // needs a transparent window background to show through the page.
@@ -241,6 +249,15 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
     if (['http:', 'https:'].includes(new URL(url).protocol)) void shell.openExternal(url)
     return { action: 'deny' }
   })
+  if (process.platform === 'linux' && !app.isPackaged) {
+    // The Linux window carries no menu, so it also carries no menu accelerator
+    // for the devtools. Development keeps F12 as a direct key handler.
+    window.webContents.on('before-input-event', (_event, input) => {
+      if (input.type === 'keyDown' && input.key === 'F12' && !window.isDestroyed()) {
+        window.webContents.toggleDevTools()
+      }
+    })
+  }
   if (process.platform === 'darwin' || process.platform === 'win32') {
     // Fullscreen hides native window controls; overlays drop their caption clearance.
     const sendFullscreen = (): void => {
@@ -940,9 +957,10 @@ async function main(): Promise<void> {
   // its standard menus and application hide commands declared explicitly.
   // Keep app.name stable: Electron derives its default userData directory from it.
   const darwin = process.platform === 'darwin'
-  const platformMenus = (): MenuItemConstructorOptions[] => darwin
-    ? [shortcuts.fileMenu(currentDesktopLocale().messages), { role: 'editMenu' }, { role: 'windowMenu' }]
-    : [{ role: 'editMenu' }]
+  // Linux installs no menu, so only macOS reaches the platform menus below;
+  // Windows installs the devtools-only template.
+  const platformMenus = (): MenuItemConstructorOptions[] =>
+    [shortcuts.fileMenu(currentDesktopLocale().messages), { role: 'editMenu' }, { role: 'windowMenu' }]
   const hideCommands: MenuItemConstructorOptions[] = darwin
     ? [{ role: 'hide', label: currentDesktopLocale().messages.hideApplication },
       { role: 'hideOthers', label: currentDesktopLocale().messages.hideOtherApplications },
@@ -951,14 +969,13 @@ async function main(): Promise<void> {
   const applicationItems = (): MenuItemConstructorOptions[] => [
     // Windows has no system About panel; Electron's fallback is a plain
     // message box, so the shell shows its own dimmed dialog instead.
-    process.platform === 'win32'
-      ? { label: currentDesktopLocale().messages.aboutMenu,
-        click: () => { void showAbout().catch((error: unknown) => { console.error(error) }) } }
-      : { label: currentDesktopLocale().messages.aboutMenu, role: 'about' },
+    darwin
+      ? { label: currentDesktopLocale().messages.aboutMenu, role: 'about' }
+      : { label: currentDesktopLocale().messages.aboutMenu,
+        click: () => { void showAbout().catch((error: unknown) => { console.error(error) }) } },
     { type: 'separator' },
     { label: currentDesktopLocale().messages.checkUpdatesMenu, click: () => { void openUpdatePrompt(true) } },
-    ...process.platform === 'darwin' || process.platform === 'win32'
-      ? [{ label: currentDesktopLocale().messages.cliCommandMenu, click: () => { void commandManager.show() } }] : [],
+    { label: currentDesktopLocale().messages.cliCommandMenu, click: () => { void commandManager.show() } },
     ...development ? [
       { type: 'separator' as const },
       { label: currentDesktopLocale().messages.reloadPageMenu, role: 'reload' as const },
@@ -970,18 +987,31 @@ async function main(): Promise<void> {
     ] : [],
     { type: 'separator' },
     ...hideCommands,
-    { role: 'quit', ...(darwin ? { label: currentDesktopLocale().messages.quitApplication }
-      : process.platform === 'win32' ? { label: currentDesktopLocale().messages.exitApplication } : {}) },
+    { role: 'quit', label: darwin ? currentDesktopLocale().messages.quitApplication
+      : currentDesktopLocale().messages.exitApplication },
   ]
   const devToolsItems: MenuItemConstructorOptions[] = [
     { role: 'toggleDevTools', visible: false },
     { role: 'toggleDevTools', visible: false, accelerator: 'F12' },
   ]
   const refreshApplicationMenu = (): void => {
-    Menu.setApplicationMenu(Menu.buildFromTemplate(process.platform === 'win32' ? devToolsItems : [{
-      label: darwin ? app.name : currentDesktopLocale().messages.application,
-      submenu: [...applicationItems(), ...devToolsItems],
-    }, ...platformMenus()]))
+    // Linux keeps no menu bar at all: it draws its own caption, so the
+    // application and Edit menus have no home. Null rather than an empty
+    // template also suppresses Electron's built-in default menu, which would
+    // otherwise reappear on Alt.
+    if (process.platform === 'linux') {
+      Menu.setApplicationMenu(null)
+    } else if (process.platform === 'win32') {
+      // Windows reaches its Application and Edit entries through popups opened
+      // from the drawn caption, so the installed menu carries only the hidden
+      // devtools items.
+      Menu.setApplicationMenu(Menu.buildFromTemplate(devToolsItems))
+    } else {
+      Menu.setApplicationMenu(Menu.buildFromTemplate([{
+        label: app.name,
+        submenu: [...applicationItems(), ...devToolsItems],
+      }, ...platformMenus()]))
+    }
     tray?.relabel()
   }
   refreshApplicationMenu()
@@ -1057,6 +1087,43 @@ async function main(): Promise<void> {
     })
   }
 
+  // Linux draws its own caption controls, so nothing native reports a maximize
+  // change; the shell pushes the state and the drawn glyph follows it. Events
+  // are the primary source, and the toggle control re-sends after acting so a
+  // compositor that never delivers them still leaves the glyph correct.
+  const relayMaximized = (window: BrowserWindow): void => {
+    const sendMaximized = (): void => {
+      if (!window.isDestroyed()) window.webContents.send(DESKTOP_IPC.windowMaximized, window.isMaximized())
+    }
+    window.on('maximize', sendMaximized)
+    window.on('unmaximize', sendMaximized)
+    // A reload re-registers the preload listener; the finished load resends the
+    // current state so a reload cannot fall back to the wrong glyph.
+    window.webContents.on('did-finish-load', sendMaximized)
+  }
+  if (process.platform === 'linux') {
+    ipcMain.handle(DESKTOP_IPC.windowControl, (event, control: unknown) => {
+      assertDesktopSender(event, ['app'])
+      const window = mainWindow
+      if (window === undefined || window.isDestroyed() || event.sender !== window.webContents
+        || event.senderFrame !== window.webContents.mainFrame) throw new Error('desktop window: rejected sender')
+      if (control !== 'minimize' && control !== 'maximize-toggle' && control !== 'close') {
+        throw new Error('desktop window: invalid control')
+      }
+      if (control === 'minimize') { window.minimize(); return }
+      if (control === 'maximize-toggle') {
+        if (window.isMaximized()) window.unmaximize()
+        else window.maximize()
+        if (!window.isDestroyed()) window.webContents.send(DESKTOP_IPC.windowMaximized, window.isMaximized())
+        return
+      }
+      // The drawn close control is a quit, not a hide: an ordinary close leaves
+      // the process running with no way back on a platform that ships no tray.
+      // app.quit() enters the same confirmation the menu and shortcuts use.
+      app.quit()
+    })
+  }
+
   const hideMainWindow = (window: BrowserWindow): void => {
     if (process.platform === 'darwin' && window.isFullScreen()) {
       // Hiding a fullscreen window leaves an empty black space; leave fullscreen first.
@@ -1069,6 +1136,7 @@ async function main(): Promise<void> {
   const createMainWindow = (): BrowserWindow => {
     const window = createWindow(appPreload, false, true)
     mainWindow = window
+    if (process.platform === 'linux') relayMaximized(window)
     browserGuests.bind(window, (guest, name) => shortcuts.attachGuest(window, guest, name))
     shortcuts.attach(window)
     window.on('focus', automaticCheck)
@@ -1077,6 +1145,10 @@ async function main(): Promise<void> {
       if (quitting || shellInstallerOwnsQuit || sessionEnding) return
       event.preventDefault()
       if (updateDialog.isOpen) { updateDialog.focus(); return }
+      // Linux ships no tray, so a hide would leave a running application with no
+      // way back to its window; the drawn close control and the window's own
+      // close both quit, through the same confirmation.
+      if (process.platform === 'linux') { app.quit(); return }
       const hide = (): void => {
         if (!quitting && !shellInstallerOwnsQuit && !sessionEnding && !window.isDestroyed()) hideMainWindow(window)
       }

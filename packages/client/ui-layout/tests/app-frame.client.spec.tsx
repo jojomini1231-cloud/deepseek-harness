@@ -227,7 +227,7 @@ describe('AppFrame', () => {
   })
 
   it('keeps Windows caption controls mounted with a zero-width collapsed column', () => {
-    document.documentElement.setAttribute('data-windows-titlebar', '')
+    document.documentElement.setAttribute('data-desktop-caption', '')
     try {
       const { frame, instance, sidebarOwner, getByTestId, queryByTestId } = mountFrame()
       act(() => { instance.actions.toggleSidebar() })
@@ -238,7 +238,7 @@ describe('AppFrame', () => {
       // shell.leading seat must not mount a duplicate set.
       expect(queryByTestId('shell.leading-content')).toBeNull()
     } finally {
-      document.documentElement.removeAttribute('data-windows-titlebar')
+      document.documentElement.removeAttribute('data-desktop-caption')
     }
   })
 

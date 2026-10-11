@@ -11,7 +11,8 @@ import type { WelcomeSaveResult, WelcomeNotice } from '../src/welcome-api.ts'
 const html = readFileSync(join(import.meta.dirname, '../renderer/welcome.html'), 'utf8')
 afterEach(cleanup)
 
-function mount(language = 'zh-CN', takeNotice = vi.fn<() => Promise<WelcomeNotice | undefined>>().mockResolvedValue(undefined)) {
+function mount(language = 'zh-CN', takeNotice = vi.fn<() => Promise<WelcomeNotice | undefined>>().mockResolvedValue(undefined),
+  drawsCloseControl = false) {
   cleanup()
   const stopAccount = vi.fn()
   const api = {
@@ -25,6 +26,8 @@ function mount(language = 'zh-CN', takeNotice = vi.fn<() => Promise<WelcomeNotic
     ...resolveDesktopLocale(language),
     saveApiKey: vi.fn<(value: string) => Promise<WelcomeSaveResult>>().mockResolvedValue({ ok: true }),
     skip: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    drawsCloseControl,
+    closeWindow: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
   }
   const mounted = render(<Welcome api={api} />)
   const input = document.querySelector('input')!
@@ -57,6 +60,20 @@ describe('desktop welcome presentation', () => {
     expect(view.document.activeElement).toBe(view.input)
     expect(view.input.type).toBe('password')
     await expect(view.copy()).toMatchFileSnapshot(`./expected/welcome/${language}-api-key.expected.txt`)
+  })
+
+  it('draws the close control only where the platform supplies no window controls', () => {
+    const native = mount('zh-CN')
+    expect(native.api.drawsCloseControl).toBe(false)
+    expect(native.document.querySelector('.titlebar-close')).toBeNull()
+
+    const drawn = mount('zh-CN', undefined, true)
+    const close = drawn.document.querySelector<HTMLButtonElement>('.titlebar-close')!
+    expect(close.getAttribute('aria-label')).toBe('关闭窗口')
+    expect(close.title).toBe('关闭窗口')
+    fireEvent.click(close)
+    expect(drawn.api.closeWindow).toHaveBeenCalledOnce()
+    expect(drawn.api.skip).not.toHaveBeenCalled()
   })
 
   it('sends one trimmed key, prevents competing actions, and clears it after saving', async () => {
