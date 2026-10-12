@@ -35,7 +35,7 @@ export function localUnsignedPackageEnvironment(environment = process.env) {
 /**
  * Read the target's required UTF-8 dotenv file; release settings never fall back to ambient values.
  * Linux builds never read a dotenv file; they always use local unsigned-build defaults.
- * @param {'win32' | 'darwin'} platform Target platform.
+ * @param {'win32' | 'darwin' | 'linux'} platform Target platform.
  * @param {NodeJS.ProcessEnv} environment Parent environment, retained only for unrelated build tools.
  * @param {string} appRoot Desktop application directory; relative credential paths resolve here.
  * @returns {NodeJS.ProcessEnv} Isolated environment with file-owned release settings.

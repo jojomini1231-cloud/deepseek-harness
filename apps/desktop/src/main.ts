@@ -1118,9 +1118,11 @@ async function main(): Promise<void> {
         if (!window.isDestroyed()) window.webContents.send(DESKTOP_IPC.windowMaximized, window.isMaximized())
         return
       }
+      if (quitting || shellInstallerOwnsQuit || sessionEnding) return
       // The drawn close control is a quit, not a hide: an ordinary close leaves
       // the process running with no way back on a platform that ships no tray.
-      // app.quit() enters the same confirmation the menu and shortcuts use.
+      // app.quit() enters the same confirmation the menu and shortcuts use, and
+      // the guard above keeps a click during shutdown from joining it again.
       app.quit()
     })
   }
