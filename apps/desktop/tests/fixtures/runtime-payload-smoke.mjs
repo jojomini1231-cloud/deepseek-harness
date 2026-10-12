@@ -1,4 +1,4 @@
-/** Exercise filtered Desktop native and HTML dependencies under its Electron Node runtime. */
+/** Exercise filtered Desktop native and HTML dependencies under the Host's Node runtime. */
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -14,7 +14,7 @@ const runtime = process.argv[2]
 assert.ok(runtime, 'Pass the filtered resources/dsh directory')
 const root = resolve(runtime)
 const descriptor = JSON.parse(readFileSync(join(root, 'desktop-runtime.json'), 'utf8'))
-assert.equal(process.versions.node, descriptor.release.nodeVersion, 'Run with the Electron Node runtime version')
+assert.equal(process.versions.node, descriptor.release.nodeVersion, 'Run with the Host Node runtime version')
 assert.equal(process.platform, descriptor.platform)
 assert.equal(process.arch, descriptor.arch)
 const resourcesRuntime = process.argv[3] ?? join(dirname(root), 'runtime')
@@ -106,19 +106,11 @@ function checkKoffi() {
   }
 }
 
-/**
- * Encode a pixel through the packaged libvips binary; on Linux Electron, additionally decode it back.
- * Linux skips the decode half: Electron's Linux binaries leak glib symbols into the process
- * (electron#46323), and sharp's second libvips call from a decode pipeline crashes on the clash.
- */
+/** Encode a pixel through the packaged libvips binary, then decode it back through a second pipeline. */
 async function checkSharp() {
   const sharp = requireRuntime('sharp')
   const pixel = Buffer.from([17, 103, 231])
   const png = await sharp(pixel, { raw: { width: 1, height: 1, channels: 3 } }).png().toBuffer()
-  if (process.platform === 'linux') {
-    console.error('runtime payload: sharp decode skipped (electron#46323)')
-    return
-  }
   const decoded = await sharp(png).raw().toBuffer({ resolveWithObject: true })
   assert.equal(decoded.info.width, 1)
   assert.equal(decoded.info.height, 1)

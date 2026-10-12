@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { runtimeArchivePath } from '../../desktop-host/src/office-engine.ts'
+import type { DesktopHostRuntime } from '../src/host-runtime.ts'
 import { desktopNodeEnvironment } from '../src/node-environment.ts'
 import type { DesktopRuntimeDescriptor } from '../src/runtime-tree.ts'
 import { scrubWindowsSigningEnvironment } from './windows-sign.mjs'
@@ -14,13 +15,13 @@ import { verifyRuntimeArchive } from './verify-runtime-archive.ts'
 /**
  * Exercise real runtime files and Host composition, including an ASAR root when packaged.
  * @param root Prepared or archived dsh directory.
- * @param node Target Electron executable.
+ * @param host Executable and mode that run the Host on the selected target.
  * @param resourcesRuntime External runtime directory beside the archive.
  * @param descriptor Runtime descriptor already verified against the selected target, which may differ from the build host.
  * @returns Resolves after archive integrity, payload checks, Host startup, Office conversion and teardown.
  */
 export async function smokePreparedRuntime(
-  root: string, node: string, resourcesRuntime: string, descriptor: DesktopRuntimeDescriptor,
+  root: string, host: DesktopHostRuntime, resourcesRuntime: string, descriptor: DesktopRuntimeDescriptor,
 ): Promise<void> {
   const cache = await mkdtemp(join(tmpdir(), 'desktop-native-smoke-'))
   const environment = { ...scrubWindowsSigningEnvironment(process.env), NODE_OPTIONS: '',
@@ -28,10 +29,10 @@ export async function smokePreparedRuntime(
   try {
     const archive = runtimeArchivePath(root)
     if (archive !== undefined) await verifyRuntimeArchive(archive, descriptor)
-    const { stdout } = await promisify(execFile)(node, [
+    const { stdout } = await promisify(execFile)(host.executable, [
       '--expose-internals', resolve(import.meta.dirname, '../tests/fixtures/runtime-payload-smoke.mjs'), root, resourcesRuntime,
     ], { timeout: 120_000, windowsHide: true,
-      env: desktopNodeEnvironment(node, join(resourcesRuntime, 'bin'), environment) }).catch((error: unknown) => {
+      env: desktopNodeEnvironment(host, join(resourcesRuntime, 'bin'), environment) }).catch((error: unknown) => {
       if (error instanceof Error) {
         if ('stdout' in error && typeof error.stdout === 'string') process.stdout.write(error.stdout)
         if ('stderr' in error && typeof error.stderr === 'string') process.stderr.write(error.stderr)
@@ -42,7 +43,7 @@ export async function smokePreparedRuntime(
       throw error
     })
     process.stdout.write(stdout)
-    await smokeDesktopRuntime(root, node, descriptor, environment, resourcesRuntime)
+    await smokeDesktopRuntime(root, host, descriptor, environment, resourcesRuntime)
   } finally {
     await rm(cache, { recursive: true, force: true })
   }

@@ -108,7 +108,7 @@ Windows 应用替换遵循[目录安装参考](../../../../apps/desktop/README.z
 
 `dev:desktop` 会构建当前 workspace，把已构建 CLI 包、私有 Desktop Host 包及其依赖链接投影为一次性项目，使用隔离的 Harness home，打开 Main、Renderer 和 Host 调试器，并在不准备发布资源的情况下启动未打包 Electron。开发运行时为独立的插件 profile 提供工作区链接；插件管理和恢复使用与打包应用相同的流程。固定的 macOS arm64、macOS x64 与 Windows x64 打包命令会把同一目标传给运行时准备、dsh 准备和 electron-builder；每条命令还提供未封装安装器的变体，用于在生成安装器前验证发布路径。
 
-Linux x64 目标仅以本地无签名 AppImage 构建存在：不适用签名、公证、更新源、发布记录或上传路径，Office 引擎因 Linux 没有发布的原生 LibreOffice kit 而回退 WASM。Linux 产物不使用 ASAR——Electron 的 ASAR 文件系统会让 kit 的目录探测把缺失的原生 Office 引擎误报为已安装，从而中断 WASM 回退——负载冒烟跳过 sharp 的解码部分，因为 Electron 的 Linux 二进制泄漏的 glib 符号会使 sharp 的 libvips 管线崩溃（[electron#46323](https://github.com/electron/electron/issues/46323)）。
+Linux x64 目标仅以本地无签名 AppImage 构建存在：不适用签名、公证、更新源、发布记录或上传路径，Office 引擎因 Linux 没有发布的原生 LibreOffice kit 而回退 WASM。Linux 产物不使用 ASAR——Electron 的 ASAR 文件系统会让 kit 的目录探测把缺失的原生 Office 引擎误报为已安装，从而中断 WASM 回退。Linux 还使用内置 Node 而非 Electron 运行 Host，因为 Electron 的 Linux 二进制泄漏的 glib 符号会使打包的 libvips 绑定崩溃（[electron#46323](https://github.com/electron/electron/issues/46323)）；该选择由 [Linux Host 运行时决策](2026-10-12-desktop-linux-host-node.zh.md)负责。
 
 ## 考虑过的替代方案
 

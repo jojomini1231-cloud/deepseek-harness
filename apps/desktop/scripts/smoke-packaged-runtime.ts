@@ -1,7 +1,8 @@
 /** Validate the assembled application, including native Office conversion outside ASAR. */
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
-import { resolveDesktopBuildTarget, resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
+import { desktopTargetPlatform, resolveDesktopBuildTarget, resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
+import { preparedHostRuntime } from '../src/host-runtime.ts'
 import { readDesktopRuntime, verifyDesktopRuntime } from '../src/runtime-tree.ts'
 import { verifyWindowsCode } from './windows-runtime-signature.mjs'
 import { smokePreparedRuntime } from './smoke-prepared-runtime.ts'
@@ -25,4 +26,5 @@ const dshRoot = linux ? join(resources, 'app', 'dsh') : join(resources, 'app.asa
 const descriptor = await verifyDesktopRuntime(paths.dsh, readDesktopRuntime(paths.dsh).release.version,
   resolveDesktopPackageTarget(target))
 if (windows && !values.unsigned) await verifyWindowsCode(application)
-await smokePreparedRuntime(dshRoot, executable, join(resources, 'runtime'), descriptor)
+await smokePreparedRuntime(dshRoot,
+  preparedHostRuntime(desktopTargetPlatform(target).platform, executable, join(resources, 'runtime')), join(resources, 'runtime'), descriptor)

@@ -3,6 +3,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
 import type { PlatformSession } from '@deepseek-ai/dsh-deepseek-account'
+import type { DesktopHostRuntime } from './host-runtime.ts'
 import { desktopNodeEnvironment } from './node-environment.ts'
 
 interface ReadyEvent {
@@ -155,7 +156,7 @@ export class DesktopHostProcess {
   }>()
 
   /**
-   * @param node - Absolute Electron executable in Node mode.
+   * @param runtime - Executable and mode that runs the Host.
    * @param runtimeDir - Immutable packages carried by the current application.
    * @param projectDir - Desktop plugin profile and child working directory.
    * @param inspectPort - Optional loopback inspector port for workspace development.
@@ -167,7 +168,7 @@ export class DesktopHostProcess {
    * @param onPlatformSession - Private credential updates for embedded Platform views.
    */
   constructor(
-    private readonly node: string,
+    private readonly runtime: DesktopHostRuntime,
     private readonly runtimeDir: string,
     private readonly projectDir: string,
     private readonly inspectPort?: number,
@@ -186,7 +187,7 @@ export class DesktopHostProcess {
   async start(): Promise<DesktopHostReady> {
     if (this.child !== undefined) return this.readyPromise
     const entry = join(this.runtimeDir, 'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'index.js')
-    const child = spawn(this.node, [
+    const child = spawn(this.runtime.executable, [
       '--expose-internals',
       ...(this.inspectPort === undefined ? [] : [`--inspect=127.0.0.1:${String(this.inspectPort)}`]),
       entry,
@@ -196,7 +197,7 @@ export class DesktopHostProcess {
       ...this.packageManager === undefined ? [] : [this.packageManager.pnpm, this.packageManager.nodeBin],
     ], {
       cwd: this.projectDir,
-      env: desktopNodeEnvironment(this.node, undefined, this.environment),
+      env: desktopNodeEnvironment(this.runtime, undefined, this.environment),
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     })
     this.child = child

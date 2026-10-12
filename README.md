@@ -54,7 +54,7 @@ The command prepares the bundled interpreter payload on first use (which may dow
 pnpm run package:desktop:linux:x64:unsigned
 ```
 
-The AppImage requires FUSE at run time and needs no `.env` file or signing configuration. Image-attachment decoding is unreliable inside the packaged application until [electron#46323](https://github.com/electron/electron/issues/46323) is fixed upstream; the [Desktop README](apps/desktop/README.md) documents this and the remaining Linux limitations.
+The AppImage requires FUSE at run time and needs no `.env` file or signing configuration. The application runs its Host on the bundled Node instead of Electron, because Electron's Linux binaries conflict with the bundled libvips bindings ([electron#46323](https://github.com/electron/electron/issues/46323)); the [Desktop README](apps/desktop/README.md) documents this and the remaining Linux limitations.
 
 ## Community and support
 

@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   root: '',
   target: 'mac-arm64' as 'mac-arm64' | 'mac-x64' | 'win-x64' | 'linux-x64',
   pnpm: '11.7.0' as string | undefined,
+  node: '24.17.0' as string | undefined,
   failure: undefined as 'electron' | 'primary' | 'cli' | undefined,
   preparePrimary: vi.fn(),
   commandLink: vi.fn(),
@@ -51,6 +52,7 @@ beforeEach(() => {
   state.root = mkdtempSync(join(tmpdir(), 'desktop-runtime-preparation-'))
   state.target = 'mac-arm64'
   state.pnpm = '11.7.0'
+  state.node = '24.17.0'
   state.failure = undefined
   process.argv = [process.execPath, 'prepare-runtime.ts']
   vi.stubEnv('DSH_DESKTOP_PACKAGING_RUN_DIR', undefined)
@@ -63,7 +65,7 @@ beforeEach(() => {
     writeFileSync(join(root, 'runtime.json'), JSON.stringify({
       desktopVersion: '1.0.0', platform: state.target === 'win-x64' ? 'win32' : state.target === 'linux-x64' ? 'linux' : 'darwin',
       arch: state.target === 'mac-arm64' ? 'arm64' : 'x64',
-      python: '3.12.14', node: '24.17.0', pnpm: state.pnpm, pythonPackages: { numpy: '2.3.5' },
+      python: '3.12.14', node: state.node, pnpm: state.pnpm, pythonPackages: { numpy: '2.3.5' },
     }))
   })
 })
@@ -89,8 +91,9 @@ it.each(['mac-arm64', 'mac-x64', 'win-x64', 'linux-x64'] as const)('prepares %s 
   expect(existsSync(join(runtime, 'cli', 'bin', windows ? 'dsh.cmd' : 'dsh'))).toBe(true)
   expect(readFileSync(join(runtime, 'cli', 'command-manager.js'), 'utf8')).toBe('command manager fixture')
   expect(existsSync(join(runtime, 'cli', 'command-path.ps1'))).toBe(true)
+  // Linux executes the Host with the payload's standalone Node; other targets record Electron's Node.
   expect(JSON.parse(readFileSync(join(runtime, 'versions.json'), 'utf8'))).toEqual({
-    schemaVersion: 1, node: '24.18.1', pnpm: '11.7.0',
+    schemaVersion: 1, node: target === 'linux-x64' ? '24.17.0' : '24.18.1', pnpm: '11.7.0',
   })
   expect(state.preparePrimary).toHaveBeenCalledWith({ deferSmoke: windows })
   if (windows || target === 'linux-x64') expect(state.commandLink).not.toHaveBeenCalled()
@@ -118,5 +121,13 @@ it.each([
   process.argv.push('--defer-primary-runtime-smoke')
   state.pnpm = pnpm
   await expect(import('../scripts/prepare-runtime.ts')).rejects.toThrow(error)
+  expect(existsSync(join(state.root, 'runtime', 'versions.json'))).toBe(false)
+})
+
+it('rejects a Linux payload with no Node to run the Host', async () => {
+  state.target = 'linux-x64'
+  state.node = undefined
+  state.pnpm = undefined
+  await expect(import('../scripts/prepare-runtime.ts')).rejects.toThrow('primary-runtime manifest has no Node version')
   expect(existsSync(join(state.root, 'runtime', 'versions.json'))).toBe(false)
 })

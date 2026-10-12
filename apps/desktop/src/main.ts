@@ -60,6 +60,7 @@ import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
 import { DesktopTray } from './tray.ts'
 import { DesktopBackgroundNotice } from './background-notice.ts'
+import { resolveDesktopHostRuntime, standaloneNodeExecutable } from './host-runtime.ts'
 
 let focusPrimaryWindow = (): void => {}
 let stopForRecovery = async (): Promise<void> => {}
@@ -144,21 +145,22 @@ protocol.registerSchemesAsPrivileged([{
 
 interface RuntimeResources {
   readonly nodeBin: string
-  readonly node: string
+  /** Electron executable in Node mode. */
+  readonly electron: string
   readonly pnpm: string
   readonly dsh: string
 }
 
 function runtimeResources(): RuntimeResources {
   const development = !app.isPackaged
-  const node = process.execPath
+  const electron = process.execPath
   const nodeBin = development ? join(app.getAppPath(), 'scripts', 'node-bin') : join(process.resourcesPath, 'runtime', 'bin')
   const pnpm = (development ? process.env.DSH_DESKTOP_PNPM_ENTRY : undefined)
     ?? (development ? join(app.getAppPath(), 'node_modules', 'pnpm', 'bin', 'pnpm.mjs')
       : join(process.resourcesPath, 'runtime', 'primary-runtime', 'dependencies', 'pnpm', 'bin', 'pnpm.mjs'))
   const dsh = (development ? process.env.DSH_DESKTOP_DSH_DIR : undefined)
     ?? (development ? join(app.getAppPath(), '.desktop-build', 'development', 'project') : join(app.getAppPath(), 'dsh'))
-  return { node, nodeBin, pnpm, dsh }
+  return { electron, nodeBin, pnpm, dsh }
 }
 
 function developmentPrimaryRuntime(): string {
@@ -461,7 +463,9 @@ async function main(): Promise<void> {
     process.platform === 'win32' ? 'win32' : process.platform === 'darwin' ? 'darwin' : null)
   const backend = new DesktopBackendController((onFailure) => {
     const hostInspectPort = developmentHostInspectPort(development)
-    const host = new DesktopHostProcess(resources.node, resources.dsh, activeProject,
+    const host = new DesktopHostProcess(
+      resolveDesktopHostRuntime(process.platform, resources.electron, standaloneNodeExecutable(primaryRuntime, process.platform)),
+      resources.dsh, activeProject,
       hostInspectPort, { ...hostEnvironment, DSH_CLIENT_VERSION: desktopClientVersion() }, onFailure,
       primaryRuntime,
       resources, (next) => { platformView.setSession(next) })

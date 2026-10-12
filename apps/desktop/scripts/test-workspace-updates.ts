@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url'
 import { createDevelopmentProjectMetadata, createPluginProfile } from '../src/project-manager.ts'
 import { removeOwnedDirectory } from '../src/owned-directory.ts'
 import { DESKTOP_HOST_PROTOCOL_VERSION } from '../src/host-protocol.ts'
+import { resolveDesktopHostRuntime, standaloneNodeExecutable } from '../src/host-runtime.ts'
+import { readPrimaryRuntime } from '../../../packages/skill/tool-workspace-dependencies/src/index.ts'
 import { desktopTargetPlatform, developmentRuntimeDirectory, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
 
 const repo = resolve(import.meta.dirname, '../../..')
@@ -24,11 +26,16 @@ const pnpm = JSON.parse(await readFile(join(repo, 'apps/desktop/node_modules/pnp
 try {
   const require = createRequire(import.meta.url)
   const electron = require('electron') as string
-  const release = { schemaVersion: 1 as const, version: manifest.version,
-    nodeVersion: execFileSync(electron, ['-p', 'process.versions.node'],
-      { encoding: 'utf8', env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, windowsHide: true }).trim(),
-    pnpmVersion: pnpm.version, hostProtocolVersion: DESKTOP_HOST_PROTOCOL_VERSION }
   const target = resolveDesktopBuildTarget()
+  const platform = desktopTargetPlatform(target).platform
+  const primaryRuntime = developmentRuntimeDirectory()
+  const { node: bundledNode } = await readPrimaryRuntime(primaryRuntime)
+  if (bundledNode === undefined) throw new Error('Electron workspace qualification: primary runtime has no Node version')
+  const host = resolveDesktopHostRuntime(platform, electron, standaloneNodeExecutable(primaryRuntime, platform))
+  const release = { schemaVersion: 1 as const, version: manifest.version,
+    nodeVersion: host.electron ? execFileSync(host.executable, ['-p', 'process.versions.node'],
+      { encoding: 'utf8', env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, windowsHide: true }).trim() : bundledNode,
+    pnpmVersion: pnpm.version, hostProtocolVersion: DESKTOP_HOST_PROTOCOL_VERSION }
   createDevelopmentProjectMetadata(project, release)
   createPluginProfile(profile)
   await writeFile(join(project, 'desktop-runtime.json'), JSON.stringify({

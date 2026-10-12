@@ -60,7 +60,7 @@ pnpm run dev:desktop
 pnpm run package:desktop:linux:x64:unsigned
 ```
 
-AppImage 运行时需要 FUSE，且无需 `.env` 文件或签名配置。上游 [electron#46323](https://github.com/electron/electron/issues/46323) 修复前，打包应用中的图片附件解码不可靠；[Desktop README](apps/desktop/README.zh.md) 记录了这一点以及其余 Linux 限制。
+AppImage 运行时需要 FUSE，且无需 `.env` 文件或签名配置。应用使用内置 Node 而非 Electron 运行 Host，因为 Electron 的 Linux 二进制与打包的 libvips 绑定冲突（[electron#46323](https://github.com/electron/electron/issues/46323)）；[Desktop README](apps/desktop/README.zh.md) 记录了这一点以及其余 Linux 限制。
 
 ## 社区与支持
 

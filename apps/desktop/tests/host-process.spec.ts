@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DesktopHostFatalError, DesktopHostProcess, DesktopHostUncleanExitError, QUIT_INSPECTION_DEADLINE_MS } from '../src/host-process.ts'
+import type { DesktopHostRuntime } from '../src/host-runtime.ts'
 
 const roots: string[] = []
 const hosts: DesktopHostProcess[] = []
@@ -59,12 +60,18 @@ function projectWithHost(source = HTTP_HOST): string {
   return project
 }
 
+/** Node-mode runtime for a fixture Host: the test runner's own executable. */
+function fixtureRuntime(electron: boolean): DesktopHostRuntime {
+  return { executable: process.execPath, electron }
+}
+
 function hostProcess(
   runtime: string, profile = runtime, onFailure?: (error: Error) => void, environment = process.env,
+  host = fixtureRuntime(false),
 ): DesktopHostProcess {
-  const host = new DesktopHostProcess(process.execPath, runtime, profile, undefined, environment, onFailure)
-  hosts.push(host)
-  return host
+  const child = new DesktopHostProcess(host, runtime, profile, undefined, environment, onFailure)
+  hosts.push(child)
+  return child
 }
 
 afterEach(async () => {
@@ -133,7 +140,7 @@ describe('desktop host process', () => {
     const runtime = projectWithHost(HTTP_HOST.replace('runtime: process.argv[2]',
       'pnpm: process.argv[5], nodeBin: process.argv[6], primaryRuntime: process.argv[4], runtime: process.argv[2]'))
     const primaryRuntime = join(runtime, 'external-primary-runtime')
-    const host = new DesktopHostProcess(process.execPath, runtime, runtime, undefined, process.env,
+    const host = new DesktopHostProcess(fixtureRuntime(false), runtime, runtime, undefined, process.env,
       undefined, primaryRuntime, { pnpm: join(runtime, 'pnpm.mjs'), nodeBin: join(runtime, 'bin') })
     hosts.push(host)
     const { url } = await host.start()
@@ -174,22 +181,22 @@ describe('desktop host process', () => {
 
   it('settles teardown when the executable cannot be spawned', async () => {
     const runtime = projectWithHost()
-    const host = new DesktopHostProcess(join(runtime, 'missing-node'), runtime, runtime)
+    const host = new DesktopHostProcess({ executable: join(runtime, 'missing-node'), electron: false }, runtime, runtime)
     hosts.push(host)
     await expect(host.start()).rejects.toThrow()
     await host.stop()
   })
 
-  it('loads the resource entry with a separate profile and inherits runtime and package-manager configuration', async () => {
+  it.each([false, true])('loads the resource entry with a separate profile and inherits runtime and package-manager configuration (Electron host: %s)', async (electron) => {
     const runtime = projectWithHost()
     const profile = mkdtempSync(join(tmpdir(), 'desktop-external-profile-'))
     roots.push(profile)
     const host = hostProcess(runtime, profile, undefined, {
       ...process.env, NODE_OPTIONS: '--no-warnings', NODE_PATH: '/custom', NPM_CONFIG_REGISTRY: 'https://registry.example.test/',
-    })
+    }, fixtureRuntime(electron))
     const { url } = await host.start()
     const response = await fetch(url)
-    expect(await response.json()).toEqual({ runtime, profile, cwd: realpathSync(profile), nodePath: '/custom', registry: 'https://registry.example.test/', nodeOptions: '--no-warnings', runAsNode: '1', internals: true })
+    expect(await response.json()).toEqual({ runtime, profile, cwd: realpathSync(profile), nodePath: '/custom', registry: 'https://registry.example.test/', nodeOptions: '--no-warnings', runAsNode: electron ? '1' : undefined, internals: true })
   })
 
   it.each([
@@ -219,7 +226,8 @@ describe('desktop host process', () => {
 it.each([null, 'stable-account'])('carries Platform identity %s over private IPC and clears credentials on shutdown', async (userId) => {
   const runtime = projectWithHost(HTTP_HOST.replace("process.send({ type: 'ready'", "process.send({ type: 'platform-session', session: { origin: 'https://platform.deepseek.com', userId: " + JSON.stringify(userId) + ", token: 'fixture-secret', embeddedPageDist: 'feat/test' } }); process.send({ type: 'ready'"))
   const changed = vi.fn()
-  const host = new DesktopHostProcess(process.execPath, runtime, runtime, undefined, process.env, undefined, undefined, undefined, changed)
+  const host = new DesktopHostProcess(
+    fixtureRuntime(false), runtime, runtime, undefined, process.env, undefined, undefined, undefined, changed)
   hosts.push(host)
   await host.start()
   expect(changed).toHaveBeenCalledWith({ origin: 'https://platform.deepseek.com', userId, token: 'fixture-secret', embeddedPageDist: 'feat/test' })
@@ -232,7 +240,8 @@ it.each([undefined, '', 7])('rejects malformed Platform account identity %s on p
   const runtime = projectWithHost(HTTP_HOST.replace("process.send({ type: 'ready'",
     `process.send({ type: 'platform-session', session: ${JSON.stringify(session)} }); process.send({ type: 'ready'`))
   const changed = vi.fn()
-  const host = new DesktopHostProcess(process.execPath, runtime, runtime, undefined, process.env, undefined, undefined, undefined, changed)
+  const host = new DesktopHostProcess(
+    fixtureRuntime(false), runtime, runtime, undefined, process.env, undefined, undefined, undefined, changed)
   hosts.push(host)
   await expect(host.start()).rejects.toThrow('invalid IPC event')
   expect(changed.mock.calls).toEqual([[null]])

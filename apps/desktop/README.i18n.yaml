@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write apps/desktop/README.md
 /deepseek-harness-desktop:
-  en: 5b8518fd5e0030ef
-  zh: 02efee59c39647dc
+  en: e5f0c07cc81a5eee
+  zh: 55526e2797c7fa7d
 /deepseek-harness-desktop/terminal-command:
   en: bef92953c237363f
   zh: d21d6effd21b8c00
@@ -15,14 +15,14 @@
   en: 19448a7feeff5e56
   zh: e8523b89b05656b6
 /deepseek-harness-desktop/key-technical-decisions/bundled-workspace-dependencies:
-  en: 2b049b4f104be1c2
-  zh: 1e8f3a9f7eb15e2b
+  en: 0f56b47e64ef5e10
+  zh: 6c7796391b26fc7a
 /deepseek-harness-desktop/bundled-command-runtime:
   en: 09f0b75af9f0ed14
   zh: 60bbc2e67d5e87a8
 /deepseek-harness-desktop/installation-ownership:
-  en: a0a4e1340c0882f2
-  zh: 2f36b8b8232436af
+  en: fd3473af9f1ebadc
+  zh: 2bf401b9920af164
 /deepseek-harness-desktop/installation-ownership/runtime-and-plugin-activation:
   en: a1a47b09f4a72ba4
   zh: 7b1cf27f0b72cf31
@@ -30,8 +30,8 @@
   en: 84a9cc7ca9455aa8
   zh: 4091b8aa8231b74a
 /deepseek-harness-desktop/develop:
-  en: fe6d23e6a3d3bc66
-  zh: d60c8d3a55747916
+  en: 331326ca4723eef6
+  zh: 8ff4421ef9676f6f
 /deepseek-harness-desktop/develop/startup-onboarding:
   en: a51346b8d880ddba
   zh: 7913214c1c66063c
@@ -45,17 +45,17 @@
   en: 5743360ab900ccd8
   zh: f8a8a4c6ca31d9b3
 /deepseek-harness-desktop/package/local-macos-dmg-without-release-signing:
-  en: 57869a5e3885f843
-  zh: 7cfc01b2dcbebd78
+  en: e0c7b72e4a79f433
+  zh: 4a7d4abdc7ba8852
 /deepseek-harness-desktop/package/local-linux-appimage-without-release-signing:
-  en: d7c58c9e0e34ffb0
-  zh: 799efcffdc918703
+  en: da9ae34dc446b621
+  zh: 72e64e4c6688b095
 /deepseek-harness-desktop/package/local-official-bundles-from-a-loopback-registry:
   en: 5f05072ec82cc62d
   zh: a3d63b58d1ef2db7
 /deepseek-harness-desktop/package/runtime-file-selection:
-  en: e7c1eb8e78fe46e3
-  zh: b7ea497dd75be524
+  en: a3774f875af326fa
+  zh: c4d2122b08296bca
 /deepseek-harness-desktop/package/upload-updates:
   en: f48baa680e841b0d
   zh: 25ded1aeaac6dad1

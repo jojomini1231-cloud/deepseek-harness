@@ -7,7 +7,9 @@ import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { DESKTOP_HOST_PROTOCOL_VERSION } from '../src/host-protocol.ts'
 import type { DesktopRelease } from '../src/release.ts'
-import { developmentRuntimeDirectory, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
+import { resolveDesktopHostRuntime, standaloneNodeExecutable } from '../src/host-runtime.ts'
+import { readPrimaryRuntime } from '../../../packages/skill/tool-workspace-dependencies/src/index.ts'
+import { desktopTargetPlatform, developmentRuntimeDirectory, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
 import { prepareDevelopmentProject } from './development-project.ts'
 import { prepareDevelopmentApp } from './development-app.ts'
 import { preparePrimaryRuntime } from './prepare-primary-runtime.ts'
@@ -54,6 +56,12 @@ async function runPackageScript(script: string, cwd: string): Promise<void> {
     throw new Error('desktop development: invoke this launcher through pnpm run dev:desktop or start:desktop')
   }
   await run(process.execPath, [packageManager, 'run', script], cwd)
+}
+
+/** Read the Node version an Electron distribution reports in Node mode. */
+function electronNodeVersion(executable: string): string {
+  return execFileSync(executable, ['-p', 'process.versions.node'],
+    { encoding: 'utf8', env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } }).trim()
 }
 
 async function launchElectron(): Promise<void> {
@@ -104,12 +112,19 @@ async function main(): Promise<void> {
   }
   const version = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
   const pnpmVersion = packageVersion(join(APP_ROOT, 'node_modules', 'pnpm', 'package.json'), 'pnpm package')
+  await preparePrimaryRuntime()
+  const primaryRuntime = developmentRuntimeDirectory()
+  const target = resolveDesktopBuildTarget()
+  const platform = desktopTargetPlatform(target).platform
+  const { node: bundledNode } = await readPrimaryRuntime(primaryRuntime)
+  if (bundledNode === undefined) throw new Error('desktop development: primary runtime has no Node version')
+  const host = resolveDesktopHostRuntime(platform,
+    createRequire(import.meta.url)('electron') as string, standaloneNodeExecutable(primaryRuntime, platform))
   const release: DesktopRelease = {
     schemaVersion: 1,
     version,
     hostProtocolVersion: DESKTOP_HOST_PROTOCOL_VERSION,
-    nodeVersion: execFileSync(createRequire(import.meta.url)('electron') as string, ['-p', 'process.versions.node'],
-      { encoding: 'utf8', env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } }).trim(),
+    nodeVersion: host.electron ? electronNodeVersion(host.executable) : bundledNode,
     pnpmVersion,
   }
   prepareDevelopmentProject({
@@ -118,9 +133,8 @@ async function main(): Promise<void> {
     hostDir: join(REPOSITORY_ROOT, 'apps', 'desktop-host'),
     dependencyDir: join(REPOSITORY_ROOT, 'node_modules', '.pnpm', 'node_modules'),
     release,
-    target: resolveDesktopBuildTarget(),
+    target,
   })
-  await preparePrimaryRuntime()
   await launchElectron()
 }
 

@@ -1,8 +1,9 @@
 /** Public dsh commands using the immutable runtime carried by the Desktop installation. */
 
-import { delimiter, dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { runCli } from '@deepseek-ai/dsh/lib/bin.js'
 import { installOfficeEngineResolution, packagedApplicationPath } from './office-engine.ts'
+import { packageManagerEnvironment } from './node-mode.ts'
 
 /**
  * Run the ordinary CLI with Desktop's bundled package manager and reserved-profile plugin access.
@@ -17,11 +18,7 @@ export async function runDesktopCli(runtimeDir: string, supportDir: string): Pro
     packageManager: {
       command: process.execPath,
       args: ['--expose-internals', join(supportDir, 'primary-runtime', 'dependencies', 'pnpm', 'bin', 'pnpm.mjs')],
-      env: {
-        ELECTRON_RUN_AS_NODE: '1',
-        DSH_DESKTOP_NODE_EXECUTABLE: process.execPath,
-        PATH: `${join(supportDir, 'bin')}${delimiter}${process.env.PATH ?? ''}`,
-      },
+      env: packageManagerEnvironment(join(supportDir, 'bin')),
     },
   })
 }

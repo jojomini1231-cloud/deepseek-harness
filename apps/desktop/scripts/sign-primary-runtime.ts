@@ -10,6 +10,7 @@ import { prepareWindowsSignatureCacheDirectory, resolveWindowsSignatureCacheDire
 import { withWindowsSigningStage } from './windows-signing-stage.mjs'
 import { failPackagingRun, recordPackagingEvent } from './packaging-run.mjs'
 import { resolveDesktopBuildTarget, resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
+import { preparedHostRuntime } from '../src/host-runtime.ts'
 import { smokePrimaryRuntime } from './prepare-primary-runtime.ts'
 import { verifyDesktopRuntime, writeDesktopRuntime, type DesktopRuntimeDescriptor } from '../src/runtime-tree.ts'
 import { smokePreparedRuntime } from './smoke-prepared-runtime.ts'
@@ -76,7 +77,7 @@ async function main(): Promise<void> {
         if (process.argv.includes('--dsh')) {
           const version = JSON.parse(await readFile(join(paths.dsh, 'package.json'), 'utf8')).version as string
           await signWindowsDesktopRuntime(paths.dsh, version, { ...options,
-            smoke: descriptor => smokePreparedRuntime(paths.dsh, join(paths.electron, 'electron.exe'), paths.runtime, descriptor),
+            smoke: descriptor => smokePreparedRuntime(paths.dsh, preparedHostRuntime('win32', join(paths.electron, 'electron.exe'), paths.runtime), paths.runtime, descriptor),
           })
         } else {
           await signWindowsPrimaryRuntime(join(paths.runtime, 'primary-runtime'), { ...options, smoke: smokePrimaryRuntime })

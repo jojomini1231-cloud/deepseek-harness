@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-10-12-desktop-linux-host-node.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-10-12-desktop-linux-host-node.md
+/agent-note-run-the-desktop-host-on-the-bundled-node-on-linux:
+  en: 104a71d53576a0c9
+  zh: 26f31c7e766c031c
+/agent-note-run-the-desktop-host-on-the-bundled-node-on-linux/problem:
+  en: 9e6be7385360dcc2
+  zh: 91785c85e61c03f2
+/agent-note-run-the-desktop-host-on-the-bundled-node-on-linux/decision:
+  en: aec8a65347e2a726
+  zh: ebdb2d92328c5cf4
+/agent-note-run-the-desktop-host-on-the-bundled-node-on-linux/alternatives-considered:
+  en: e428a19e85d5ffd4
+  zh: 94bfbb97248f4ddd
+/agent-note-run-the-desktop-host-on-the-bundled-node-on-linux/consequences:
+  en: 8828fda3d5189145
+  zh: d2fc6b61b02124af
+/agent-note-run-the-desktop-host-on-the-bundled-node-on-linux/related:
+  en: 3a3e2a42904e263e
+  zh: 6fa85e6c084ef0b6

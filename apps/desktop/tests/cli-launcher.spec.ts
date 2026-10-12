@@ -27,9 +27,17 @@ function fixture() {
   const electron = join(application, ...platform === 'darwin'
     ? ['Contents', 'MacOS', 'DeepSeek Harness']
     : platform === 'linux' ? ['deepseek-harness'] : ['DeepSeek Harness.exe'])
-  mkdirSync(dirname(electron), { recursive: true })
-  if (platform === 'win32') copyFileSync(process.execPath, electron)
-  else symlinkSync(process.execPath, electron)
+  if (platform !== 'linux') {
+    mkdirSync(dirname(electron), { recursive: true })
+    if (platform === 'win32') copyFileSync(process.execPath, electron)
+    else symlinkSync(process.execPath, electron)
+  }
+  // Linux runs the installed CLI on the bundled Node instead of the Electron binary.
+  if (platform === 'linux') {
+    const bundled = join(resources, 'runtime', 'primary-runtime', 'dependencies', 'node', 'bin', 'node')
+    mkdirSync(dirname(bundled), { recursive: true })
+    symlinkSync(process.execPath, bundled)
+  }
   // Linux ships unpacked, so the dsh tree is a plain app directory instead of app.asar.
   const entry = join(resources, ...platform === 'linux' ? ['app', 'dsh'] : ['app.asar', 'dsh'],
     'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'cli.js')
@@ -44,6 +52,8 @@ function fixture() {
     '',
   ].join('\n'))
   const command = join(cli, 'bin', platform === 'win32' ? 'dsh.cmd' : 'dsh')
+  /** The launcher marks Electron Node mode only where an Electron binary runs the CLI. */
+  const nodeMode = platform === 'linux' ? undefined : '1'
   function start(args: string[], executable = command) {
     // cmd fixture inputs contain no metacharacters; POSIX cases exercise literal expansion characters separately.
     const child = platform === 'win32'
@@ -63,7 +73,12 @@ function fixture() {
     child.stderr.setEncoding('utf8').on('data', (text: string) => { stderr += text })
     return { child, closed, stdout: () => stdout, stderr: () => stderr }
   }
-  return { root, command, start }
+  return { root, command, start, nodeMode }
+}
+
+/** A launcher that runs plain Node leaves the variable out of the child environment entirely. */
+function nodeModeExpectation(nodeMode: string | undefined): { nodeMode?: string } {
+  return nodeMode === undefined ? {} : { nodeMode }
 }
 
 it('preserves common arguments, cwd, environment, binary input, stderr and exit status', async () => {
@@ -73,7 +88,7 @@ it('preserves common arguments, cwd, environment, binary input, stderr and exit 
   const input = Buffer.from([0, 1, 10, 255])
   run.child.stdin.end(input)
   expect(await run.closed, run.stderr()).toBe(23)
-  expect(JSON.parse(run.stdout())).toEqual({ args, cwd: f.root, value: 'kept', nodeMode: '1', input: input.toString('hex') })
+  expect(JSON.parse(run.stdout())).toEqual({ args, cwd: f.root, value: 'kept', nodeMode: f.nodeMode, input: input.toString('hex') })
   expect(run.stderr()).toBe('separate stderr\n')
 })
 
@@ -87,5 +102,5 @@ it.skipIf(process.platform === 'win32')('resolves chained command symlinks witho
   const run = f.start(args, command)
   run.child.stdin.end()
   expect(await run.closed, run.stderr()).toBe(23)
-  expect(JSON.parse(run.stdout())).toMatchObject({ args, cwd: f.root, nodeMode: '1' })
+  expect(JSON.parse(run.stdout())).toMatchObject({ args, cwd: f.root, ...nodeModeExpectation(f.nodeMode) })
 })

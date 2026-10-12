@@ -9,9 +9,17 @@ import type { MenuItemConstructorOptions, MessageBoxOptions } from 'electron'
 import { DESKTOP_IPC, type DesktopUpdateState } from '../src/ipc.ts'
 import { MANDATORY_IPC } from '../src/mandatory-update-ipc.ts'
 import { DesktopHostFatalError, DesktopHostUncleanExitError } from '../src/host-process.ts'
+import type { DesktopHostRuntime } from '../src/host-runtime.ts'
 import { en, zh } from '../src/locale.ts'
 import { DesktopUpdatePreparationError } from '../src/update-error.ts'
 import { writeCrashReport } from '../src/crash-report.ts'
+
+/** Executable the shell selects for the Host that runs on `primaryRuntime`. */
+function hostRuntimeFor(primaryRuntime: string): DesktopHostRuntime {
+  return process.platform === 'linux'
+    ? { executable: join(primaryRuntime, 'dependencies', 'node', 'bin', 'node'), electron: false }
+    : { executable: process.execPath, electron: true }
+}
 
 type InvokeEvent = { sender?: unknown; senderFrame: { url: string } }
 type InvokeHandler = (event: InvokeEvent, ...args: unknown[]) => unknown
@@ -151,7 +159,8 @@ const harness = await vi.hoisted(async () => {
       return this.exited.promise
     })
     constructor(
-      readonly node: string, readonly runtime: string, readonly profile: string,
+      readonly runtime: { readonly executable: string; readonly electron: boolean },
+      readonly runtimeDir: string, readonly profile: string,
       readonly inspectPort?: number, readonly environment?: NodeJS.ProcessEnv, readonly onFailure?: (error: Error) => void,
       readonly primaryRuntime?: string,
       readonly packageManager?: { pnpm: string; nodeBin: string },
@@ -459,9 +468,10 @@ describe('desktop main startup', () => {
     harness.app.isPackaged = packaged
     await readyForUpdate()
     const host = harness.hosts[0]!
-    expect(host.node).toBe(process.execPath)
-    expect(host.primaryRuntime).toBe(packaged
-      ? join('desktop-test-resources', 'runtime', 'primary-runtime') : 'test-primary-runtime')
+    const primaryRuntime = packaged
+      ? join('desktop-test-resources', 'runtime', 'primary-runtime') : 'test-primary-runtime'
+    expect(host.runtime).toEqual(hostRuntimeFor(primaryRuntime))
+    expect(host.primaryRuntime).toBe(primaryRuntime)
     expect(host.packageManager).toMatchObject({
       pnpm: packaged
         ? join('desktop-test-resources', 'runtime', 'primary-runtime', 'dependencies', 'pnpm', 'bin', 'pnpm.mjs')
@@ -2319,8 +2329,8 @@ describe('desktop main startup', () => {
     await Promise.all([retry, secondRetry, harness.navigated.promise])
     expect(harness.applyRelease).toHaveBeenCalledTimes(1)
     expect(harness.hosts[0]).toMatchObject({
-      node: process.execPath,
-      runtime: join(harness.app.getAppPath(), 'dsh'),
+      runtime: hostRuntimeFor(join('desktop-test-resources', 'runtime', 'primary-runtime')),
+      runtimeDir: join(harness.app.getAppPath(), 'dsh'),
       primaryRuntime: join('desktop-test-resources', 'runtime', 'primary-runtime'),
       profile: 'desktop-test-profile',
     })
@@ -2342,7 +2352,7 @@ describe('desktop main startup', () => {
     harness.prepared.resolve()
     await harness.hostStarted.promise
     const project = join(harness.app.getAppPath(), '.desktop-build', 'development', 'project')
-    expect(harness.hosts[0]).toMatchObject({ node: process.execPath, runtime: project,
+    expect(harness.hosts[0]).toMatchObject({ runtime: hostRuntimeFor('test-primary-runtime'), runtimeDir: project,
       primaryRuntime: 'test-primary-runtime', profile: 'desktop-test-profile' })
     expect(harness.applyRelease).toHaveBeenCalledOnce()
     harness.hosts[0]!.ready.resolve()

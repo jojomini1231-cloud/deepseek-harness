@@ -16,6 +16,7 @@ vi.mock('node:child_process', async (importOriginal) => {
 vi.mock('../scripts/smoke-runtime.ts', () => ({ smokeDesktopRuntime: vi.fn(async () => {}) }))
 
 const roots: string[] = []
+const hostRuntime = { executable: '/target/electron', electron: true }
 const hostArch = Object.getOwnPropertyDescriptor(process, 'arch')!
 afterEach(() => {
   Object.defineProperty(process, 'arch', hostArch)
@@ -37,7 +38,7 @@ it('retains payload progress and termination details when the child fails', asyn
   payload.mockRejectedValueOnce(failure)
   const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true)
   const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
-  await expect(smokePreparedRuntime(root, join(root, 'electron'), join(root, 'runtime'), descriptor)).rejects.toBe(failure)
+  await expect(smokePreparedRuntime(root, hostRuntime, join(root, 'runtime'), descriptor)).rejects.toBe(failure)
   expect(stdout).toHaveBeenCalledWith('payload output\n')
   expect(stderr).toHaveBeenCalledWith('runtime payload: pty\n')
   expect(stderr).toHaveBeenCalledWith('runtime payload: killed=true, signal=SIGTERM\n')
@@ -54,12 +55,11 @@ it('smokes an x64 target verified on an arm64 build host without revalidating ag
   await expect(verifyDesktopRuntime(root, fixture.release.version, { ...target, arch: process.arch }))
     .rejects.toThrow(/incompatible/u)
   const descriptor = await verifyDesktopRuntime(root, fixture.release.version, target)
-  const electron = join(root, 'target-electron')
   const resources = join(root, 'runtime')
-  await smokePreparedRuntime(root, electron, resources, descriptor)
-  expect(payload.mock.calls[0]![0]).toBe(electron)
+  await smokePreparedRuntime(root, hostRuntime, resources, descriptor)
+  expect(payload.mock.calls[0]![0]).toBe(hostRuntime.executable)
   expect(payload.mock.calls[0]![1]).toEqual(expect.arrayContaining([root, resources]))
-  expect(smokeDesktopRuntime).toHaveBeenCalledWith(root, electron, descriptor, expect.any(Object), resources)
+  expect(smokeDesktopRuntime).toHaveBeenCalledWith(root, hostRuntime, descriptor, expect.any(Object), resources)
   const environment = vi.mocked(smokeDesktopRuntime).mock.calls[0]![3]
   expect(existsSync(environment.NARB_NATIVE_CACHE_DIR!)).toBe(false)
 })
