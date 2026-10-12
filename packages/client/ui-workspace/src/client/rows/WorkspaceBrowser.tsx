@@ -23,7 +23,7 @@ import clsx from 'clsx'
 import {
   Button, IconArchiveCheckOutlineRegular, IconArchiveOffOutlineRegular, IconArchiveOutlineRegular,
   IconChevronsUpDownOutlineRegular, IconClockOutlineRegular, IconCloseFillRegular,
-  IconFlatListOutlineRegular, IconFolderCloseRegular, IconProjectAddOutlineRegular,
+  IconFlatListOutlineRegular, IconFolderCloseRegular, IconNewChatOutlineRegular, IconProjectAddOutlineRegular,
   IconQueueOutlineRegular, IconSearchOutlineRegular, IconSlidersTwoOutlineRegular,
   IconWorkspaceTreeOutlineRegular, Menu, Modal, Toast, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -1514,7 +1514,7 @@ export function WorkspaceBrowser({
             aria-label={t('session.new.temporary')}
             onClick={() => { startTemporarySession() }}
           >
-            <IconProjectAddOutlineRegular size={16} />
+            <IconNewChatOutlineRegular size={16} />
           </button>
         </Tooltip>
       )}

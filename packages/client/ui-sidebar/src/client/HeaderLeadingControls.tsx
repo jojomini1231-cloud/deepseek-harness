@@ -1,6 +1,6 @@
 /** Window-chrome controls for the fully hidden sidebar (frame shell.leading seat). */
 import {
-  IconNewChatOutlineRegular, IconPanelLeftOutlineRegular, IconSparkleRegular, Tooltip,
+  IconNewChatOutlineRegular, IconPanelLeftOutlineRegular, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the frame's shell.leading slot declaration.
@@ -60,7 +60,7 @@ export function HeaderLeadingControls({
           aria-label={t('session.new.temporary.label')}
           onClick={() => { startTemporarySession() }}
         >
-          <IconSparkleRegular size={16} />
+          <IconNewChatOutlineRegular size={16} />
         </button>
       </Tooltip>
     </div>
