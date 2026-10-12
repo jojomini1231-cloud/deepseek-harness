@@ -73,6 +73,14 @@ export interface UiWorkspace {
    */
   startSession(workspaceId?: WorkspaceId, options?: StartSessionOptions): void
   /**
+   * Create a workspace-less temporary Session and show it. The Host creates its
+   * directory under the configured temporary root and records it in the
+   * registry's temporary set. Never reuses a blank: each call yields a fresh
+   * temporary workspace. A creation the Host refuses is shown through the
+   * Workspace notice and leaves the selection as it was.
+   */
+  startTemporarySession(): void
+  /**
    * Archive a Session and clear it when it is the current selection.
    * @param sessionId - Session to archive.
    * @param options - `stopActivity` asks the Host to stop the Session's running work instead of refusing.
@@ -224,10 +232,25 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   private async openWorkspaceSession(
     workspaceId: WorkspaceId, beforeOpen: ((sessionId: SessionId) => void) | undefined, reuse: boolean,
   ): Promise<void> {
+    return this.openCreated(() => this.connectBlank(workspaceId, reuse), beforeOpen)
+  }
+
+  /**
+   * Create one Session under a navigation that a newer gesture can supersede,
+   * then show it. Both entry points share this: a refusal is reported through
+   * the Workspace notice, and a creation or reveal the newer gesture already
+   * replaced is dropped silently.
+   * @param create - performs the Session creation.
+   * @param beforeOpen - runs against the created Session before the selection moves.
+   */
+  private async openCreated(
+    create: () => Promise<SessionId>,
+    beforeOpen: ((sessionId: SessionId) => void) | undefined,
+  ): Promise<void> {
     const navigation = AbortSignal.any([this.ctx.layout.beginNavigation(), this.lifetime.signal])
     let sessionId: SessionId
     try {
-      sessionId = await this.connectBlank(workspaceId, reuse)
+      sessionId = await create()
     } catch (error: unknown) {
       // Reported here, not in connectWorkspace: startup restoration calls that
       // directly and stays console-only.
@@ -285,6 +308,17 @@ class UiWorkspaceService extends Service implements UiWorkspace {
     )
   }
 
+  startTemporarySession(): void {
+    const opening = this.openTemporarySession()
+    void opening.catch(
+      (reason: unknown) => { console.warn('new temporary session failed:', reason) },
+    )
+  }
+
+  private async openTemporarySession(): Promise<void> {
+    return this.openCreated(() => this.sessions.create({ temporary: true }), undefined)
+  }
+
   private prepareDraft(binding: SessionBinding, options: DraftInitializationOptions): void {
     const conversation = this.ctx.get('conversation')
     if (conversation === undefined) this.draftPreparationFailed()
@@ -308,11 +342,15 @@ class UiWorkspaceService extends Service implements UiWorkspace {
 
   async pinSession(sessionId: SessionId): Promise<void> {
     await this.workspaces.pinSession(sessionId)
-    const { items, pinnedSessionIds, archivedSessionIds } = this.workspaces.list.getSnapshot()
+    const { items, pinnedSessionIds, archivedSessionIds, temporarySessionIds } = this.workspaces.list.getSnapshot()
     this.view.pinSessionOrder(
       sessionId,
-      pinOrderAccounts(items, sessionId),
-      pinOrderSource(items, this.sessions.list.getSnapshot(), { pinnedSessionIds, archivedSessionIds }),
+      pinOrderAccounts(items, sessionId, temporarySessionIds),
+      pinOrderSource(
+        items,
+        this.sessions.list.getSnapshot(),
+        { pinnedSessionIds, archivedSessionIds, temporarySessionIds },
+      ),
     )
   }
 

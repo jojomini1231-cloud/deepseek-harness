@@ -129,6 +129,12 @@ The controller's `initializeDefault` takes no request: it owns the fixed `defaul
 
 The controller's [transport types](../../packages/api/workspace-controller/src/types.ts) define `WorkspacePinSessionRequest` and `WorkspaceUnpinSessionRequest`, each carrying one `sessionId`. Both operations return `WorkspacePinValue`: the complete `pinnedSessionIds` array of Session ids, most recently pinned first. Pinning requires a known, unarchived Session; unpinning an id that is not pinned succeeds without changing the set. Archiving removes the Session's pin in the same durable write, and unarchiving does not restore it.
 
+## Temporary sessions
+
+A temporary session is one created without a Workspace: the Host gives it a working directory under the deployment-configured temporary root and records its id in a registry-global durable set, which a browser surface reads to group such sessions. The [session create path](../../packages/api/session-controller/README.md#temporary-sessions) owns the decision and the mark; the [temporary root](../../packages/api/workspace-controller/README.md#temporary-workspace-root) policy and the [registry set](../../packages/workspace/workspace/README.md#recording-temporary-sessions) belong to the Workspace controller and the registry.
+
+Membership follows the create request, not the session's directory, so it is fixed when the session is made and does not change if the working directory later moves or is removed. The set is registry-global (no per-Workspace record), defaults to empty so records written before the field parse unchanged, and never participates in the one-owner accounting invariant, because it classifies rather than belongs. It is the same durable-set form as the archive and pin sets, and `initializeDefault` counts it as history.
+
 ## Archive admission
 
 Archiving is a registry-global durable set, and the registry refuses to hide running work behind it. The rule is a capability seam over two Host events the package declares and dispatches ([events](#workspace-events)): `workspace/session-activity` (waterfall) asks the composed providers what still runs for a Session, and `workspace/session-stop` (parallel) asks them to stop it. Each provider registers on the root like any listener, so the package knows no agent, job, or schedule vocabulary; the families are keys of a merge-extensible map.
@@ -331,6 +337,17 @@ Source: [`packages/api/terminal-controller/src/index.ts`](../../packages/api/ter
 Host service backing the generated `ctx.remote.workspace` namespace.
 
 ```ts cordis-catalog
+/**
+ * Resolve the temporary session workspace root: the deployment-configured
+ * `temporaryWorkspaceDirectory`, or `<Documents>/deepseek-harness/temporary-workspaces`
+ * when unset. The directory is created recursively and canonicalized through
+ * `fs.realpath`, so the caller's later `mkdir` of a per-Session child agrees
+ * with one spelling. Not a Remote verb: only the Host create path needs it.
+ * @param signal - caller lifetime; cancels the native Documents lookup.
+ * @returns the absolute temporary root directory.
+ */
+async temporaryRoot(signal: AbortSignal): Promise<string>
+
 /**
  * Create or idempotently resolve one Workspace over an existing directory.
  * @param request - directory path to register.
@@ -590,6 +607,15 @@ pinSession(sessionId: SessionId): Promise<void>
  * @returns resolution after durability.
  */
 unpinSession(sessionId: SessionId): Promise<void>
+
+/**
+ * Record one session as temporary durably. The Host calls this after the
+ * session exists; the id is not re-checked here because the caller just
+ * created it. Idempotent: an already-recorded id resolves without writing.
+ * @param sessionId - The session to record.
+ * @returns resolution after durability.
+ */
+markTemporarySession(sessionId: SessionId): Promise<void>
 
 /**
  * Resolve by canonical directory path without creating or mutating a

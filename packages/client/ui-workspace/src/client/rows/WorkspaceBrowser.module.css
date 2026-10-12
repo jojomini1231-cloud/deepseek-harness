@@ -301,27 +301,42 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  margin-left: -4px;
   margin-right: calc(-1 * var(--dsh-session-list-edge-inset));
-  padding-left: 4px;
-  /* The list remains the scroll clip. This seat stays visible so the
-     absolutely positioned first-boundary marker can occupy the header gap. */
+  /* Kept out of the scroll clip so the absolutely positioned first-boundary
+     marker can occupy the gap above the first section header; the row insets
+     the scroller below would otherwise cancel move onto the scroller itself. */
   overflow: visible;
 }
 
 .rail .listArea {
-  margin-left: 0;
   margin-right: 0;
-  padding-left: 0;
 }
 
-/* Relative for the bottom fade overlay. */
+/* Relative for the bottom fade overlay, and now the region's ONLY scroll
+   container: the section headers scroll away with their rows, so both sections
+   share this clip instead of each owning one. Block children keep their design
+   heights under content overflow. The 2px edge offset, stable 5px themed
+   scrollbar, and remaining padding equal the shell's right inset, with or
+   without overflow, so moving the bar does not move the rows. */
 .treeBody {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow-y: auto;
+  margin-left: -4px;
+  margin-right: var(--dsh-session-list-scrollbar-offset);
+  padding-left: 4px;
+  padding-right: calc(
+    var(--dsh-session-list-edge-inset)
+    - var(--dsh-session-list-scrollbar-width)
+    - var(--dsh-session-list-scrollbar-offset)
+  );
+  /* Clears the compact bottom fade overlay: at scroll end the last row sits
+     above the gradient instead of under it. */
+  padding-bottom: 16px;
+  scrollbar-gutter: stable;
 }
 
 /* Bottom fade: compact overlay pinned to the visible bottom,
@@ -351,26 +366,19 @@
   from { opacity: 0; }
 }
 
-/* List: the only scrolling region. Block children keep their design heights
-   under content overflow. The 2px edge offset, stable 5px themed scrollbar,
-   and remaining padding equal the shell's right inset, with or without
-   overflow, so moving the bar does not move the rows. */
+/* One section's row region. It no longer scrolls, so it carries the edge
+   insets its own rows need and the shared scroller above stays neutral. It is
+   also the positioned ancestor for this section's exit overlay. */
+.section {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* A section's row run. The scroller owns the scroll; this only stacks rows. */
 .list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
   margin-left: -4px;
-  margin-right: var(--dsh-session-list-scrollbar-offset);
   padding-left: 4px;
-  padding-right: calc(
-    var(--dsh-session-list-edge-inset)
-    - var(--dsh-session-list-scrollbar-width)
-    - var(--dsh-session-list-scrollbar-offset)
-  );
-  /* Clears the compact bottom fade overlay: at scroll end the last row sits
-     above the gradient instead of under it. */
-  padding-bottom: 16px;
-  scrollbar-gutter: stable;
 }
 
 .flatList > * + *,

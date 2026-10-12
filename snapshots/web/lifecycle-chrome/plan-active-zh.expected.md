@@ -1,6 +1,7 @@
 - button "新建会话"
 - button "收起侧边栏"
 - button "新建会话": 新会话
+- button "新建临时会话": 临时会话
 - navigation "全局面板":
   - button "插件"
   - button "自动化任务"
@@ -12,6 +13,12 @@
 - tree "会话":
   - treeitem "workspace" [expanded]
   - treeitem "新会话" [selected]
+- text: 临时工作区
+- button "搜索临时会话"
+- textbox "搜索临时会话名称"
+- button "临时工作区视图选项"
+- button "新建临时会话"
+- tree "临时工作区"
 - button "设置"
 - banner:
   - button "打开右侧边栏"

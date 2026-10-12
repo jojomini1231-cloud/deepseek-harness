@@ -1,12 +1,18 @@
 /** Host Workspace Remote owner: explicit commands and reconnect-safe state. */
 
+import { mkdir, realpath } from 'node:fs/promises'
 import { Context } from '@deepseek-ai/cordis'
+import type { Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { WorkspaceCommands } from './commands.ts'
 import { DirectoryPickerController } from './directory-picker.ts'
 import { WorkspaceFeed, workspaceView } from './feed.ts'
-import { defaultWorkspaceDirectory, validateDocumentsDirectory } from './default-directory.ts'
+import {
+  defaultWorkspaceDirectory,
+  temporaryWorkspaceDirectory,
+  validateDocumentsDirectory,
+} from './default-directory.ts'
 import type {
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
@@ -29,16 +35,19 @@ import type {
 export type * from './types.ts'
 export { DirectoryPickerController } from './directory-picker.ts'
 
-/** First-use directory policy for the Host account. */
+/** Directory policy supplied by plugin configuration; volatile fields are live references. */
 export interface Config {
   /** Override the system Documents directory with a fully qualified path. */
   documentsDirectory?: string
+  /**
+   * Root under which each workspace-less Session's temporary directory is
+   * created. Fully qualified; unset derives `<Documents>/deepseek-harness/temporary-workspaces`.
+   * Volatile, so the deployment (and the Settings page) may change it live.
+   */
+  temporaryWorkspaceDirectory: Volatile<string | undefined>
   /** Maximum duration of the operating system's Documents lookup. */
-  documentsLookupTimeoutMs?: number
+  documentsLookupTimeoutMs: number
 }
-
-/** Directory policy after schema defaults have been applied. */
-type ResolvedConfig = Config & { documentsLookupTimeoutMs: number }
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -51,23 +60,26 @@ declare module '@deepseek-ai/cordis' {
 export class WorkspaceController extends TypertRemoteService {
   static inject = ['typert', 'workspaceRegistry']
 
-  static Config: z<Config, ResolvedConfig> = z.object({
+  static Config = z.object({
     documentsDirectory: z.string(),
+    temporaryWorkspaceDirectory: z.string().volatile(),
     documentsLookupTimeoutMs: z.natural().min(1).default(10_000),
   })
 
-  private readonly config: ResolvedConfig
+  private readonly config: Config
   private readonly commands: WorkspaceCommands
   private readonly feed: WorkspaceFeed
 
   /**
    * @param ctx - Host context containing the Workspace registry.
-   * @param config - first-use directory policy.
+   * @param config - resolved first-use directory policy from the plugin schema.
    */
-  constructor(ctx: Context, config: Config = {}) {
+  constructor(ctx: Context, config: Config) {
     super(ctx, 'workspaceController', { namespace: 'workspace' })
-    this.config = WorkspaceController.Config(config)
-    if (this.config.documentsDirectory !== undefined) validateDocumentsDirectory(this.config.documentsDirectory)
+    this.config = config
+    if (config.documentsDirectory !== undefined) validateDocumentsDirectory(config.documentsDirectory)
+    const configuredTemporary = config.temporaryWorkspaceDirectory.get()
+    if (configuredTemporary !== undefined) validateDocumentsDirectory(configuredTemporary)
     this.commands = new WorkspaceCommands(ctx)
     this.feed = new WorkspaceFeed(ctx)
     // This package is the Loader entry for both Remote owners it hosts: the
@@ -75,6 +87,24 @@ export class WorkspaceController extends TypertRemoteService {
     // stays pending until a picking backend is composed, so a host without one
     // registers no picking namespace instead of answering an unservable verb.
     ctx.plugin(DirectoryPickerController)
+  }
+
+  /**
+   * Resolve the temporary session workspace root: the deployment-configured
+   * `temporaryWorkspaceDirectory`, or `<Documents>/deepseek-harness/temporary-workspaces`
+   * when unset. The directory is created recursively and canonicalized through
+   * `fs.realpath`, so the caller's later `mkdir` of a per-Session child agrees
+   * with one spelling. Not a Remote verb: only the Host create path needs it.
+   * @param signal - caller lifetime; cancels the native Documents lookup.
+   * @returns the absolute temporary root directory.
+   */
+  async temporaryRoot(signal: AbortSignal): Promise<string> {
+    const timeout = AbortSignal.timeout(this.config.documentsLookupTimeoutMs)
+    const directory = this.config.temporaryWorkspaceDirectory.get()
+      ?? await temporaryWorkspaceDirectory(this.config.documentsDirectory, AbortSignal.any([signal, timeout]))
+    const absolute = validateDocumentsDirectory(directory)
+    await mkdir(absolute, { recursive: true })
+    return await realpath(absolute)
   }
 
   /**

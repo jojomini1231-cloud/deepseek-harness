@@ -70,10 +70,12 @@ const workspaceState = (
   items: readonly WorkspaceView[],
   archivedSessionIds: readonly SessionId[] = [],
   pinnedSessionIds: readonly SessionId[] = [],
+  temporarySessionIds: readonly SessionId[] = [],
 ): WorkspaceSnapshot => ({
   items,
   archivedSessionIds,
   pinnedSessionIds,
+  temporarySessionIds,
   state: 'idle',
   phase: 'ready',
   error: null,
@@ -125,6 +127,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     useStore: bindSnapshotSelector(store),
     actions: store.actions,
     startSession: vi.fn(),
+    startTemporarySession: vi.fn(),
     open: vi.fn(),
     searchSessions: vi.fn(async () => ({ items: [], hasMore: false })),
     searchResultLimit: 20,
@@ -2561,5 +2564,104 @@ describe('Workspace tree grouping', () => {
     fireEvent.dragEnd(alpha)
     expect(b.props.insertWorkspaceBefore).toHaveBeenCalledOnce()
     expect(b.props.insertWorkspaceBefore).toHaveBeenCalledWith(wid('alpha'), wid('gamma'))
+  })
+})
+
+describe('WorkspaceBrowser Temporary section', () => {
+  const temporaryState = (...temporary: string[]) => workspaceState(
+    [workspace('alpha', ['owned'])], [], [], temporary.map(id => sid(id)),
+  )
+
+  it('draws the section header above its own rows, always, even with nothing to list', () => {
+    mount({ useSessions: hook(sessionState([summary('owned', 1)])), useWorkspaces: hook(temporaryState()) })
+    // The header renders with no members, so its create button stays reachable.
+    expect(screen.getByText('临时工作区')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '新建临时会话' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '临时工作区视图选项' })).toBeTruthy()
+    expect(screen.getByRole('tree', { name: '临时工作区' })).toBeTruthy()
+  })
+
+  it('creates a temporary Session from the section header button', () => {
+    const b = mount({ useWorkspaces: hook(temporaryState()) })
+    fireEvent.click(screen.getByRole('button', { name: '新建临时会话' }))
+    expect(b.props.startTemporarySession).toHaveBeenCalledOnce()
+  })
+
+  it('files a temporary member in its own section rather than a Workspace group', () => {
+    const b = mount({
+      useSessions: hook(sessionState([summary('owned', 1), summary('temporary', 9)])),
+      useWorkspaces: hook(temporaryState('temporary')),
+    })
+    act(() => { b.store.actions.setGroupExpanded('alpha', true) })
+    const temporary = screen.getByRole('tree', { name: '临时工作区' })
+    expect(within(temporary).getByText('temporary')).toBeTruthy()
+    // The Workspace tree never lists the temporary member under its own label.
+    const workspaceTree = screen.getByRole('tree', { name: '会话' })
+    expect(within(workspaceTree).queryByText('temporary')).toBeNull()
+    expect(within(workspaceTree).getByText('owned')).toBeTruthy()
+  })
+
+  it('narrows only its own rows and leaves the Workspace tree untouched', () => {
+    const b = mount({
+      useSessions: hook(sessionState([
+        summary('keep-me', 3, { displayTitle: 'Keep me' }),
+        summary('drop-me', 2, { displayTitle: 'Drop me' }),
+        summary('owned', 1),
+      ])),
+      useWorkspaces: hook(temporaryState('keep-me', 'drop-me')),
+    })
+    act(() => { b.store.actions.setGroupExpanded('alpha', true) })
+    fireEvent.click(screen.getByRole('button', { name: '搜索临时会话' }))
+    fireEvent.change(screen.getByPlaceholderText('搜索临时会话名称'), { target: { value: 'keep' } })
+    const temporary = screen.getByRole('tree', { name: '临时工作区' })
+    expect(within(temporary).getByText('Keep me')).toBeTruthy()
+    expect(within(temporary).queryByText('Drop me')).toBeNull()
+    // The global search body is untouched: the Workspace section still renders.
+    expect(screen.getByRole('tree', { name: '会话' })).toBeTruthy()
+    expect(screen.getByText('owned')).toBeTruthy()
+  })
+
+  it('keeps its own order and archived filter independent of the Workspace section', () => {
+    const b = mount({
+      useSessions: hook(sessionState([
+        summary('older', 1), summary('newer', 9), summary('filed', 5),
+      ])),
+      useWorkspaces: hook(workspaceState(
+        [workspace('alpha', ['filed'])], ['newer'].map(id => sid(id)), [], [sid('older'), sid('newer')],
+      )),
+    })
+    act(() => { b.store.actions.setGroupExpanded('alpha', true) })
+    const temporary = () => screen.getByRole('tree', { name: '临时工作区' })
+    // Default section filter hides archived members, so only `older` shows.
+    expect(within(temporary()).getByText('older')).toBeTruthy()
+    expect(within(temporary()).queryByText('newer')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '临时工作区视图选项' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '仅显示已归档' }))
+    expect(within(temporary()).getByText('newer')).toBeTruthy()
+    expect(within(temporary()).queryByText('older')).toBeNull()
+    // The Workspace section's own filter did not move.
+    expect(screen.getByText('filed')).toBeTruthy()
+    expect(b.store.getSnapshot().archivedFilter).toBe('default')
+    expect(b.store.getSnapshot().temporaryArchivedFilter).toBe('only')
+
+    // The section's own order mode moves without touching the global one.
+    expect(b.store.getSnapshot().orderBy).toBe('manual')
+    expect(b.store.getSnapshot().temporaryOrderBy).toBe('updated')
+    fireEvent.click(screen.getByRole('button', { name: '临时工作区视图选项' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '手动排序' }))
+    expect(b.store.getSnapshot().orderBy).toBe('manual')
+    expect(b.store.getSnapshot().temporaryOrderBy).toBe('manual')
+  })
+
+  it('omits the second section in the flat list and in the rail', () => {
+    const b = mount({ useSessions: hook(sessionState([summary('temporary', 1)])), useWorkspaces: hook(temporaryState('temporary')) })
+    expect(screen.getByText('临时工作区')).toBeTruthy()
+    b.store.actions.setGroupBy('flat')
+    rerender(b, {})
+    expect(screen.queryByText('临时工作区')).toBeNull()
+    expect(screen.getByRole('tree', { name: '会话' })).toBeTruthy()
+    rerender(b, { wide: false })
+    expect(screen.queryByText('临时工作区')).toBeNull()
   })
 })

@@ -3,6 +3,7 @@
 import { notifySubscribers } from '@deepseek-ai/dsh-client-store'
 import type {} from '@deepseek-ai/dsh-api-workspace-controller/remote'
 import { isRemoteFailure } from '@deepseek-ai/dsh-api-gateway/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { RemoteFailure, RemoteResult, TypertClientRemote } from '@deepseek-ai/dsh-typert-protocol'
 import type {
   WorkspaceArchiveSessionRequest,
@@ -35,6 +36,8 @@ export interface WorkspaceSnapshot {
   readonly archivedSessionIds: WorkspaceArchiveValue['archivedSessionIds']
   /** Complete registry-global pin set, most recently pinned first. */
   readonly pinnedSessionIds: WorkspacePinValue['pinnedSessionIds']
+  /** Complete registry-global temporary set: sessions created without a Workspace. */
+  readonly temporarySessionIds: readonly SessionId[]
   readonly state: 'idle' | 'loading' | 'error'
   readonly phase: WorkspaceListPhase
   readonly error: RemoteFailure | null
@@ -54,6 +57,8 @@ export interface WorkspaceFollowSink {
   replaceArchived(sessionIds: WorkspaceArchiveValue['archivedSessionIds']): void
   /** Replace the complete pinned Session set. */
   replacePinned(pinnedSessionIds: WorkspacePinValue['pinnedSessionIds']): void
+  /** Replace the complete temporary Session set. */
+  replaceTemporary(temporarySessionIds: readonly SessionId[]): void
 }
 
 /**
@@ -63,6 +68,7 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
   private items: readonly WorkspaceView[] = []
   private archivedSessionIds: WorkspaceArchiveValue['archivedSessionIds'] = []
   private pinnedSessionIds: WorkspacePinValue['pinnedSessionIds'] = []
+  private temporarySessionIds: readonly SessionId[] = []
   private state: WorkspaceSnapshot['state'] = 'loading'
   private phase: WorkspaceListPhase = 'pending'
   private error: RemoteFailure | null = null
@@ -268,6 +274,7 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
     this.installViews(baseline.items)
     this.installArchived(baseline.archivedSessionIds)
     this.installPinned(baseline.pinnedSessionIds)
+    this.installTemporary(baseline.temporarySessionIds)
     this.state = 'idle'
     this.phase = 'ready'
     this.error = null
@@ -306,6 +313,14 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
   replacePinned(pinnedSessionIds: WorkspacePinValue['pinnedSessionIds']): void {
     this.pinRequestSeq++
     this.installPinned(pinnedSessionIds)
+  }
+
+  /**
+   * Replace the temporary Session set from the current follow generation.
+   * @param temporarySessionIds - complete Host-confirmed temporary set.
+   */
+  replaceTemporary(temporarySessionIds: readonly SessionId[]): void {
+    this.installTemporary(temporarySessionIds)
   }
 
   /** Keep the last complete projection visible while a lost carrier reconnects. */
@@ -350,6 +365,7 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
       items: this.items,
       archivedSessionIds: this.archivedSessionIds,
       pinnedSessionIds: this.pinnedSessionIds,
+      temporarySessionIds: this.temporarySessionIds,
       state: this.state,
       phase: this.phase,
       error: this.error,
@@ -367,6 +383,13 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
     if (pinnedSessionIds.length === this.pinnedSessionIds.length
       && pinnedSessionIds.every((id, index) => id === this.pinnedSessionIds[index])) return
     this.pinnedSessionIds = [...pinnedSessionIds]
+    this.invalidate()
+  }
+
+  private installTemporary(temporarySessionIds: readonly SessionId[]): void {
+    if (temporarySessionIds.length === this.temporarySessionIds.length
+      && temporarySessionIds.every((id, index) => id === this.temporarySessionIds[index])) return
+    this.temporarySessionIds = [...temporarySessionIds]
     this.invalidate()
   }
 

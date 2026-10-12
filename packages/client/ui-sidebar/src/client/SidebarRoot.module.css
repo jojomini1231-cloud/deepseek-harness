@@ -479,6 +479,57 @@
 
 .newSession:is(:hover, :focus-visible) .newSessionShortcut { opacity: 1; }
 
+/* Workspace-less entry, a sibling below the New Session bar: a lighter,
+   secondary treatment so it reads as an alternative and not a second primary
+   action. Shares the bar's 12px radius and 2px inset. */
+.newTemporary {
+  container-type: inline-size;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 6px 12px;
+  margin: -4px 2px 12px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: var(--dsw-radius-md);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.newTemporary:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.newTemporaryContent { display: flex; width: 100cqw; align-items: center; justify-content: center; gap: 6px; }
+.newTemporaryContent > svg { flex: none; }
+
+.newTemporaryLabel {
+  max-width: 200px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.collapsed .newTemporary {
+  align-self: flex-start;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  margin: 0 0 12px;
+  background: transparent;
+}
+
+.collapsed .newTemporaryLabel {
+  max-width: 0;
+}
+
 .panelList {
   flex: none;
   display: flex;

@@ -41,6 +41,15 @@ Client 列表行和驻留 Session 使用当前 `sessionListMetadata` 投影纠�
 
 显式 ID 的 `session.create` 会收养活动 Session，或恢复持久化 Session 并持续持有其写锁。写锁争用返回 `session/writer-held`；调用方可以尝试其他空白会话，同时保留其他失败。`session.list` 根据缓存元数据列出持久化空白会话，不打开冷日志正文。
 
+<a id="temporary-sessions"></a>
+### 临时会话
+
+`session.create({ temporary: true })` 创建无工作区的临时会话：Host 解析[临时根](../workspace-controller/README.zh.md#temporary-workspace-root)，以 `<根>/<会话 id>` 作为该 Session 的工作目录，并把该 Session 记录到 Workspace 注册表的临时集合，供侧边栏分组。`temporary` 与 `workspaceId`、`cwd` 互斥；同时给出会被拒绝为 `gateway/bad-request`。不带 `temporary` 的普通请求行为不变。
+
+Host 由会话 id 派生目录，因此 Client 预分配 id（与任何携带 `sessionId` 的 `session.create` 相同），叶目录名即该 id。为空、`.`、`..` 或含路径分隔符的会话 id 会在创建任何目录之前被拒绝。收养型请求——其 `sessionId` 已指向活动或持久 Session——保留该 Session 已存储的工作目录，因此修改配置的根目录不会迁移已有 Session。缺少 Workspace controller 属于组合错误，以 `gateway/internal` 失败。
+
+临时标记在 Session 存在之后写入，因此即使标记失败，Session 也一定已创建；标记失败会记录日志，Session 保留其临时目录但显示为未分组。收养分支同样执行标记，因此对已有 id 的重复请求会被一致地归类。
+
 Client 列表刷新保留未变化的行对象，并在顺序和值均相同时复用条目数组。每行的 `retainedBy` 包含正数的本地引用来源计数，Host 元数据刷新不能覆盖它们。缓存成员检查使用每次刷新构建的 ID 集合，因此对账成本随当前列表和保留缓存的规模线性增长。 Host 摘要更新会替换运行状态与 Agent 可用性；本地 create/fork 响应只补充已有行缺失的元数据。普通 Session 被移除后，仅在目录仍有子项时保留其投影 store。
 
 后台 job 的名册行与观测流属于 [`dsh-api-job-controller`](../job-controller/README.zh.md)；控制流只承载投影。

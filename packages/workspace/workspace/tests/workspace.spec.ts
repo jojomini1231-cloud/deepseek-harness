@@ -174,6 +174,11 @@ function storedState(pool: MemoryMediaPool): WorkspaceDomainState {
   return pool.media.get('workspace')!.global as WorkspaceDomainState
 }
 
+/** Durable global state of an initialized registry with no Workspaces or Session sets. */
+const emptyRegistryState: WorkspaceDomainState = {
+  initialized: true, workspaceIds: [], archivedSessionIds: [], pinnedSessionIds: [], temporarySessionIds: [],
+}
+
 let base: string
 const tempDirs: string[] = []
 
@@ -203,7 +208,7 @@ describe('WorkspaceRegistry lifecycle and bootstrap', () => {
     await fiber.await()
     expect(ctx.workspaceRegistry.list()).toEqual([])
     expect(list).toHaveBeenCalledTimes(1)
-    expect(storedState(pool)).toEqual({ initialized: true, workspaceIds: [], archivedSessionIds: [], pinnedSessionIds: [] })
+    expect(storedState(pool)).toEqual(emptyRegistryState)
   })
 
   it('bootstraps once from list headers only, in workspace/session createdAt order', async () => {
@@ -238,6 +243,7 @@ describe('WorkspaceRegistry lifecycle and bootstrap', () => {
       workspaceIds: result.registry.list().map(workspace => workspace.id),
       archivedSessionIds: [],
       pinnedSessionIds: [],
+      temporarySessionIds: [],
     })
   })
 
@@ -266,7 +272,7 @@ describe('WorkspaceRegistry lifecycle and bootstrap', () => {
     const second = await harness({ pool, sessions: [header('late', late, 100)] })
     expect(second.list).not.toHaveBeenCalled()
     expect(second.registry.list()).toEqual([])
-    expect(storedState(pool)).toEqual({ initialized: true, workspaceIds: [], archivedSessionIds: [], pinnedSessionIds: [] })
+    expect(storedState(pool)).toEqual(emptyRegistryState)
   })
 
   it('reuses partial records after a bootstrap record write fails', async () => {
@@ -520,7 +526,7 @@ describe('WorkspaceRegistry create and lookup', () => {
     await expect(result.registry.delete(workspace.id)).resolves.toBe(false)
     expect(result.registry.get(workspace.id)).toBeUndefined()
     expect(result.registry.list()).toEqual([])
-    expect(storedState(result.pool)).toEqual({ initialized: true, workspaceIds: [], archivedSessionIds: [], pinnedSessionIds: [] })
+    expect(storedState(result.pool)).toEqual(emptyRegistryState)
     expect(result.pool.media.get('workspace')!.tables.get('workspaces')!.has(workspace.id)).toBe(false)
     await expect(realpath(dir)).resolves.toBe(dir)
     expect(result.list).toHaveBeenCalledTimes(1)
@@ -565,6 +571,7 @@ describe('WorkspaceRegistry create and lookup', () => {
       workspaceIds: [],
       archivedSessionIds: [],
       pinnedSessionIds: [],
+      temporarySessionIds: [],
       pendingMutation: { operation: 'delete', workspaceId: workspace.id },
     })
     const reregistered = await first.registry.create(dir)
@@ -574,6 +581,7 @@ describe('WorkspaceRegistry create and lookup', () => {
       workspaceIds: [reregistered.id],
       archivedSessionIds: [],
       pinnedSessionIds: [],
+      temporarySessionIds: [],
     })
     await first.fiber.dispose()
 
@@ -853,7 +861,7 @@ describe('header-validated membership projection', () => {
     const createRecovery = await harness({ pool: interruptedCreate })
     expect(createRecovery.registry.list()).toEqual([])
     expect(interruptedCreate.media.get('workspace')!.tables.get('workspaces')!.has(createId)).toBe(false)
-    expect(storedState(interruptedCreate)).toEqual({ initialized: true, workspaceIds: [], archivedSessionIds: [], pinnedSessionIds: [] })
+    expect(storedState(interruptedCreate)).toEqual(emptyRegistryState)
 
     const interruptedDelete = storedPool(
       [[deleteId, record(deleteDir, [])]],
@@ -866,7 +874,7 @@ describe('header-validated membership projection', () => {
     const deleteRecovery = await harness({ pool: interruptedDelete })
     expect(deleteRecovery.registry.list()).toEqual([])
     expect(interruptedDelete.media.get('workspace')!.tables.get('workspaces')!.has(deleteId)).toBe(false)
-    expect(storedState(interruptedDelete)).toEqual({ initialized: true, workspaceIds: [], archivedSessionIds: [], pinnedSessionIds: [] })
+    expect(storedState(interruptedDelete)).toEqual(emptyRegistryState)
 
     const corruptPending = storedPool(
       [[deleteId, record(deleteDir, [])]],
@@ -1197,6 +1205,61 @@ describe('registry-global session pin', () => {
 
 })
 
+describe('registry-global temporary sessions', () => {
+  it('records durably in creation order and writes nothing for an idempotent repeat', async () => {
+    const result = await harness({ sessions: [] })
+    expect(result.registry.temporarySessionIds).toEqual([])
+
+    await result.registry.markTemporarySession(SessionId('one'))
+    expect(result.registry.temporarySessionIds).toEqual(['one'])
+    expect(storedState(result.pool).temporarySessionIds).toEqual([SessionId('one')])
+    const changesAfterFirst = result.changes.filter(change => change.table === '').length
+
+    await result.registry.markTemporarySession(SessionId('one'))
+    expect(result.registry.temporarySessionIds).toEqual(['one'])
+    // The repeat neither rewrites the medium nor emits a change.
+    expect(result.changes.filter(change => change.table === '').length).toBe(changesAfterFirst)
+
+    await result.registry.markTemporarySession(SessionId('two'))
+    expect(result.registry.temporarySessionIds).toEqual(['one', 'two'])
+    // The set is display-only: it never becomes a Workspace account.
+    expect(result.registry.list()).toEqual([])
+  })
+
+  it('records a session that has no recountable header without consulting persistence', async () => {
+    const result = await harness({ sessions: [] })
+    const listingsBefore = result.list.mock.calls.length
+    result.list.mockRejectedValueOnce(new Error('persistence backend down'))
+
+    // The Host marks the session it just created, so membership is decided by
+    // the caller rather than re-derived from a listing.
+    await expect(result.registry.markTemporarySession(SessionId('fresh'))).resolves.toBeUndefined()
+    expect(result.registry.temporarySessionIds).toEqual(['fresh'])
+    expect(result.list.mock.calls.length).toBe(listingsBefore)
+  })
+
+  it('restores the set across restarts and defaults it for pre-field media', async () => {
+    const dir = await makeDir('temporary-restart')
+    const pool = new MemoryMediaPool()
+    const first = await harness({ pool, sessions: [] })
+    await first.registry.markTemporarySession(SessionId('kept'))
+    await first.fiber.dispose()
+
+    const second = await harness({ pool, sessions: [] })
+    expect(second.registry.temporarySessionIds).toEqual(['kept'])
+    await second.fiber.dispose()
+
+    // A medium written before the field existed parses through the schema default.
+    const legacyId = WorkspaceId('00000000-0000-4000-8000-00000000000b')
+    const legacy = storedPool(
+      [[legacyId, record(dir, [])]],
+      { initialized: true, workspaceIds: [legacyId] },
+    )
+    const upgraded = await harness({ pool: legacy })
+    expect(upgraded.registry.temporarySessionIds).toEqual([])
+  })
+})
+
 describe('registry-global session unpin', () => {
   it('unpins durably in place and idempotently skips absent ids', async () => {
     const dir = await makeDir('unpin-home')
@@ -1316,6 +1379,17 @@ describe('first-use Workspace preparation', () => {
     const history = header('old')
     const h = await firstUse(kind === 'persisted' ? { sessions: [history] } : { liveSessions: [history] })
     if (kind === 'archived') await h.registry.archiveSession(history.id)
+    await expect(h.registry.initializeDefault(h.resolveDirectory)).resolves.toBeUndefined()
+    expect(h.registry.list()).toEqual([])
+    expect(storedState(h.pool).defaultWorkspaceId).toBeUndefined()
+    expect(h.resolveDirectory).not.toHaveBeenCalled()
+  })
+
+  it('refuses automatic creation once a temporary Session has been recorded', async () => {
+    const h = await firstUse()
+    // The installation's history lives in the temporary set alone, so there is
+    // no empty install left to seed a default Workspace for.
+    await h.registry.markTemporarySession(SessionId('temporary'))
     await expect(h.registry.initializeDefault(h.resolveDirectory)).resolves.toBeUndefined()
     expect(h.registry.list()).toEqual([])
     expect(storedState(h.pool).defaultWorkspaceId).toBeUndefined()

@@ -129,6 +129,12 @@ interface Workspace {
 
 控制器的[传输类型](../../packages/api/workspace-controller/src/types.ts)定义了 `WorkspacePinSessionRequest` 和 `WorkspaceUnpinSessionRequest`，两者都携带一个 `sessionId`。两个操作都返回 `WorkspacePinValue`：完整的会话 id 数组 `pinnedSessionIds`，最近置顶的会话排在前面。置顶要求会话已知且未归档；对未置顶的 id 取消置顶会成功，且不改变集合。归档在同一次持久化写入中移除该会话的置顶，取消归档不会恢复置顶。
 
+## 临时会话
+
+临时会话是不归属任何 Workspace 而创建的会话：Host 在部署配置的临时根目录下为它创建工作目录，并把其 id 记录到 registry 全局的持久集合中，浏览器界面读取该集合以分组这类会话。[会话创建路径](../../packages/api/session-controller/README.zh.md#temporary-sessions)拥有判定与标记；[临时根](../../packages/api/workspace-controller/README.zh.md#temporary-workspace-root)策略与[注册表集合](../../packages/workspace/workspace/README.zh.md#recording-temporary-sessions)分别属于 Workspace controller 与注册表。
+
+成员关系依据创建请求而非会话目录，因此它在会话创建时即固定，工作目录日后被移动或删除都不会改变。该集合是 registry 全局的（没有逐 Workspace 记录），默认为空，因此在字段加入之前写入的记录照常解析；它不参与单归属记账不变量，因为它做的是分类而非归属。它与归档、置顶集合同样是持久集合形式，且 `initializeDefault` 将其计为历史。
+
 ## 归档准入
 
 归档是一个注册表全局的持久化集合，注册表拒绝把正在运行的工作藏在它后面。这条规则是本包声明并派发的两个宿主事件之上的能力接缝（[事件](#workspace-events)）：`workspace/session-activity`（waterfall）向已组合的提供方询问某会话还有什么在跑，`workspace/session-stop`（parallel）请它们停止这些工作。每个提供方像任何监听器一样在根上注册，因此本包不认识 agent、job 或 schedule 的词汇；各族是一个可合并扩展的 map 的键。
@@ -331,6 +337,17 @@ Source: [`packages/api/terminal-controller/src/index.ts`](../../packages/api/ter
 Host service backing the generated `ctx.remote.workspace` namespace.
 
 ```ts cordis-catalog
+/**
+ * Resolve the temporary session workspace root: the deployment-configured
+ * `temporaryWorkspaceDirectory`, or `<Documents>/deepseek-harness/temporary-workspaces`
+ * when unset. The directory is created recursively and canonicalized through
+ * `fs.realpath`, so the caller's later `mkdir` of a per-Session child agrees
+ * with one spelling. Not a Remote verb: only the Host create path needs it.
+ * @param signal - caller lifetime; cancels the native Documents lookup.
+ * @returns the absolute temporary root directory.
+ */
+async temporaryRoot(signal: AbortSignal): Promise<string>
+
 /**
  * Create or idempotently resolve one Workspace over an existing directory.
  * @param request - directory path to register.
@@ -590,6 +607,15 @@ pinSession(sessionId: SessionId): Promise<void>
  * @returns resolution after durability.
  */
 unpinSession(sessionId: SessionId): Promise<void>
+
+/**
+ * Record one session as temporary durably. The Host calls this after the
+ * session exists; the id is not re-checked here because the caller just
+ * created it. Idempotent: an already-recorded id resolves without writing.
+ * @param sessionId - The session to record.
+ * @returns resolution after durability.
+ */
+markTemporarySession(sessionId: SessionId): Promise<void>
 
 /**
  * Resolve by canonical directory path without creating or mutating a

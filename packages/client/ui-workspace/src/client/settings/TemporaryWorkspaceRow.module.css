@@ -1,0 +1,47 @@
+/* Temporary-workspace directory row: heading, description, the staged path
+ * control, and the browse affordance that stages a native pick. */
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.description {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.browse {
+  align-self: flex-start;
+  height: 32px;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-module-platform);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.browse:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.browse:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
+}

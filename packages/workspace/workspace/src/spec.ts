@@ -51,8 +51,12 @@ const workspacePendingMutation = z.discriminatedUnion('operation', [
  * position), so the set never participates in the one-owner accounting
  * invariant. `pinnedSessionIds` is the registry-global pin set in pin order
  * (most recently pinned first); pinning and archival are mutually
- * exclusive, so archiving drops the session's pin. Both session sets are
- * defaulted so records written before the fields parse unchanged.
+ * exclusive, so archiving drops the session's pin. `temporarySessionIds` is
+ * the registry-global temporary set: sessions created through the
+ * workspace-less entry point, whose working directory the Host created under
+ * the deployment-configured temporary root. Like the other two sets it never
+ * participates in the one-owner accounting invariant. All three session sets
+ * are defaulted so records written before the fields parse unchanged.
  */
 export const workspaceDomainState = z.object({
   initialized: z.boolean(),
@@ -61,6 +65,7 @@ export const workspaceDomainState = z.object({
   workspaceIds: z.array(workspaceId),
   archivedSessionIds: z.array(sessionId).default([]),
   pinnedSessionIds: z.array(sessionId).default([]),
+  temporarySessionIds: z.array(sessionId).default([]),
   pendingMutation: workspacePendingMutation.optional(),
 })
 
@@ -78,7 +83,13 @@ export const workspaceDomainSpec = defineDomain({
   version: 2,
   global: {
     schema: workspaceDomainState,
-    initial: { initialized: false, workspaceIds: [], archivedSessionIds: [], pinnedSessionIds: [] },
+    initial: {
+      initialized: false,
+      workspaceIds: [],
+      archivedSessionIds: [],
+      pinnedSessionIds: [],
+      temporarySessionIds: [],
+    },
   },
   tables: { workspaces: domainTable<WorkspaceId, WorkspaceRecord>(workspaceRecord) },
 })

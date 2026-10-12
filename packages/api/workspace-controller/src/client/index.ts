@@ -113,6 +113,9 @@ function acceptIncrement(accept: WorkspaceFollowSink, frame: WorkspaceFollowIncr
     case 'pinned':
       accept.replacePinned(frame.pinnedSessionIds)
       return
+    case 'temporary':
+      accept.replaceTemporary(frame.temporarySessionIds)
+      return
     /* v8 ignore next -- the generated Remote codec validates this closed union */
     default:
       return assertNever(frame)

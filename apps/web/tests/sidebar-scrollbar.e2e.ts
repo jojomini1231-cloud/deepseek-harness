@@ -55,7 +55,7 @@ interface ListMetrics {
  */
 function measureList(page: Page): Promise<ListMetrics> {
   return page.evaluate(() => {
-    const list = document.querySelector<HTMLElement>('[role="tree"][aria-label="Sessions"]')
+    const list = document.querySelector<HTMLElement>('[class*="treeBody"]')
     if (list === null) throw new Error('sidebar session list not in the DOM')
     const time = list.querySelector<HTMLElement>('[class*="time"]')
     if (time === null) throw new Error('no row relative-time element in the sidebar list')
@@ -126,7 +126,7 @@ function measureList(page: Page): Promise<ListMetrics> {
  */
 function measureRowInset(page: Page): Promise<Pick<ListMetrics, 'overflows' | 'rowEdgeInset'>> {
   return page.evaluate(() => {
-    const list = document.querySelector<HTMLElement>('[role="tree"][aria-label="Sessions"]')
+    const list = document.querySelector<HTMLElement>('[class*="treeBody"]')
     if (list === null) throw new Error('sidebar session list not in the DOM')
     const row = list.querySelector<HTMLElement>('[role="treeitem"]')
     if (row === null) throw new Error('no row in the sidebar list')
@@ -211,7 +211,7 @@ function renderGeometry(light: PaletteMetrics, dark: PaletteMetrics): string {
  */
 function resolveThumb(page: Page): Promise<string> {
   return page.evaluate(() => {
-    const list = document.querySelector<HTMLElement>('[role="tree"][aria-label="Sessions"]')
+    const list = document.querySelector<HTMLElement>('[class*="treeBody"]')
     if (list === null) throw new Error('sidebar session list not in the DOM')
     const probe = document.createElement('span')
     probe.style.color = 'var(--dsh-scrollbar-thumb)'
@@ -234,7 +234,7 @@ const NO_THUMB = 'rgba(0, 0, 0, 0)'
  * of the viewport (the conversation column).
  */
 async function pointAt(page: Page, where: 'list' | 'away'): Promise<void> {
-  const box = await page.locator('[role="tree"][aria-label="Sessions"]').boundingBox()
+  const box = await page.locator('[class*="treeBody"]').boundingBox()
   if (box === null) throw new Error('sidebar session list has no layout box')
   const viewport = page.viewportSize()
   if (viewport === null) throw new Error('page has no viewport')
@@ -344,7 +344,7 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     // leaves the column quiet. This is the one deliberate loss, and
     // it is pinned here rather than only described, so making a scroll
     // re-reveal the bar has to be a decision rather than a side effect.
-    await page.locator('[role="tree"][aria-label="Sessions"]').evaluate((el) => { el.scrollTop += 200 })
+    await page.locator('[class*="treeBody"]').evaluate((el) => { el.scrollTop += 200 })
     await page.waitForTimeout(500)
     expect(await resolveThumb(page)).toBe(NO_THUMB)
     await pointAt(page, 'list')

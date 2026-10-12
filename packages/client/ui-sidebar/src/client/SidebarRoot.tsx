@@ -19,7 +19,8 @@
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
-  FishLogo, IconNewChatOutlineMedium, IconNewChatOutlineRegular, IconPanelLeftOutlineRegular, isDarwinDesktop, ShortcutKeys, Tooltip,
+  FishLogo, IconNewChatOutlineMedium, IconNewChatOutlineRegular, IconPanelLeftOutlineRegular, IconSparkleRegular,
+  isDarwinDesktop, ShortcutKeys, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
@@ -89,6 +90,7 @@ export function SidebarRoot({
   collapsed,
   width,
   startSession,
+  startTemporarySession,
   toggleSidebar,
   selectPanel,
   usePanels,
@@ -276,6 +278,22 @@ export function SidebarRoot({
           {wide && newShortcut !== undefined && newShortcut.keys.length > 0 && <span className={css.newSessionShortcut} aria-hidden="true">
             <ShortcutKeys keys={newShortcut.keys} />
           </span>}
+        </button>
+      </Tooltip>
+
+      {/* A distinct workspace-less entry: the Host creates a temporary
+          directory for the Session and it groups under "Temporary". */}
+      <Tooltip label={t('session.new.temporary.label')} delayMs={500} side={captionTooltipSide} disabled={wide}>
+        <button
+          type="button"
+          className={css.newTemporary}
+          aria-label={t('session.new.temporary.label')}
+          onClick={() => { startTemporarySession() }}
+        >
+          <span className={css.newTemporaryContent}>
+            <IconSparkleRegular size={wide ? 14 : desktopCaption ? 16 : 18} />
+            {wide && <span className={clsx(css.newTemporaryLabel, css.wide)}>{t('session.new.temporary')}</span>}
+          </span>
         </button>
       </Tooltip>
 

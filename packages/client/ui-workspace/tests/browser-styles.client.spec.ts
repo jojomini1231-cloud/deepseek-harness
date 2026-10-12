@@ -36,11 +36,12 @@ const rowDeclarations = (selector: string): Map<string, string> | undefined => d
 describe('WorkspaceBrowser.module.css list', () => {
   const root = declarations('.root')
   const listArea = declarations('.listArea')
+  const treeBody = declarations('.treeBody')
   const list = declarations('.list')
 
   it('is the scrolling region', () => {
-    expect(list).toBeDefined()
-    expect(list!.get('overflow-y')).toBe('auto')
+    expect(treeBody).toBeDefined()
+    expect(treeBody!.get('overflow-y')).toBe('auto')
   })
 
   it('counts the themed scrollbar inside the shell trailing inset', () => {
@@ -48,25 +49,30 @@ describe('WorkspaceBrowser.module.css list', () => {
     expect(root?.get('--dsh-session-list-scrollbar-width')).toBe('5px')
     expect(root?.get('--dsh-session-list-scrollbar-offset')).toBe('2px')
     expect(root?.get('padding-right')).toBe('var(--dsh-session-list-edge-inset)')
-    expect(listArea?.get('margin-left')).toBe('-4px')
-    expect(listArea?.get('padding-left')).toBe('4px')
+    // The scroller carries the row insets: the first-boundary marker lives in
+    // the seat above it, which must stay out of the scroll clip.
+    expect(listArea?.get('overflow')).toBe('visible')
     expect(listArea?.get('margin-right')).toBe('calc(-1 * var(--dsh-session-list-edge-inset))')
     expect(declarations('.fade')?.get('right')).toBe('var(--dsh-session-list-edge-inset)')
-    expect(list?.get('margin-right')).toBe('var(--dsh-session-list-scrollbar-offset)')
-    expect(list?.get('margin-left')).toBe('-4px')
-    expect(list?.get('padding-left')).toBe('4px')
-    expect(list?.get('padding-right')).toBe([
+    expect(treeBody?.get('margin-right')).toBe('var(--dsh-session-list-scrollbar-offset)')
+    expect(treeBody?.get('margin-left')).toBe('-4px')
+    expect(treeBody?.get('padding-left')).toBe('4px')
+    expect(treeBody?.get('padding-right')).toBe([
       'calc(',
       'var(--dsh-session-list-edge-inset)',
       '- var(--dsh-session-list-scrollbar-width)',
       '- var(--dsh-session-list-scrollbar-offset)',
       ')',
     ].join(' '))
+    // A section no longer scrolls: its rows only need the same edge insets.
+    expect(list?.get('overflow-y')).toBeUndefined()
+    expect(list?.get('margin-left')).toBe('-4px')
+    expect(list?.get('padding-left')).toBe('4px')
     expect(declarations('.list::-webkit-scrollbar')).toBeUndefined()
   })
 
   it('reserves the scrollbar whether or not the list overflows', () => {
-    expect(list!.get('scrollbar-gutter')).toBe('stable')
+    expect(treeBody!.get('scrollbar-gutter')).toBe('stable')
   })
 
   it('keeps 2px between rows and 4px between workspace groups', () => {

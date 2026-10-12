@@ -860,8 +860,10 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
 @Remote('search') search(request: SessionSearchRequest, signal: AbortSignal): Promise<SessionSearchValue>
 
 /**
- * Create or idempotently adopt one ordinary Session.
- * @param request - requested identity, location, and Agent preset.
+ * Create or idempotently adopt one Session. A request naming neither a
+ * Workspace nor a cwd, with `temporary: true`, gets a directory under the
+ * workspace controller's temporary root.
+ * @param request - requested identity, location, Agent preset, and whether this is a workspace-less temporary Session.
  * @returns the Session identity and resolved preset when configured.
  */
 @Remote('create') create(request: SessionCreateRequest): Promise<SessionCreateValue>

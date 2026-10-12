@@ -8,8 +8,9 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SessionProjectionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client'
 import {
   type ArchivedFilter,
-  deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, owningGroupKey, owningParentFolder,
-  pinCurrentBlank, reconcileManualOrder, sessionMemberIds, visibleSessionIds, workspaceLabel, UNGROUPED_KEY,
+  deriveFlat, deriveGroups, deriveSearchResults, deriveTemporaryMemberIds, orderByRecency, owningGroupKey,
+  owningParentFolder, pinCurrentBlank, reconcileManualOrder, sessionMemberIds, visibleSessionIds,
+  workspaceLabel, TEMPORARY_KEY, UNGROUPED_KEY,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
 
@@ -58,18 +59,28 @@ const rowState = (options: {
   pinned?: readonly string[]
   archived?: readonly string[]
   archivedFilter?: ArchivedFilter
+  temporary?: readonly string[]
 } = {}) => ({
   pinnedSessionIds: (options.pinned ?? []).map(sid),
   archivedSessionIds: (options.archived ?? []).map(sid),
+  temporarySessionIds: (options.temporary ?? []).map(sid),
   archivedFilter: options.archivedFilter ?? 'default' as const,
 })
 const noRows = rowState()
+const noTemporary: readonly SessionId[] = []
+const temporaryLabel = 'Temporary'
 
 describe('owningGroupKey', () => {
   it('returns the owning Workspace id or the Ungrouped key', () => {
     const workspaces = [workspace('first', ['owned'])]
     expect(owningGroupKey(workspaces, sid('owned'))).toBe('first')
     expect(owningGroupKey(workspaces, sid('loose'))).toBe(UNGROUPED_KEY)
+  })
+
+  it('prefers the temporary set over Workspace membership', () => {
+    const workspaces = [workspace('first', ['owned'])]
+    expect(owningGroupKey(workspaces, sid('owned'), [sid('owned')])).toBe(TEMPORARY_KEY)
+    expect(owningGroupKey(workspaces, sid('loose'), [sid('other')])).toBe(UNGROUPED_KEY)
   })
 })
 
@@ -225,6 +236,20 @@ describe('deriveGroups', () => {
     expect(groups[0]!.sessions.map(session => session.id)).toEqual([sid('older'), sid('newer')])
   })
 
+  it('keeps a temporary member out of its Workspace group', () => {
+    const sessions = list(summary('owned', 20), summary('loose', 10))
+    const workspaces = [workspace('first', ['owned'])]
+    const plain = deriveGroups(sessions, workspaces, noRows, noAttention, view(['first']))
+    expect(plain[0]!.sessions.map(session => session.id)).toEqual([sid('owned')])
+
+    const grouped = deriveGroups(
+      sessions, workspaces, rowState({ temporary: ['owned'] }), noAttention, view(['first']),
+    )
+    // The temporary set owns the member, so the Workspace group loses it rather
+    // than rendering the same Session in both sections.
+    expect(grouped[0]!.sessions).toEqual([])
+  })
+
   it('projects pending-interaction state into grouped and flat rows', () => {
     const awaiting = { ...summary('awaiting', 10), running: true }
     const sessions = list(awaiting)
@@ -260,6 +285,67 @@ describe('deriveGroups', () => {
     )
     expect(groups.map(group => group.key)).toEqual(['first', UNGROUPED_KEY])
     expect(groups[1]!.sessions.map(session => session.id)).toEqual([sid('loose')])
+  })
+
+  it('separates the temporary member run from the Workspace groups', () => {
+    const sessions = list(
+      summary('owned', 1, '/projects/first'),
+      summary('temporary', 9, '/tmp/temporary'),
+      summary('loose', 5, '/other'),
+    )
+    const temporary = deriveTemporaryMemberIds(
+      sessions,
+      [sid('temporary')],
+      rowState({ temporary: ['temporary'] }),
+      'updated',
+      undefined,
+    )
+    // The Temporary bucket is no longer a Workspace-group member: the section
+    // owns it, and Ungrouped keeps only the loose remainder.
+    const groups = deriveGroups(
+      sessions,
+      [workspace('first', ['owned'])],
+      rowState({ temporary: ['temporary'] }),
+      noAttention,
+      view([UNGROUPED_KEY]),
+    )
+    expect(groups.map(group => group.key)).toEqual(['first', UNGROUPED_KEY])
+    expect(temporary).toEqual([sid('temporary')])
+    expect(groups[1]!.sessions.map(session => session.id)).toEqual([sid('loose')])
+  })
+
+  it('lists no temporary member when the section is empty', () => {
+    // The section header renders even with nothing to list, so an empty run is
+    // an ordinary result rather than an omitted section.
+    expect(deriveTemporaryMemberIds(
+      list(summary('owned', 1, '/projects/first'), summary('loose', 2, '/other')),
+      [],
+      noRows,
+      'updated',
+      undefined,
+    )).toEqual([])
+  })
+
+  it('applies stored temporary order and appends newly created Sessions by recency', () => {
+    const sessions = list(summary('one', 3), summary('two', 2), summary('new', 4))
+    expect(deriveTemporaryMemberIds(
+      sessions,
+      sessions.ids,
+      rowState({ temporary: ['one', 'two', 'new'] }),
+      'manual',
+      ['two', 'stale', 'two'],
+    )).toEqual([sid('two'), sid('new'), sid('one')])
+  })
+
+  it('hides archived members under the section filter and restores them under only-archived', () => {
+    const sessions = list(summary('plain', 1), summary('archived', 2))
+    const members = [sid('plain'), sid('archived')]
+    expect(deriveTemporaryMemberIds(
+      sessions, members, rowState({ archived: ['archived'] }), 'updated', undefined,
+    )).toEqual([sid('plain')])
+    expect(deriveTemporaryMemberIds(
+      sessions, members, rowState({ archived: ['archived'], archivedFilter: 'only' }), 'updated', undefined,
+    )).toEqual([sid('archived')])
   })
 
   it('applies stored Ungrouped order and appends new loose Sessions by recency', () => {
@@ -316,9 +402,8 @@ describe('deriveGroups', () => {
     expect(deriveFlat(sessions, visibleSessionIds(sessions, noArchive, 'default'), noRows, statuses)
       .find(node => node.id === done.id)!.completed).toBe(true)
     const search = deriveSearchResults(
-      sessions, [workspace('first', ['done', 'plain'])], 'done', noArchive, 'default',
-      statuses, { items: [], hasMore: false }, 10,
-    )
+      sessions, [workspace('first', ['done', 'plain'])], 'done', noArchive, 'default', noTemporary,
+      statuses, { items: [], hasMore: false }, 10, temporaryLabel)
     expect(search.items[0]?.completed).toBe(true)
   })
 
@@ -362,9 +447,8 @@ describe('deriveGroups', () => {
       [parent.id, 1], [fork.id, 1],
     ])
     expect(deriveSearchResults(
-      sessions, [workspace('first', ['parent', 'fork'])], 'parent', noArchive, 'default',
-      noAttention, { items: [], hasMore: false }, 10,
-    ).items[0]).toMatchObject({ id: parent.id, runningSubagentCount: 1 })
+      sessions, [workspace('first', ['parent', 'fork'])], 'parent', noArchive, 'default', noTemporary,
+      noAttention, { items: [], hasMore: false }, 10, temporaryLabel).items[0]).toMatchObject({ id: parent.id, runningSubagentCount: 1 })
   })
 
   it('uses current child status only for members of the direct parent catalog', () => {
@@ -386,7 +470,7 @@ describe('deriveGroups', () => {
     const counts = (snapshot: SessionStatusSnapshot) => [
       deriveGroups(sessions, [workspace('first', ['parent'])], noRows, snapshot, view(['first']))[0]!.sessions[0]!.runningSubagentCount,
       deriveFlat(sessions, [parent.id], noRows, snapshot)[0]!.runningSubagentCount,
-      deriveSearchResults(sessions, [], 'parent', noArchive, 'default', snapshot, { items: [], hasMore: false }, 10).items[0]!.runningSubagentCount,
+      deriveSearchResults(sessions, [], 'parent', noArchive, 'default', noTemporary, snapshot, { items: [], hasMore: false }, 10, temporaryLabel).items[0]!.runningSubagentCount,
     ]
     expect(counts(statuses)).toEqual([1, 1, 1])
     statuses.set(child.id, status(undefined, { running: false }))
@@ -594,11 +678,10 @@ describe('deriveSearchResults archive filtering', () => {
       [],
       'needle',
       archived('gone'),
-      'default',
+      'default', noTemporary,
       noAttention,
       { items: [{ sessionId: gone.id, snippet: 'needle body' }], hasMore: false },
-      10,
-    )
+      10, temporaryLabel)
     expect(result.items.map(item => item.id)).toEqual([hit.id])
   })
 
@@ -606,8 +689,7 @@ describe('deriveSearchResults archive filtering', () => {
     const gone = summary('gone', 1)
     gone.title = gone.displayTitle = 'Needle archived'
     const result = deriveSearchResults(
-      list(gone), [], 'needle', archived('gone'), 'show', noAttention, { items: [], hasMore: false }, 10,
-    )
+      list(gone), [], 'needle', archived('gone'), 'show', noTemporary, noAttention, { items: [], hasMore: false }, 10, temporaryLabel)
     expect(result.items.map(item => [item.id, item.archived])).toEqual([[gone.id, true]])
   })
 
@@ -617,8 +699,7 @@ describe('deriveSearchResults archive filtering', () => {
     const gone = summary('gone', 1)
     gone.title = gone.displayTitle = 'Needle archived'
     const result = deriveSearchResults(
-      list(hit, gone), [], 'needle', archived('gone'), 'only', noAttention, { items: [], hasMore: false }, 10,
-    )
+      list(hit, gone), [], 'needle', archived('gone'), 'only', noTemporary, noAttention, { items: [], hasMore: false }, 10, temporaryLabel)
     expect(result.items.map(item => [item.id, item.archived])).toEqual([[gone.id, true]])
   })
 })
@@ -640,7 +721,7 @@ describe('deriveSearchResults', () => {
       ],
       ' NEEDLE ',
       noArchive,
-      'default',
+      'default', noTemporary,
       new Map([[titleHit.id, status({
         key: 'question:1', kind: 'plan-review', sessionId: titleHit.id,
       } as SessionPendingInteraction)]]),
@@ -653,8 +734,7 @@ describe('deriveSearchResults', () => {
         ],
         hasMore: false,
       },
-      10,
-    )
+      10, temporaryLabel)
 
     expect(result).toEqual({
       items: [
@@ -693,6 +773,26 @@ describe('deriveSearchResults', () => {
     })
   })
 
+  it('labels a temporary member with the section name instead of a Workspace', () => {
+    const hit = summary('temporary', 5, '/tmp/deepseek-harness/temporary-workspaces/temporary')
+    hit.title = hit.displayTitle = 'Needle temporary'
+    const result = deriveSearchResults(
+      list(hit),
+      [],
+      'needle',
+      noArchive,
+      'default',
+      [hit.id],
+      noAttention,
+      { items: [], hasMore: false },
+      10,
+      temporaryLabel,
+    )
+    // The directory basename would read as the label otherwise; the temporary
+    // set wins, matching how the section names its own members.
+    expect(result.items.map(item => [item.id, item.workspace])).toEqual([[hit.id, temporaryLabel]])
+  })
+
   it('excludes blank sessions from search regardless of query or content hits', () => {
     const currentBlank = { ...summary('opaque-current', 5), blank: true }
     const staleBlank = { ...summary('new session stale', 4), blank: true }
@@ -704,7 +804,7 @@ describe('deriveSearchResults', () => {
       [workspace('first', ['opaque-current', 'new session stale'])],
       'new session',
       noArchive,
-      'default',
+      'default', noTemporary,
       noAttention,
       {
         items: [
@@ -713,8 +813,7 @@ describe('deriveSearchResults', () => {
         ],
         hasMore: false,
       },
-      10,
-    )
+      10, temporaryLabel)
     expect(result.items).toEqual([])
   })
 
@@ -729,11 +828,10 @@ describe('deriveSearchResults', () => {
       [],
       'needle',
       noArchive,
-      'default',
+      'default', noTemporary,
       noAttention,
       { items: [], hasMore: false },
-      3,
-    )
+      3, temporaryLabel)
     expect(overflow.items).toHaveLength(3)
     expect(overflow.hasMore).toBe(true)
 
@@ -742,14 +840,13 @@ describe('deriveSearchResults', () => {
       [],
       'needle',
       noArchive,
-      'default',
+      'default', noTemporary,
       noAttention,
       { items: [{ sessionId: sid('body'), snippet: 'needle' }], hasMore: true },
-      3,
-    )
+      3, temporaryLabel)
     expect(backendMore.items).toHaveLength(1)
     expect(backendMore.hasMore).toBe(true)
-    expect(deriveSearchResults(list(), [], '  ', noArchive, 'default', noAttention, { items: [], hasMore: true }, 3))
+    expect(deriveSearchResults(list(), [], '  ', noArchive, 'default', noTemporary, noAttention, { items: [], hasMore: true }, 3, temporaryLabel))
       .toEqual({ items: [], hasMore: false })
   })
 })

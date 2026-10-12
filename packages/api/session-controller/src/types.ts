@@ -216,6 +216,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'session/agent-busy': { readonly reason: string }
     'session/invalid-time-zone': { readonly value: string }
     'session/workspace-attach-failed': { readonly sessionId: SessionId; readonly workspaceId: string }
+    'session/temporary-mark-failed': { readonly sessionId: SessionId }
     'agent-preset/conflict': {
       readonly sessionId: SessionId
       readonly requestedPreset: string
@@ -290,6 +291,12 @@ export interface SessionCreateRequest {
   readonly cwd?: string
   readonly sessionId?: SessionId
   readonly agentPreset?: string
+  /**
+   * Create a workspace-less temporary Session: the Host derives the working
+   * directory as `<temporary root>/<sessionId>` and records the Session in the
+   * registry's temporary set. Mutually exclusive with `workspaceId` and `cwd`.
+   */
+  readonly temporary?: true
 }
 
 /** Session creation response value. */

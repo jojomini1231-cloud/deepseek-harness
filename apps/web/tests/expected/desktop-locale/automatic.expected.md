@@ -33,6 +33,12 @@
   - button "排队发送"
   - text: 性能与用量 选择性能与用量信息展示的详细程度
   - button "详细"
+  - text: 临时工作区目录 每个临时会话都会在这里创建独立目录，作为它的工作目录。 根目录
+  - textbox "根目录":
+    - /placeholder: ""
+  - paragraph: 留空则使用文档目录下的 deepseek-harness/temporary-workspaces。
+  - button "浏览…"
+  - button "保存" [disabled]
   - text: 在使用官方模型 API 时上传 Session Log 帮助改进 DeepSeek 模型与产品
   - switch "在使用官方模型 API 时上传 Session Log"
   - text: 当前版本：{{version}}

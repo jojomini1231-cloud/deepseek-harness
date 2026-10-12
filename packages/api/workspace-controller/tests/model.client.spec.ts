@@ -167,7 +167,7 @@ function baseline(
   archivedSessionIds: readonly SessionId[] = [],
   pinnedSessionIds: readonly SessionId[] = [],
 ): void {
-  model.replaceBaseline({ items, archivedSessionIds, pinnedSessionIds })
+  model.replaceBaseline({ items, archivedSessionIds, pinnedSessionIds, temporarySessionIds: [] })
 }
 
 describe('ClientWorkspaceModel', () => {
@@ -514,6 +514,28 @@ describe('ClientWorkspaceModel', () => {
     await expect(model.archiveSession(sid('pinned'))).resolves.toMatchObject({ ok: true })
     expect(model.getSnapshot().archivedSessionIds).toEqual(['pinned'])
     expect(model.getSnapshot().pinnedSessionIds).toEqual(['kept'])
+  })
+
+  it('publishes a replaced temporary set and republishes nothing for an identical one', () => {
+    const model = modelFor()
+    baseline(model)
+    const before = model.getSnapshot()
+    expect(before.temporarySessionIds).toEqual([])
+
+    // The empty set the baseline installed is value-equal, so the follow
+    // generation must not republish on every reconnect.
+    model.replaceTemporary([])
+    expect(model.getSnapshot()).toBe(before)
+
+    model.replaceTemporary([sid('first'), sid('second')])
+    expect(model.getSnapshot()).not.toBe(before)
+    expect(model.getSnapshot().temporarySessionIds).toEqual(['first', 'second'])
+
+    // Same length in a different order is a different set, not a no-op.
+    const replaced = model.getSnapshot()
+    model.replaceTemporary([sid('second'), sid('first')])
+    expect(model.getSnapshot()).not.toBe(replaced)
+    expect(model.getSnapshot().temporarySessionIds).toEqual(['second', 'first'])
   })
 
   it('keeps the newest row and places Workspaces missing from partial orders last', async () => {

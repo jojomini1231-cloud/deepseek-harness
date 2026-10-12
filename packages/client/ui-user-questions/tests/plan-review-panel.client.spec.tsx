@@ -58,7 +58,7 @@ const attentionState: AttentionState = new Map()
 const workspaceState = {
   items: [],
   archivedSessionIds: [],
-  pinnedSessionIds: [],
+  pinnedSessionIds: [], temporarySessionIds: [],
   state: 'idle' as const,
   phase: 'ready' as const,
   error: null,

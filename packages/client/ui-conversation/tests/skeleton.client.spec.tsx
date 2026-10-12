@@ -111,8 +111,11 @@ function workspace(id = 'w1'): WorkspaceView {
   }
 }
 
-const workspaceState = (items: readonly WorkspaceView[]): WorkspaceSnapshot => ({
-  items, archivedSessionIds: [], pinnedSessionIds: [], state: 'idle', phase: 'ready', error: null,
+const workspaceState = (
+  items: readonly WorkspaceView[],
+  temporarySessionIds: readonly SessionId[] = [],
+): WorkspaceSnapshot => ({
+  items, archivedSessionIds: [], pinnedSessionIds: [], temporarySessionIds, state: 'idle', phase: 'ready', error: null,
 })
 
 function sessionSnapshotOf(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
@@ -138,6 +141,8 @@ function mount(
     nestedSubagent?: boolean
     /** A composer block another plugin raised for this session. */
     composerBlock?: { reason: string }
+    /** Classify the selected Session as temporary: no Workspace owns it. */
+    temporary?: boolean
     /** Mutable view ledger used by registration-order regressions. */
     viewTabs?: ViewTab[]
   } = {},
@@ -167,7 +172,10 @@ function mount(
     },
     phase: 'ready', projectionsBySession: {},
   })
-  const workspaces = createSnapshotStore<WorkspaceSnapshot>(workspaceState(workspaceRows))
+  const workspaces = createSnapshotStore<WorkspaceSnapshot>(workspaceState(
+    options.temporary === true ? [] : workspaceRows,
+    options.temporary === true ? [SID] : [],
+  ))
   const session = createSnapshotStore<SessionSnapshot>(snapshot)
   const useSession = bindSnapshotSelector(session)
   const conversation = createSnapshotStore<ConversationSnapshot>(EMPTY_CONVERSATION_SNAPSHOT)
@@ -684,6 +692,24 @@ describe('ConversationRoot resident composer', () => {
     // The agent-preset chip sits in the same row, for the same reason: both
     // choices are only open before the first message.
     expect(b.slotCalls).toContain('conversation.hero.agentPreset')
+  })
+
+  it('keeps a temporary Session composer live with its group label, not the derived directory', () => {
+    // A temporary Session owns no Workspace entity; without the temporary set
+    // the chip would resolve to undefined and the hero composer would stay
+    // inert even though the Host already made the directory.
+    const b = mount(sessionSnapshotOf({ blank: true }), [], undefined, {
+      summaryBlank: true,
+      temporary: true,
+    })
+    const box = b.view.getByRole('textbox')
+    expect(box.getAttribute('aria-disabled')).not.toBe('true')
+    expect(box.getAttribute('contenteditable')).toBe('true')
+    // The chip names the synthetic group rather than the Session-derived
+    // directory, whose leaf is the session id.
+    const chip = b.view.getByRole('button', { name: '选择工作区' })
+    expect(chip.textContent).toBe('临时工作区')
+    expect((chip as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('prompt failure renders the promptError strip (ordinary failure, no transaction UI)', () => {

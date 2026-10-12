@@ -1,5 +1,16 @@
+- text: Workspaces
+- button "Search sessions"
+- textbox "Search session names"
+- button "View options"
+- button "Add workspace"
 - tree "Sessions":
   - treeitem "{{workspace}}" [expanded]
   - treeitem "Newest conversation now" [selected]
   - treeitem "Middle conversation 1min"
   - treeitem "Oldest conversation 2min"
+- text: Temporary workspaces
+- button "Search temporary sessions"
+- textbox "Search temporary session names"
+- button "Temporary section view options"
+- button "New temporary session"
+- tree "Temporary workspaces"

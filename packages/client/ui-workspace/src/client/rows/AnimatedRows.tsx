@@ -14,6 +14,12 @@ interface AnimatedRowsProps {
   ready: boolean
   /** Changes that replace the view or reveal hidden rows settle immediately. */
   resetKey: string
+  /**
+   * Element whose visible box clips the animation. Defaults to this list
+   * itself, which is right when the list owns the scroll; a list nested in a
+   * shared scroller passes that scroller so offscreen rows stay excluded.
+   */
+  viewport?: HTMLElement | null | undefined
 }
 
 interface RowPosition {
@@ -56,7 +62,7 @@ export class AnimatedRows extends Component<AnimatedRowsProps> {
       || typeof list.animate !== 'function'
       || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return null
 
-    const viewport = list.getBoundingClientRect()
+    const viewport = (this.props.viewport ?? list).getBoundingClientRect()
     const positions = this.readPositions()
     const nextKeys = new Set(this.props.rowKeys)
     const removed = new Map<string, RowPosition>()
@@ -83,7 +89,7 @@ export class AnimatedRows extends Component<AnimatedRowsProps> {
     this.cancelMovements()
     const list = this.list.current as HTMLDivElement
     const overlay = this.overlay.current as HTMLDivElement
-    const viewport = list.getBoundingClientRect()
+    const viewport = (this.props.viewport ?? list).getBoundingClientRect()
     const origin = overlay.getBoundingClientRect()
     const positions = this.readPositions()
 

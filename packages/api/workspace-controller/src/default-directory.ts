@@ -5,6 +5,9 @@ import { posix, win32 } from 'node:path'
 import { runNativeCommand, type NativeCommandRunner } from '@deepseek-ai/dsh-native-command'
 import { DEFAULT_WORKSPACE_DIRECTORY } from './default-workspace.ts'
 
+/** Leaf directory name of temporary session workspaces under `<Documents>/deepseek-harness`. */
+export const DEFAULT_TEMPORARY_WORKSPACE_DIRECTORY = 'temporary-workspaces'
+
 /** Platform observations replaceable in directory-resolution tests. */
 interface DocumentsDirectoryInternals {
   readonly platform?: NodeJS.Platform
@@ -28,16 +31,19 @@ export function validateDocumentsDirectory(directory: string, platform: NodeJS.P
 }
 
 /**
- * Resolve the first-use directory on the Host without creating files.
+ * Resolve one harness directory under the system Documents directory without
+ * creating files.
  * @param documentsDirectory - explicit deployment override for the system Documents directory.
  * @param signal - caller lifetime and lookup deadline.
  * @param internals - platform facts and native command runner.
+ * @param leaf - final harness directory segment.
  * @returns the absolute candidate path.
  */
-export async function defaultWorkspaceDirectory(
+async function underDocuments(
   documentsDirectory: string | undefined,
   signal: AbortSignal,
-  internals: DocumentsDirectoryInternals = {},
+  internals: DocumentsDirectoryInternals,
+  leaf: string,
 ): Promise<string> {
   const platform = internals.platform ?? process.platform
   const paths = platform === 'win32' ? win32 : posix
@@ -74,5 +80,35 @@ export async function defaultWorkspaceDirectory(
   }
   directory = validateDocumentsDirectory(directory, platform)
   signal.throwIfAborted()
-  return paths.join(directory, 'deepseek-harness', DEFAULT_WORKSPACE_DIRECTORY)
+  return paths.join(directory, 'deepseek-harness', leaf)
+}
+
+/**
+ * Resolve the first-use Workspace directory on the Host without creating files.
+ * @param documentsDirectory - explicit deployment override for the system Documents directory.
+ * @param signal - caller lifetime and lookup deadline.
+ * @param internals - platform facts and native command runner.
+ * @returns the absolute candidate path.
+ */
+export async function defaultWorkspaceDirectory(
+  documentsDirectory: string | undefined,
+  signal: AbortSignal,
+  internals: DocumentsDirectoryInternals = {},
+): Promise<string> {
+  return await underDocuments(documentsDirectory, signal, internals, DEFAULT_WORKSPACE_DIRECTORY)
+}
+
+/**
+ * Resolve the temporary session workspace root on the Host without creating files.
+ * @param documentsDirectory - explicit deployment override for the system Documents directory.
+ * @param signal - caller lifetime and lookup deadline.
+ * @param internals - platform facts and native command runner.
+ * @returns the absolute candidate path.
+ */
+export async function temporaryWorkspaceDirectory(
+  documentsDirectory: string | undefined,
+  signal: AbortSignal,
+  internals: DocumentsDirectoryInternals = {},
+): Promise<string> {
+  return await underDocuments(documentsDirectory, signal, internals, DEFAULT_TEMPORARY_WORKSPACE_DIRECTORY)
 }

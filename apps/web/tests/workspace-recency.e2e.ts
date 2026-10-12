@@ -86,13 +86,13 @@ describe('web e2e: workspace recency', () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-workspace-recency'))
     const titles = () => page.locator('[role="treeitem"]:not([aria-expanded]) [class*="title"]').allTextContents()
     const pick = async (name: string): Promise<void> => {
-      await page.getByRole('button', { name: 'View options' }).click()
+      await page.getByRole('button', { name: 'View options', exact: true }).click()
       await page.getByRole('menuitem', { name, exact: true }).click()
     }
     const captureSidebar = async (): Promise<string> => {
-      await page.getByRole('button', { name: 'View options' }).hover()
+      await page.getByRole('button', { name: 'View options', exact: true }).hover()
       await expect.poll(() => page.getByRole('button', { name: /^Session actions for / }).count()).toBe(0)
-      return captureStableAria(page, '[role="tree"][aria-label="Sessions"]', scaffold.workspaceCwd)
+      return captureStableAria(page, '[class*="treeBody"]', scaffold.workspaceCwd)
     }
     await expect.poll(titles).toEqual(TITLES)
     await compareOrRefreshGolden(

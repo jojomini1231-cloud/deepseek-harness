@@ -60,6 +60,7 @@ function accepts(overrides: Partial<WorkspaceFollowSink> = {}): WorkspaceFollowS
     replaceOrder: ignore,
     replaceArchived: ignore,
     replacePinned: ignore,
+    replaceTemporary: ignore,
     ...overrides,
   }
 }
@@ -314,7 +315,7 @@ describe('WorkspaceController', () => {
   it('returns no Workspace when startup is ineligible without changing the list', async ({ mock, start }) => {
     const { remote, client } = await gatewayClient(mock, start)
     const model = new ClientWorkspaceModel(remote.workspace)
-    model.replaceBaseline({ items: [], archivedSessionIds: [], pinnedSessionIds: [] })
+    model.replaceBaseline({ items: [], archivedSessionIds: [], pinnedSessionIds: [], temporarySessionIds: [] })
     const controller = new WorkspaceController(client.ctx, model)
     const before = model.getSnapshot()
     mock.remote.workspace.initializeDefault.mockResolvedValueOnce({ ok: true, value: undefined })
@@ -325,7 +326,7 @@ describe('WorkspaceController', () => {
   it('publishes the model source and exposes successful Workspace commands', async ({ mock, start }) => {
     const { remote, client } = await gatewayClient(mock, start)
     const model = new ClientWorkspaceModel(remote.workspace)
-    model.replaceBaseline({ items: [workspace('one')], archivedSessionIds: [], pinnedSessionIds: [] })
+    model.replaceBaseline({ items: [workspace('one')], archivedSessionIds: [], pinnedSessionIds: [], temporarySessionIds: [] })
     const controller = new WorkspaceController(client.ctx, model)
 
     expect(controller.list).toBe(model)

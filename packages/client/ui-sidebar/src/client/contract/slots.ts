@@ -121,6 +121,11 @@ export type SidebarRootInjected = {
    * recent Workspace, or clear into the New Session pure view when none exist.
    */
   startSession: (workspaceId?: WorkspaceId) => void
+  /**
+   * Start a workspace-less temporary Session: the Host creates a directory for
+   * it under the configured temporary root and opens it.
+   */
+  startTemporarySession: () => void
   /** Toggle the sidebar column through the layout service. */
   toggleSidebar: () => void
   /** Select the global panel addressed by a sidebar row. */

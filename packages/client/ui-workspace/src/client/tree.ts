@@ -18,22 +18,39 @@ import { workspaceTitleOf } from '@deepseek-ai/dsh-util-workspace-path'
 export const UNGROUPED_KEY = ''
 
 /**
+ * Group key for the synthetic temporary-workspace bucket. A sentinel no
+ * Workspace id (a uuid) and no {@link UNGROUPED_KEY} can spell.
+ */
+export const TEMPORARY_KEY = '__temporary__'
+
+/**
+ * Which section a group row represents; decides its label and available
+ * actions. The Temporary section is not one of these: it renders its own flat
+ * run of rows under its own header rather than a Workspace-style group row.
+ */
+export type GroupKind = 'workspace' | 'ungrouped'
+
+/**
  * Resolve the Workspace browser group that owns one Session.
  * @param workspaces - authoritative Workspace membership.
  * @param sessionId - Session whose browser group is required.
- * @returns owning Workspace id, or {@link UNGROUPED_KEY} when no Workspace accounts for it.
+ * @param temporarySessionIds - registry-global temporary set; a member is grouped under {@link TEMPORARY_KEY}.
+ * @returns owning Workspace id, {@link TEMPORARY_KEY}, or {@link UNGROUPED_KEY} when neither accounts for it.
  */
 export function owningGroupKey(
   workspaces: readonly WorkspaceView[],
   sessionId: SessionId,
+  temporarySessionIds: readonly SessionId[] = [],
 ): string {
+  if (temporarySessionIds.includes(sessionId)) return TEMPORARY_KEY
   return (workspaces.find(workspace => workspace.sessionIds.includes(sessionId))
     ?.workspaceId as string | undefined) ?? UNGROUPED_KEY
 }
 
 /** Pending interaction kinds with dedicated Workspace-row presentation. */
 export type SessionPendingInteractionStatus = 'approval' | 'plan-review' | 'question'
-type SessionStatuses = SessionStatusSnapshot
+/** Unified UI status by Session, as the tree derivations consume it. */
+export type SessionStatuses = SessionStatusSnapshot
 
 function mainSessionId(list: SessionListState): SessionId | undefined {
   return Object.values(list.byId)
@@ -66,12 +83,14 @@ export type SessionOrderBy = 'manual' | 'updated'
 
 /** One workspace group section: header row facts + visible top-level session rows. */
 export interface GroupNode {
-  /** Group key: the workspace id or {@link UNGROUPED_KEY}. */
+  /** Group key: a Workspace id or {@link UNGROUPED_KEY}. */
   key: string
-  /** Backing Workspace id; absent only for the ungrouped bucket. */
+  /** Which section this row is; decides its label and available actions. */
+  kind: GroupKind
+  /** Backing Workspace id; absent for the ungrouped bucket. */
   workspaceId: WorkspaceId | undefined
   cwd: string | undefined
-  /** Workspace creation time (epoch ms); absent only for the ungrouped bucket. */
+  /** Workspace creation time (epoch ms); absent for the ungrouped bucket. */
   createdAt: number | undefined
   label: string
   /** Total visible sessions in the group. */
@@ -115,6 +134,7 @@ export interface TreeView {
 
 interface Group {
   key: string
+  kind: GroupKind
   workspaceId: WorkspaceId | undefined
   cwd: string | undefined
   createdAt: number | undefined
@@ -262,6 +282,8 @@ export interface SessionRowState {
   pinnedSessionIds: readonly SessionId[]
   /** Archive set; members keep their slots and show grayed while visible. */
   archivedSessionIds: readonly SessionId[]
+  /** Registry-global temporary set; members group under the temporary bucket. */
+  temporarySessionIds: readonly SessionId[]
   /** Archived-row visibility choice applied to lists and search alike. */
   archivedFilter: ArchivedFilter
 }
@@ -299,17 +321,18 @@ function sessionTitle(session: SessionSummary): string {
 /** Build one group without projecting session lineage into presentation. */
 function buildGroup(
   key: string,
+  kind: GroupKind,
   workspaceId: WorkspaceId | undefined,
   cwd: string | undefined,
   createdAt: number | undefined,
   label: string,
   members: readonly SessionSummary[],
 ): Group {
-  return { key, workspaceId, cwd, createdAt, label, sessions: [...members] }
+  return { key, kind, workspaceId, cwd, createdAt, label, sessions: [...members] }
 }
 
-/** Apply a stored Ungrouped order and append newly loose Sessions by recency. */
-function orderedUngrouped(
+/** Apply a stored bucket order and append newly loose Sessions by recency. */
+function orderedBucket(
   members: readonly SessionSummary[],
   stored: readonly string[] | undefined,
   summaries: SessionListState['byId'],
@@ -325,28 +348,41 @@ function orderedUngrouped(
   })
 }
 
+/** One scan of Workspace membership, shared by the Workspace groups and the Temporary section. */
+interface GroupScan {
+  /** Real-Workspace groups in caller order, members already filtered by the caller's filter. */
+  workspaces: Group[]
+  /** Sessions outside every Workspace, before any archive filtering. */
+  loose: SessionSummary[]
+}
+
 /**
- * Group Sessions by Workspace: one group per caller-ordered entity, with
- * members resolved from caller-ordered sessionIds. Sessions outside every
- * Workspace trail in the browser-local Ungrouped order, which falls back to
- * recency before that order is initialized.
+ * Compute the Workspace groups and the loose Session set once, so the Workspace
+ * groups and the separately-derived Temporary section agree on which Sessions
+ * are loose, and a Workspace whose summary has not landed yet stays accounted
+ * for rather than falling through as loose. `loose` is returned unfiltered so
+ * each section applies its own archive filter independently; the Workspace
+ * groups do use the caller's filter, since only the Workspace section reads them.
+ * A Session in the temporary set is excluded from its Workspace group: the
+ * Temporary section owns it, and rendering it in both would duplicate the row.
  */
-function groupByWorkspace(
+function scanGroups(
   list: SessionListState,
   workspaces: readonly WorkspaceView[],
   archived: ReadonlySet<SessionId>,
   archivedFilter: ArchivedFilter,
-  ungroupedOrder: readonly string[] | undefined,
-): Group[] {
+  temporary: ReadonlySet<SessionId>,
+): GroupScan {
   const current = mainSessionId(list)
-  const groups: Group[] = []
   const accounted = new Set<SessionId>()
+  const groups: Group[] = []
   for (const workspace of workspaces) {
     const members: SessionSummary[] = []
     for (const id of workspace.sessionIds) {
       const summary = list.byId[id]
       if (summary === undefined) continue // account may lead the list pull; the row appears when the summary lands
       accounted.add(id)
+      if (temporary.has(id)) continue
       if (!sessionVisible(summary, current, archived, archivedFilter)) continue
       members.push(summary)
     }
@@ -354,25 +390,59 @@ function groupByWorkspace(
     // a Workspace without archived Sessions contributes no group.
     if (archivedFilter === 'only' && members.length === 0) continue
     groups.push(buildGroup(
-      workspace.workspaceId, workspace.workspaceId, workspace.path,
+      workspace.workspaceId, 'workspace', workspace.workspaceId, workspace.path,
       Date.parse(workspace.createdAt), workspace.title, members,
     ))
   }
-  const stray = list.ids
+  const loose = list.ids
     .map(id => list.byId[id])
-    .filter((s): s is SessionSummary =>
-      s !== undefined && !accounted.has(s.id) && sessionVisible(s, current, archived, archivedFilter))
-  if (stray.length > 0) {
-    groups.push(buildGroup(
-      UNGROUPED_KEY,
-      undefined,
-      undefined,
-      undefined,
-      '',
-      orderedUngrouped(stray, ungroupedOrder, list.byId),
-    ))
+    .filter((s): s is SessionSummary => s !== undefined && !accounted.has(s.id))
+  return { workspaces: groups, loose }
+}
+
+/**
+ * Sessions outside every Workspace, split into the temporary set and the
+ * browser-local strays under one archive filter. `loose` arrives unfiltered
+ * from {@link scanGroups}, so this is where each section's filter applies.
+ */
+function looseBuckets(
+  list: SessionListState,
+  loose: readonly SessionSummary[],
+  temporary: ReadonlySet<SessionId>,
+  archived: ReadonlySet<SessionId>,
+  archivedFilter: ArchivedFilter,
+): { temporary: SessionSummary[]; stray: SessionSummary[] } {
+  const current = mainSessionId(list)
+  const visible = loose.filter(session => sessionVisible(session, current, archived, archivedFilter))
+  return {
+    temporary: visible.filter(session => temporary.has(session.id)),
+    stray: visible.filter(session => !temporary.has(session.id)),
   }
-  return groups
+}
+
+/**
+ * Group Sessions by Workspace: one group per caller-ordered entity, with
+ * members resolved from caller-ordered sessionIds. Sessions outside every
+ * Workspace trail in the browser-local Ungrouped order, which falls back to
+ * recency before that order is initialized. The temporary bucket is derived
+ * separately by {@link deriveTemporaryMemberIds}, so it never appears here.
+ */
+function groupByWorkspace(
+  list: SessionListState,
+  workspaces: readonly WorkspaceView[],
+  archived: ReadonlySet<SessionId>,
+  archivedFilter: ArchivedFilter,
+  temporary: ReadonlySet<SessionId>,
+  ungroupedOrder: readonly string[] | undefined,
+): Group[] {
+  const scan = scanGroups(list, workspaces, archived, archivedFilter, temporary)
+  const stray = orderedBucket(
+    looseBuckets(list, scan.loose, temporary, archived, archivedFilter).stray, ungroupedOrder, list.byId,
+  )
+  if (stray.length === 0) return scan.workspaces
+  return [...scan.workspaces, buildGroup(
+    UNGROUPED_KEY, 'ungrouped', undefined, undefined, undefined, '', stray,
+  )]
 }
 
 /** Keep navigation presentation independent from domain-owned interaction objects. */
@@ -442,16 +512,20 @@ export function deriveGroups(
 ): GroupNode[] {
   const archived = new Set(rowState.archivedSessionIds)
   const pinned = new Set(rowState.pinnedSessionIds)
+  const temporary = new Set(rowState.temporarySessionIds)
   const expandedGroups = new Set(view.expandedGroups)
   const current = mainSessionId(list)
   const currentGroup = current === undefined
     ? undefined
-    : owningGroupKey(workspaces, current)
+    : owningGroupKey(workspaces, current, rowState.temporarySessionIds)
   const groups: GroupNode[] = []
-  for (const g of groupByWorkspace(list, workspaces, archived, rowState.archivedFilter, view.ungroupedOrder)) {
+  for (const g of groupByWorkspace(
+    list, workspaces, archived, rowState.archivedFilter, temporary, view.ungroupedOrder,
+  )) {
     const expanded = expandedGroups.has(g.key)
     groups.push({
       key: g.key,
+      kind: g.kind,
       workspaceId: g.workspaceId,
       cwd: g.cwd,
       createdAt: g.createdAt,
@@ -466,6 +540,46 @@ export function deriveGroups(
     })
   }
   return groups
+}
+
+/**
+ * Derive the Temporary section's rows in the section's own order.
+ *
+ * Independent of {@link deriveGroups} in every input the section owns: it
+ * applies the archived filter the caller supplies as the section's own and
+ * orders by the section's own mode, so neither the Workspace section's filter
+ * nor its order mode reaches this bucket. The section always renders, so an
+ * empty result is ordinary rather than a reason to omit it.
+ *
+ * Returns ids rather than rows: the section draws them through the same flat
+ * row run as the flat list, which derives each row's presentation itself.
+ * @param list - sessions list snapshot.
+ * @param memberIds - the section's members, from the registry set over the whole list.
+ * @param rowState - registry-global sets plus the SECTION's archived filter.
+ * @param orderBy - the section's own order mode.
+ * @param stored - the section's saved manual order, read only under `orderBy === 'manual'`.
+ * @returns the section's visible members in rendered order.
+ */
+export function deriveTemporaryMemberIds(
+  list: SessionListState,
+  memberIds: readonly SessionId[],
+  rowState: SessionRowState,
+  orderBy: SessionOrderBy,
+  stored: readonly string[] | undefined,
+): SessionId[] {
+  const archived = new Set(rowState.archivedSessionIds)
+  const current = mainSessionId(list)
+  // Summaries may lag the registry set, so a member without one drops out
+  // before ordering rather than ordering around an absent row.
+  const visibleIds = memberIds.filter((id) => {
+    const session = list.byId[id]
+    /* v8 ignore next -- account may lead the list pull; the row appears when the summary lands. */
+    if (session === undefined) return false
+    return sessionVisible(session, current, archived, rowState.archivedFilter)
+  })
+  return orderBy === 'updated'
+    ? orderByRecency(visibleIds, list.byId)
+    : reconcileManualOrder(visibleIds, stored, list.byId, rowState)
 }
 
 /**
@@ -534,9 +648,11 @@ export function deriveFlat(
  * @param query - caller text; surrounding whitespace is ignored.
  * @param archivedSessionIds - registry-global archive set (members match per the archived filter).
  * @param archivedFilter - archived-row visibility choice; search follows it.
+ * @param temporarySessionIds - registry-global temporary set; members label as the temporary group.
  * @param statuses - unified UI status by Session.
  * @param content - ranked Host content-search page.
  * @param limit - protocol-owned maximum merged row count.
+ * @param temporaryLabel - localized name of the temporary group, used as a temporary row's Workspace label.
  * @returns bounded deduplicated flat rows and a refine-query hint bit.
  */
 export function deriveSearchResults(
@@ -545,13 +661,16 @@ export function deriveSearchResults(
   query: string,
   archivedSessionIds: readonly SessionId[],
   archivedFilter: ArchivedFilter,
+  temporarySessionIds: readonly SessionId[],
   statuses: SessionStatuses,
   content: { items: readonly SessionSearchResultItem[]; hasMore: boolean },
   limit: number,
+  temporaryLabel: string,
 ): SearchResultSet {
   const q = query.trim().toLowerCase()
   if (q === '') return { items: [], hasMore: false }
   const archived = new Set(archivedSessionIds)
+  const temporary = new Set(temporarySessionIds)
   const current = mainSessionId(list)
 
   const workspaceBySession = new Map<SessionId, string>()
@@ -561,7 +680,9 @@ export function deriveSearchResults(
     }
   }
   const labelOf = (summary: SessionSummary): string =>
-    workspaceBySession.get(summary.id) ?? workspaceLabel(summary.cwd)
+    temporary.has(summary.id)
+      ? temporaryLabel
+      : workspaceBySession.get(summary.id) ?? workspaceLabel(summary.cwd)
   const contentBySession = new Map<SessionId, SessionSearchResultItem>()
   for (const item of content.items) {
     if (!contentBySession.has(item.sessionId)) contentBySession.set(item.sessionId, item)

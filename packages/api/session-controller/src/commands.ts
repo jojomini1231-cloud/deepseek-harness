@@ -2,6 +2,7 @@
 
 import { modelAvailable } from './catalog.ts'
 import { randomUUID } from 'node:crypto'
+import { isAbsolute, join, relative } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { Agent, ModelSelection as AgentModelSelection } from '@deepseek-ai/dsh-agent'
@@ -23,6 +24,7 @@ import { SessionTitleInvalidError } from '@deepseek-ai/dsh-session-title'
 import { canonicalClientTimeZone } from '@deepseek-ai/dsh-util-time'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
+import type {} from '@deepseek-ai/dsh-api-workspace-controller'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
 import {
   ApiSessionAgentController,
@@ -64,6 +66,19 @@ type PromptContentCandidate =
   | SessionPromptRequest['content'][number]
   | Extract<SessionUpdateQueueRequest['action'], { readonly kind: 'edit' }>['content'][number]
 
+/**
+ * Whether a Session's stored cwd lies inside the temporary root. A create that
+ * mints a temporary cwd places it directly under the root, so a stored path
+ * outside the root identifies an ordinary Session.
+ * @param root - absolute temporary workspace root.
+ * @param cwd - the Session's stored working directory.
+ * @returns true when the cwd is the root itself or a descendant of it.
+ */
+function isUnder(root: string, cwd: string): boolean {
+  const rest = relative(root, cwd)
+  return rest === '' || (!rest.startsWith('..') && !isAbsolute(rest))
+}
+
 function hasPromptContent(content: readonly PromptContentCandidate[]): boolean {
   return content.some(part => part.type !== 'text' || part.text.trim().length > 0)
 }
@@ -99,12 +114,16 @@ export class SessionCommandController {
 
   /**
    * Create or idempotently adopt one ordinary Session.
-   * @param request - requested identity, location, and Agent preset.
+   * @param request - requested identity, location, Agent preset, and whether this is a workspace-less temporary Session.
+   * @param signal - caller lifetime; cancels the temporary root's native Documents lookup.
    * @returns the Session identity and resolved preset when configured.
    */
-  async create(request: SessionCreateRequest): Promise<SessionCreateValue> {
+  async create(request: SessionCreateRequest, signal: AbortSignal = AbortSignal.timeout(30_000)): Promise<SessionCreateValue> {
     if (request.workspaceId !== undefined && request.cwd !== undefined) {
       throw new RemoteError('gateway/bad-request', 'session.create accepts workspaceId or cwd, not both', {})
+    }
+    if (request.temporary === true && (request.workspaceId !== undefined || request.cwd !== undefined)) {
+      throw new RemoteError('gateway/bad-request', 'session.create accepts temporary alone, not with workspaceId or cwd', {})
     }
     const sessionId = request.sessionId ?? brandString<SessionId>(`session-${randomUUID()}`)
     let workspace: Workspace | undefined
@@ -116,7 +135,10 @@ export class SessionCommandController {
         })
       }
     }
-    const cwd = workspace?.path ?? request.cwd ?? this.defaultCwd
+    const cwd = workspace?.path ?? request.cwd
+      ?? (request.temporary === true
+        ? await this.temporaryCwd(sessionId, request.sessionId !== undefined, signal)
+        : this.defaultCwd)
     let adopted: Agent
     try {
       adopted = await this.agents.ensureSession(
@@ -139,8 +161,79 @@ export class SessionCommandController {
         )
       }
     }
+    if (request.temporary === true) {
+      try {
+        await this.ctx.workspaceRegistry.markTemporarySession(sessionId)
+      } catch (error) {
+        // The directory and the Session log exist, but nothing re-derives the
+        // classification from them, so a swallowed failure would leave a
+        // Session the Temporary section can never show. Report it the way the
+        // Workspace-attach branch reports its own post-create failure.
+        throw new RemoteError(
+          'session/temporary-mark-failed',
+          `session "${sessionId}" was created but could not be marked temporary: ${String(error)}`,
+          { sessionId },
+        )
+      }
+    }
     const agentPreset = this.agents.presetForSession(adopted.session)
     return { sessionId, ...(agentPreset === undefined ? {} : { agentPreset }) }
+  }
+
+  /**
+   * Resolve the working directory for a workspace-less temporary Session:
+   * `<temporary root>/<sessionId>`. An adopting request whose Session already
+   * exists keeps its stored cwd, so changing the configured root never
+   * conflicts with an already-created Session. The Host's create path makes
+   * the directory recursively afterwards.
+   * @param sessionId - the (possibly client-supplied) Session id that names the leaf directory.
+   * @param adopting - whether the request carried an explicit Session id to adopt.
+   * @param signal - caller lifetime; cancels the native Documents lookup.
+   * @returns the absolute temporary working directory.
+   */
+  private async temporaryCwd(sessionId: SessionId, adopting: boolean, signal: AbortSignal): Promise<string> {
+    if (adopting) {
+      let storedCwd: string | undefined
+      try {
+        using observation = await this.ctx.sessionQuery.observeSession(sessionId, { projectionMode: 'none', signal })
+        storedCwd = observation.header.cwd
+      } catch (error: unknown) {
+        if (!(error instanceof SessionQueryError)
+          || error.code !== 'SESSION_QUERY_SESSION_NOT_FOUND') throw error
+      }
+      // An adopting request reuses the stored directory: it was chosen when the
+      // Session was made, and every create path that produces a temporary
+      // Session puts it under the temporary root. A stored cwd that is not
+      // under that root is an ordinary Session, whose classification this
+      // request must not overwrite.
+      if (storedCwd !== undefined) {
+        const root = await this.requireTemporaryRoot(signal)
+        if (isUnder(root, storedCwd)) return storedCwd
+        throw new RemoteError(
+          'gateway/bad-request',
+          `session "${sessionId}" is not a temporary session: its cwd "${storedCwd}" is outside "${root}"`,
+          {},
+        )
+      }
+    }
+    if (sessionId === '' || sessionId === '.' || sessionId === '..' || /[/\\]/.test(sessionId)) {
+      throw new RemoteError('gateway/bad-request', `session id "${sessionId}" is not a usable directory name`, {})
+    }
+    return join(await this.requireTemporaryRoot(signal), sessionId)
+  }
+
+  /**
+   * The absolute temporary root, or the failure a Host without the Workspace
+   * controller reports.
+   * @param signal - caller lifetime; cancels the native Documents lookup.
+   * @returns the resolved temporary workspace root.
+   */
+  private async requireTemporaryRoot(signal: AbortSignal): Promise<string> {
+    const workspaceController = this.ctx.get('workspaceController')
+    if (workspaceController === undefined) {
+      throw new RemoteError('gateway/internal', 'temporary sessions require the Workspace controller', {})
+    }
+    return await workspaceController.temporaryRoot(signal)
   }
 
   /**

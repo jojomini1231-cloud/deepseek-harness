@@ -303,15 +303,22 @@ export interface Config {
 ## `@deepseek-ai/dsh-api-workspace-controller`
 
 - `inject`: `typert` · `workspaceRegistry`
-- `source`: [`packages/api/workspace-controller/src/index.ts:33`](../packages/api/workspace-controller/src/index.ts)
+- `refs`: `Volatile` (`@deepseek-ai/cordis`)
+- `source`: [`packages/api/workspace-controller/src/index.ts:39`](../packages/api/workspace-controller/src/index.ts)
 
 ```ts config-catalog
-/** First-use directory policy for the Host account. */
+/** Directory policy supplied by plugin configuration; volatile fields are live references. */
 export interface Config {
   /** Override the system Documents directory with a fully qualified path. */
   documentsDirectory?: string
+  /**
+   * Root under which each workspace-less Session's temporary directory is
+   * created. Fully qualified; unset derives `<Documents>/deepseek-harness/temporary-workspaces`.
+   * Volatile, so the deployment (and the Settings page) may change it live.
+   */
+  temporaryWorkspaceDirectory: Volatile<string | undefined>
   /** Maximum duration of the operating system's Documents lookup. */
-  documentsLookupTimeoutMs?: number
+  documentsLookupTimeoutMs: number
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-api-workspace-controller -->

@@ -11,7 +11,7 @@ Desktop product events use the optional [product analytics service](../product-a
 
 ## Summary
 
-The dsh web client sidebar lets users recognize the active build, start a new session, collapse navigation to a 56px rail, browse Workspaces and Sessions, and open Settings. It preserves a bottom-pinned Settings entry and hides idle scrollbars without moving browser rows. New Session uses an explicitly selected Workspace, then the current Session's Workspace, then the most recently active Workspace; if none exists, it opens a blank New Session page. Deployments can replace the brand mark or name while retaining the navigation controls and rail geometry.
+The dsh web client sidebar lets users recognize the active build, start a new session, start a workspace-less temporary session, collapse navigation to a 56px rail, browse Workspaces and Sessions, and open Settings. It preserves a bottom-pinned Settings entry and hides idle scrollbars without moving browser rows. New Session uses an explicitly selected Workspace, then the current Session's Workspace, then the most recently active Workspace; if none exists, it opens a blank New Session page. Deployments can replace the brand mark or name while retaining the navigation controls and rail geometry.
 
 ## Table of Contents
 
@@ -32,6 +32,8 @@ The sidebar is the navigation shell: users see the brand, start new sessions, co
 ### Brand and New Session
 
 The expanded brand row renders `sidebar.brand.mark` and `sidebar.brand.name` as independent single slots; the collapsed rail renders the same mark slot. On Web and Windows desktop, clicking the expanded brand starts a new session; hovering or focusing it shows no tooltip. Without occupants, the shell uses the fish mark and a localized local-build label. A complete build stacks a code badge below the label as `version[-commit][-dirty]`, using `DSH_CLIENT_VERSION`, the optional 7-character `DSH_CLIENT_COMMIT_HASH`, and `DSH_CLIENT_GIT_DIRTY=true`; missing version metadata omits the badge. New Session targets the explicit Workspace used by a scoped action, otherwise the current Session's Workspace, otherwise the most recently active Workspace; when none exists it clears into the blank New Session page. The expanded New Session button displays the effective binding as trailing grey text on hover or keyboard focus. While the shortcut is visible, the centered icon and label fade before it when space is narrow; CSS reserves the shortcut’s width without measuring the button. Icon-only controls retain tooltips with platform-formatted keycaps, including the resident macOS header control when the sidebar is hidden. All controls expose `aria-keyshortcuts`.
+
+Beside New Session, a separate **New temporary session** control starts a workspace-less [temporary Session](../ui-workspace/README.md#temporary-sessions) with its own Host-created directory. It is a distinct action, not a mode of New Session: New Session keeps its Workspace-targeting behavior unchanged, and this control never carries a Workspace id or reuses a blank. The same entry rides the macOS `shell.leading` seat when the column is hidden.
 
 ### Global panel entries
 
@@ -103,7 +105,7 @@ None; this package neither assembles nor sends a provider request.
 These limits define what the shell owns versus what its occupants own; they are current package constraints.
 
 - **Session state-dot rendering is owned by ui-workspace** — no done/error notification sources are available to this shell.
-- **Workspace browser behavior is composition-owned** — grouping, ordering, search, and row state belong to ui-workspace, not this shell.
+- **Workspace browser behavior is composition-owned** — grouping, ordering, search, row state, and temporary-Session creation belong to ui-workspace, not this shell; the shell only routes the New temporary session control to it.
 - **"New task completed" unread marking is local viewing state** — completion-time > last-seen never reaches the host.
 
 <a id="dev-note"></a>

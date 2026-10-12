@@ -32,6 +32,10 @@ import type {} from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: pulls the SlotRegistry service merge (ctx.slots).
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+// Type-only: the ctx.configForms Context merge and the settings SlotMap
+// entries. Cross-plugin collaboration goes through the service, never a value
+// import (client bundle purity gate).
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 // Type-only: pulls the Session root standard-hook merge.
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
@@ -52,6 +56,10 @@ import { PinSessionMenuItem, PinSessionRowButton } from './session-actions/PinSe
 import { RenameSessionMenuItem, SessionRenameDialog } from './session-actions/RenameSession.tsx'
 import { RowActionToast } from './session-actions/RowActionToast.tsx'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
+import { TemporaryWorkspaceRow } from './settings/TemporaryWorkspaceRow.tsx'
+import {
+  TemporaryWorkspaceRowController, WORKSPACE_CONTROLLER_NS,
+} from './settings/temporary-workspace-controller.ts'
 import { en, zh, type WorkspaceKey } from './locales.ts'
 
 export type { StartSessionOptions, UiWorkspace } from './navigation.ts'
@@ -94,7 +102,7 @@ const NS = 'workspace'
  * declaration through `slots.inject()` instead of assuming order.
  */
 export const inject = [
-  'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout', 'shortcuts',
+  'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout', 'shortcuts', 'configForms',
 ]
 
 /**
@@ -242,6 +250,7 @@ export function apply(ctx: Context): void {
     // Explicit group actions keep their target; unscoped New Session inherits
     // the current Session Workspace before the recent-Workspace fallback.
     startSession: (workspaceId, options) => { uiWorkspace.startSession(workspaceId, options) },
+    startTemporarySession: () => { uiWorkspace.startTemporarySession() },
     open: openSession,
     searchSessions,
     searchResultLimit: sessions.searchResultLimit,
@@ -326,6 +335,20 @@ export function apply(ctx: Context): void {
     },
     WorkspacePicker,
   ))
+
+  // The temporary-workspace directory is this feature's preference, so its
+  // General row registers here; `whileServed` keeps the row out of a
+  // deployment that composed no Workspace controller.
+  const temporaryDirectory = new TemporaryWorkspaceRowController(
+    ctx.configForms.get(WORKSPACE_CONTROLLER_NS),
+    () => uiWorkspace.pickDirectory(),
+  )
+  ctx.effect(() => () => { temporaryDirectory.dispose() }, 'ui-workspace: settings form subscription')
+  ctx.effect(() => ctx.configForms.whileServed([WORKSPACE_CONTROLLER_NS], () =>
+    ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+      name: 'settings.general.item', id: 'temporary-workspace', order: 31, locale: NS,
+      inject: () => temporaryDirectory.inject(),
+    }, TemporaryWorkspaceRow))), 'ui-workspace: temporary workspace row')
 }
 
 /**

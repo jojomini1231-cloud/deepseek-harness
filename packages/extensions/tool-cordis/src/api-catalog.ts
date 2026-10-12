@@ -1976,8 +1976,8 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote(\'create\') create(request: SessionCreateRequest): Promise<SessionCreateValue>',
-        description: 'Create or idempotently adopt one ordinary Session.',
-        parameters: [{ name: 'request', description: 'requested identity, location, and Agent preset.' }],
+        description: 'Create or idempotently adopt one Session. A request naming neither a Workspace nor a cwd, with `temporary: true`, gets a directory under the workspace controller\'s temporary root.',
+        parameters: [{ name: 'request', description: 'requested identity, location, Agent preset, and whether this is a workspace-less temporary Session.' }],
         returns: 'the Session identity and resolved preset when configured.',
       },
       {
@@ -3686,6 +3686,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Host service backing the generated `ctx.remote.workspace` namespace.',
     methods: [
       {
+        signature: 'async temporaryRoot(signal: AbortSignal): Promise<string>',
+        description: 'Resolve the temporary session workspace root: the deployment-configured `temporaryWorkspaceDirectory`, or `<Documents>/deepseek-harness/temporary-workspaces` when unset. The directory is created recursively and canonicalized through `fs.realpath`, so the caller\'s later `mkdir` of a per-Session child agrees with one spelling. Not a Remote verb: only the Host create path needs it.',
+        parameters: [{ name: 'signal', description: 'caller lifetime; cancels the native Documents lookup.' }],
+        returns: 'the absolute temporary root directory.',
+      },
+      {
         signature: '@Remote(\'create\') create(request: WorkspaceCreateRequest): Promise<WorkspaceCreateValue>',
         description: 'Create or idempotently resolve one Workspace over an existing directory.',
         parameters: [{ name: 'request', description: 'directory path to register.' }],
@@ -3854,6 +3860,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'unpinSession(sessionId: SessionId): Promise<void>',
         description: 'Unpin one session durably by dropping it from the registry-global pin set. Unpinning runs no session-existence check because removing an id cannot introduce an unknown one, so an entry whose session is gone still resolves. An id that is not pinned resolves without writing.',
         parameters: [{ name: 'sessionId', description: 'The session to unpin.' }],
+        returns: 'resolution after durability.',
+      },
+      {
+        signature: 'markTemporarySession(sessionId: SessionId): Promise<void>',
+        description: 'Record one session as temporary durably. The Host calls this after the session exists; the id is not re-checked here because the caller just created it. Idempotent: an already-recorded id resolves without writing.',
+        parameters: [{ name: 'sessionId', description: 'The session to record.' }],
         returns: 'resolution after durability.',
       },
       {
@@ -6771,7 +6783,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionCreateRequest',
-    declaration: 'export interface SessionCreateRequest {\n    readonly workspaceId?: WorkspaceId;\n    readonly cwd?: string;\n    readonly sessionId?: SessionId;\n    readonly agentPreset?: string;\n}',
+    declaration: 'export interface SessionCreateRequest {\n    readonly workspaceId?: WorkspaceId;\n    readonly cwd?: string;\n    readonly sessionId?: SessionId;\n    readonly agentPreset?: string;\n    readonly temporary?: true;\n}',
   },
   {
     name: 'SessionCreateValue',
@@ -8419,7 +8431,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WorkspaceBaseline',
-    declaration: 'export interface WorkspaceBaseline {\n    readonly items: readonly WorkspaceView[];\n    readonly archivedSessionIds: readonly SessionId[];\n    readonly pinnedSessionIds: readonly SessionId[];\n}',
+    declaration: 'export interface WorkspaceBaseline {\n    readonly items: readonly WorkspaceView[];\n    readonly archivedSessionIds: readonly SessionId[];\n    readonly pinnedSessionIds: readonly SessionId[];\n    readonly temporarySessionIds: readonly SessionId[];\n}',
   },
   {
     name: 'WorkspaceByteRange',
@@ -8503,7 +8515,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WorkspaceFollowIncrement',
-    declaration: 'export type WorkspaceFollowIncrement = {\n    readonly type: \'upsert\';\n    readonly workspace: WorkspaceView;\n} | {\n    readonly type: \'remove\';\n    readonly workspaceId: WorkspaceId;\n} | {\n    readonly type: \'order\';\n    readonly workspaceIds: readonly WorkspaceId[];\n} | {\n    readonly type: \'archived\';\n    readonly archivedSessionIds: readonly SessionId[];\n} | {\n    readonly type: \'pinned\';\n    readonly pinnedSessionIds: readonly SessionId[];\n};',
+    declaration: 'export type WorkspaceFollowIncrement = {\n    readonly type: \'upsert\';\n    readonly workspace: WorkspaceView;\n} | {\n    readonly type: \'remove\';\n    readonly workspaceId: WorkspaceId;\n} | {\n    readonly type: \'order\';\n    readonly workspaceIds: readonly WorkspaceId[];\n} | {\n    readonly type: \'archived\';\n    readonly archivedSessionIds: readonly SessionId[];\n} | {\n    readonly type: \'pinned\';\n    readonly pinnedSessionIds: readonly SessionId[];\n} | {\n    readonly type: \'temporary\';\n    readonly temporarySessionIds: readonly SessionId[];\n};',
   },
   {
     name: 'WorkspaceInsertBeforeRequest',

@@ -78,6 +78,11 @@ ctx.workspaceRegistry.list() // shows the project, newest first
 
 Workspace 注册不意味着拥有其目录。未来的破坏性文件系统操作必须单独命名、获得明确确认，并执行所有权与安全检查。
 
+<a id="recording-temporary-sessions"></a>
+### 记录临时会话
+
+`markTemporarySession(sessionId)` 把一个会话记入 registry 全局的临时集合，浏览器界面读取该集合以分组经无工作区入口创建的会话。[Host 会话创建路径](../../api/session-controller/README.zh.md#temporary-sessions)拥有调用时机：它依据创建请求而非会话目录一次性判定，因此会话的工作目录日后被移动或删除时仍保留分类。该调用幂等——已记录的 id 直接解析而不写入——且不重复校验 id 是否存在，因为调用方刚刚创建了该会话。该集合不参与单归属记账不变量，因此绝不影响会话属于哪个项目。`initializeDefault` 把非空临时集合视为历史：使用过临时会话的安装不是空安装，不会自动获得默认工作区。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -115,7 +120,7 @@ Workspace 注册不意味着拥有其目录。未来的破坏性文件系统操�
 
 ### 持久形态
 
-注册表打开 `workspace` 领域（版本 2）：一张以 `WorkspaceId` 为键的 `workspaces` 表，加上一个持有 `workspaceIds`（权威显示顺序）、`archivedSessionIds`、`pinnedSessionIds`、可选的首次使用身份 `defaultWorkspaceId` 与可选 `pendingMutation` 标记的全局状态。归档与置顶集合存储会话 id 字符串，默认值为空，不包含逐项对象或时间戳；置顶数组把最近置顶的 id 放在前面。归档在同一次全局状态写入中清除置顶，但不改变 Workspace 成员关系。取消归档不做会话存在性探测，因为从集合中移除 id 不可能引入未知 id，而归档会在加入前校验会话。
+注册表打开 `workspace` 领域（版本 2）：一张以 `WorkspaceId` 为键的 `workspaces` 表，加上一个持有 `workspaceIds`（权威显示顺序）、`archivedSessionIds`、`pinnedSessionIds`、`temporarySessionIds`、可选的首次使用身份 `defaultWorkspaceId` 与可选 `pendingMutation` 标记的全局状态。归档、置顶与临时集合存储会话 id 字符串，默认值为空，不包含逐项对象或时间戳；置顶数组把最近置顶的 id 放在前面。临时集合记录的是创建入口而非目录，且不参与单归属记账不变量。归档在同一次全局状态写入中清除置顶，但不改变 Workspace 成员关系。取消归档不做会话存在性探测，因为从集合中移除 id 不可能引入未知 id，而归档会在加入前校验会话。三个集合都默认为空，因此在某字段加入之前写入的记录照常解析。
 
 ### 生命周期
 

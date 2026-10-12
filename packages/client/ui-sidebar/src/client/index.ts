@@ -34,6 +34,7 @@ const NS = 'sidebar'
 
 interface WorkspaceNavigation {
   startSession(workspaceId?: Parameters<SidebarRootInjected['startSession']>[0]): void
+  startTemporarySession(): void
 }
 
 /** Services required by the sidebar plugin. */
@@ -66,6 +67,7 @@ export function apply(ctx: ClientContext): void {
     // The shell's New Session button rides the Workspace UI's shared action
     // (current Session Workspace, then recent Workspace).
     startSession: (workspaceId) => { workspaceNavigation.startSession(workspaceId) },
+    startTemporarySession: () => { workspaceNavigation.startTemporarySession() },
     toggleSidebar: () => { ctx.layout.toggleSidebar() },
     selectPanel: (id) => {
       if (id === 'plugins' || id === 'schedules') ctx.get('productAnalytics')?.track('sidebar_menu_click', { menu_name: id === 'plugins' ? 'plugin' : 'cron' })

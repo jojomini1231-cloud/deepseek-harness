@@ -155,6 +155,8 @@ export interface WorkspaceBaseline {
   readonly archivedSessionIds: readonly SessionId[]
   /** Registry-global pin set, most recently pinned first. */
   readonly pinnedSessionIds: readonly SessionId[]
+  /** Registry-global temporary set: sessions created without a Workspace. */
+  readonly temporarySessionIds: readonly SessionId[]
 }
 
 /** One ordered Workspace change after a generation's baseline. */
@@ -164,6 +166,7 @@ export type WorkspaceFollowIncrement =
   | { readonly type: 'order'; readonly workspaceIds: readonly WorkspaceId[] }
   | { readonly type: 'archived'; readonly archivedSessionIds: readonly SessionId[] }
   | { readonly type: 'pinned'; readonly pinnedSessionIds: readonly SessionId[] }
+  | { readonly type: 'temporary'; readonly temporarySessionIds: readonly SessionId[] }
 
 /** Workspace state stream; every generation starts with exactly one baseline. */
 export type WorkspaceFollowFrame =

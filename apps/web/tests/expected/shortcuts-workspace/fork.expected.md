@@ -7,3 +7,9 @@
   - treeitem "Ungrouped" [expanded]
   - treeitem "T4 source (1) now"
   - treeitem "T4 source 1min" [selected]
+- text: Temporary workspaces
+- button "Search temporary sessions"
+- textbox "Search temporary session names"
+- button "Temporary section view options"
+- button "New temporary session"
+- tree "Temporary workspaces"

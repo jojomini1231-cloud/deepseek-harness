@@ -95,7 +95,7 @@ function workspaceState(
   return {
     items,
     archivedSessionIds,
-    pinnedSessionIds: [],
+    pinnedSessionIds: [], temporarySessionIds: [],
     phase,
     state: phase === 'ready' ? 'idle' : 'loading',
     error: null,
@@ -692,6 +692,41 @@ describe('UiWorkspaceService', () => {
       expect(b.sessions.create).toHaveBeenCalledExactlyOnceWith({ workspaceId: wid('a') })
     })
     await vi.waitFor(() => { expect(b.sessions.retain).toHaveBeenCalledWith(sid('created-a'), expect.anything()) })
+  })
+
+  it('starts a workspace-less temporary Session without a Workspace or blank reuse', async () => {
+    const b = bench({
+      sessions: sessionState([summary('blank', { blank: true, cwd: '/w/a' })], 'pending'),
+      workspaces: workspaceState([workspace('a', [sid('blank')])]),
+    })
+    b.uiWorkspace.startTemporarySession()
+    await vi.waitFor(() => {
+      expect(b.sessions.create).toHaveBeenCalledExactlyOnceWith({ temporary: true })
+    })
+    // A blank in some Workspace is not a candidate: each temporary Session
+    // gets its own Host-created directory.
+    await vi.waitFor(() => {
+      expect(b.sessions.retain).toHaveBeenCalledWith(sid('created-none'), expect.anything())
+    })
+  })
+
+  it('reports a refused temporary Session creation through the Workspace notice', async () => {
+    const b = bench({ workspaces: workspaceState([workspace('a')]), sessions: sessionState() })
+    // Startup restoration creates its own Session first and stays quiet on failure.
+    await vi.waitFor(() => { expect(b.sessions.retain).toHaveBeenCalledOnce() })
+    b.sessions.retain.mockClear()
+    expect(b.notify).not.toHaveBeenCalled()
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    b.sessions.create.mockRejectedValueOnce(new Error('temporary root unavailable'))
+    b.uiWorkspace.startTemporarySession()
+    await vi.waitFor(() => {
+      expect(b.notify).toHaveBeenCalledExactlyOnceWith({
+        kind: 'createFailed',
+        message: 'temporary root unavailable',
+      })
+    })
+    expect(warning).toHaveBeenCalledExactlyOnceWith('new temporary session failed:', expect.any(Error))
+    expect(b.sessions.retain).not.toHaveBeenCalled()
   })
 
   it('reports a refused explicit Session creation through the Workspace notice', async () => {

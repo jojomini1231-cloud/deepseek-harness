@@ -9,7 +9,7 @@ import type { WorkspaceId, WorkspaceSnapshot, WorkspaceView } from '@deepseek-ai
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { StoredEntry } from '@deepseek-ai/dsh-client-ui-slots'
-import { RemoteError, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
+import { RemoteError, stubConfigForm, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from '@deepseek-ai/dsh-client-ui-workspace/client'
@@ -26,7 +26,7 @@ import { RenameSessionMenuItem, SessionRenameDialog } from '../src/client/sessio
 import { RowActionToast } from '../src/client/session-actions/RowActionToast.tsx'
 import { WorkspacePicker } from '../src/client/WorkspacePicker.tsx'
 import { FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
-import { UNGROUPED_KEY } from '../src/client/tree.ts'
+import { UNGROUPED_KEY, TEMPORARY_KEY } from '../src/client/tree.ts'
 import { apply as hostApply } from '../src/index.ts'
 
 const sid = (id: string) => id as SessionId
@@ -48,13 +48,21 @@ const workspaceState = (
   archivedSessionIds: readonly SessionId[] = [],
   pinnedSessionIds: readonly SessionId[] = [],
 ): WorkspaceSnapshot => ({
-  items, archivedSessionIds, pinnedSessionIds, state: 'idle', phase: 'ready', error: null,
+  items, archivedSessionIds, pinnedSessionIds, temporarySessionIds: [], state: 'idle', phase: 'ready', error: null,
 })
 
 async function bench() {
   const ctx = new Context()
   ctx.provide('shortcuts', { register: () => () => {}, catalog: createSnapshotStore([]) })
   ctx.provide('uiConversation', {})
+  // The Workspace controller's entry form, and the settings owner's
+  // served-namespace watch: the row registers while the Host serves it.
+  const workspaceForm = stubConfigForm()
+  ctx.provide('configForms', {
+    get: () => workspaceForm.scope,
+    whileServed: (namespaces: readonly string[], register: (served: ReadonlySet<string>) => () => void) =>
+      register(new Set(namespaces)),
+  } as never)
   await ctx.plugin(SlotRegistry).await()
   const create = vi.fn(async (input: { name: string } | { path: string }) => ({
     workspaceId: 'ws-new' as never,
@@ -200,7 +208,7 @@ describe('ui-workspace apply', () => {
 
   it('declares the services it drives', () => {
     expect(inject).toEqual([
-      'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout', 'shortcuts',
+      'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout', 'shortcuts', 'configForms',
     ])
   })
 
@@ -331,6 +339,7 @@ describe('ui-workspace apply', () => {
     await vi.waitFor(() => {
       expect(view.getSnapshot().sessionOrderByAccount).toEqual({
         alpha: ['three', 'one', 'two'],
+        [TEMPORARY_KEY]: [],
         [UNGROUPED_KEY]: [],
         [FLAT_SESSION_ORDER_KEY]: ['three', 'one', 'two'],
       })

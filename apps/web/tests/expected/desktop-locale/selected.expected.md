@@ -33,6 +33,12 @@
   - button "Queue"
   - text: Performance & usage Choose how much performance and usage information to show
   - button "Detailed"
+  - text: Temporary workspace directory Each temporary session gets its own directory here and uses it as its working directory. Root directory
+  - textbox "Root directory":
+    - /placeholder: ""
+  - paragraph: Leave blank to use deepseek-harness/temporary-workspaces under your Documents folder.
+  - button "Browse…"
+  - button "Save" [disabled]
   - text: Upload Session Log when using the official model API Help improve DeepSeek models and products.
   - switch "Upload Session Log when using the official model API"
   - text: "Current version: {{version}}"

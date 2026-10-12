@@ -41,6 +41,15 @@ Client list rows and resident Sessions use the current `sessionListMetadata` pro
 
 Explicit-id `session.create` adopts a live Session or resumes a persisted Session while retaining its writer lock. Writer contention returns `session/writer-held`; callers may try another blank without suppressing unrelated failures. `session.list` includes persisted blanks using cached metadata, without opening cold log bodies.
 
+<a id="temporary-sessions"></a>
+### Temporary Sessions
+
+`session.create({ temporary: true })` creates a workspace-less temporary Session: the Host resolves the [temporary root](../workspace-controller/README.md#temporary-workspace-root), uses `<root>/<sessionId>` as the Session's working directory, and records the Session in the Workspace registry's temporary set so the sidebar can group it. `temporary` is mutually exclusive with `workspaceId` and `cwd`; combining them is rejected as `gateway/bad-request`. An ordinary request without `temporary` is unchanged.
+
+The Host derives the directory from the session id, so the Client preallocates the id (as with any `session.create` carrying `sessionId`) and the leaf name is that id. A session id that is empty, `.`, `..`, or contains a path separator is rejected before any directory is created. An adopting request — one whose `sessionId` already names a live or persisted Session — keeps that Session's stored working directory, so changing the configured root never relocates an existing Session. A missing Workspace controller is a composition error and fails as `gateway/internal`.
+
+The temporary mark is written after the Session exists, so a Session is always created even if the mark fails; a failed mark is logged and the Session keeps its temporary directory but appears ungrouped. The mark runs for the adopting branch too, so a repeated request for an existing id is classified consistently.
+
 Client list refreshes retain unchanged row objects and reuse the items array when order and values match. Each row's `retainedBy` contains positive local reference-source counts; Host metadata refreshes cannot overwrite them. Cache membership checks use a per-refresh ID set, so reconciliation grows linearly with the current list and retained cache sizes. Host summary updates replace running and Agent availability; local create/fork responses only fill missing metadata on existing rows. Removed ordinary Sessions retain projection stores only when their catalogs contain children.
 
 Background-job rows and observation streams belong to [`dsh-api-job-controller`](../job-controller/README.md); the control stream carries projections only.

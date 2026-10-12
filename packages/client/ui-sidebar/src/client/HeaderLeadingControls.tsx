@@ -1,6 +1,6 @@
 /** Window-chrome controls for the fully hidden sidebar (frame shell.leading seat). */
 import {
-  IconNewChatOutlineRegular, IconPanelLeftOutlineRegular, Tooltip,
+  IconNewChatOutlineRegular, IconPanelLeftOutlineRegular, IconSparkleRegular, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the frame's shell.leading slot declaration.
@@ -15,15 +15,18 @@ export type HeaderLeadingControlsProps =
   & PropsLocale<'sidebar'>
 
 /**
- * Sidebar-open and New Session controls in the frame's window-chrome seat.
- * On macOS desktop a collapsed sidebar hides entirely (no rail), taking both
+ * Sidebar-open, New Session, and New temporary session controls in the frame's
+ * window-chrome seat.
+ * On macOS desktop a collapsed sidebar hides entirely (no rail), taking the
  * controls off screen; this occupant puts them back beside the traffic
  * lights. The frame mounts the seat only in that state and owns its
  * placement, so the occupant renders unconditionally.
  * @param props - Injected sidebar actions plus the sidebar locale seat.
- * @returns the two window-chrome controls.
+ * @returns the window-chrome controls.
  */
-export function HeaderLeadingControls({ toggleSidebar, startSession, useShortcuts, t }: HeaderLeadingControlsProps) {
+export function HeaderLeadingControls({
+  toggleSidebar, startSession, startTemporarySession, useShortcuts, t,
+}: HeaderLeadingControlsProps) {
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'sidebar.left.toggle'))
   const newShortcut = useShortcuts(rows => rows.find(row => row.id === 'session.new'))
   return (
@@ -48,6 +51,16 @@ export function HeaderLeadingControls({ toggleSidebar, startSession, useShortcut
           onClick={() => { startSession() }}
         >
           <IconNewChatOutlineRegular size={16} />
+        </button>
+      </Tooltip>
+      <Tooltip label={t('session.new.temporary.label')} delayMs={500}>
+        <button
+          type="button"
+          className={css.iconButton}
+          aria-label={t('session.new.temporary.label')}
+          onClick={() => { startTemporarySession() }}
+        >
+          <IconSparkleRegular size={16} />
         </button>
       </Tooltip>
     </div>

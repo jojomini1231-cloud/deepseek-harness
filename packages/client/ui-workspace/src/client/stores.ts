@@ -8,7 +8,7 @@
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-store'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import { reconcileManualOrder, type ArchivedFilter, type SessionRowState } from './tree.ts'
+import { reconcileManualOrder, TEMPORARY_KEY, type ArchivedFilter, type SessionRowState } from './tree.ts'
 
 /** Browser-local order account for the hierarchy-free flat Session list. */
 export const FLAT_SESSION_ORDER_KEY = '__flat_session_order__'
@@ -28,6 +28,10 @@ type WorkspaceViewState = {
   sessionOrderByAccount: Record<string, string[]>
   /** Archived-row visibility; omitted in pre-filter v5 snapshots and read as 'default'. */
   archivedFilter?: ArchivedFilter
+  /** Temporary-section order; omitted in pre-section v5 snapshots and read as 'updated'. */
+  temporaryOrderBy?: SessionOrderBy
+  /** Temporary-section archived-row visibility; omitted in pre-section v5 snapshots and read as 'default'. */
+  temporaryArchivedFilter?: ArchivedFilter
 }
 
 type SessionOrderSource = {
@@ -59,6 +63,10 @@ type WorkspaceViewActions = {
     order: readonly string[],
     initialOrders: Readonly<Record<string, readonly string[]>>,
   ) => void
+  setTemporarySessionOrder: (
+    draft: WorkspaceViewState,
+    order: readonly string[],
+  ) => void
   pinSessionOrder: (
     draft: WorkspaceViewState,
     sessionId: string,
@@ -66,6 +74,8 @@ type WorkspaceViewActions = {
     source: SessionOrderSource,
   ) => void
   setArchivedFilter: (draft: WorkspaceViewState, filter: ArchivedFilter) => void
+  setTemporaryOrderBy: (draft: WorkspaceViewState, mode: SessionOrderBy) => void
+  setTemporaryArchivedFilter: (draft: WorkspaceViewState, filter: ArchivedFilter) => void
 }
 
 /** Copy read-only projections into the persisted mutable store representation. */
@@ -87,6 +97,8 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       groupExpansion: {},
       sessionOrderByAccount: {},
       archivedFilter: 'default',
+      temporaryOrderBy: 'updated',
+      temporaryArchivedFilter: 'default',
     }),
     persist: 'dsh.workspace.view.v5',
     actions: {
@@ -117,6 +129,12 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         d.orderBy = 'manual'
         d.sessionOrderByAccount[accountKey] = [...order]
       },
+      // The Temporary section carries its own sort mode, so a drop there must
+      // not flip the Workspace section's `orderBy` to manual.
+      setTemporarySessionOrder: (d, order) => {
+        d.temporaryOrderBy = 'manual'
+        d.sessionOrderByAccount[TEMPORARY_KEY] = [...order]
+      },
       pinSessionOrder: (d, sessionId, accountKeys, source) => {
         const selected = new Set(accountKeys)
         d.sessionOrderByAccount = Object.fromEntries(Object.entries(source.members).map(([key, members]) => {
@@ -125,6 +143,8 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         }))
       },
       setArchivedFilter: (d, filter: ArchivedFilter) => { d.archivedFilter = filter },
+      setTemporaryOrderBy: (d, mode: SessionOrderBy) => { d.temporaryOrderBy = mode },
+      setTemporaryArchivedFilter: (d, filter: ArchivedFilter) => { d.temporaryArchivedFilter = filter },
     },
   })
 }

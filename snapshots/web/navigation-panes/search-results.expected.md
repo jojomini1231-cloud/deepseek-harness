@@ -1,2 +1,5 @@
+- button "Search sessions" [expanded]
+- textbox "Search session names": WATERFALL
+- button "Clear search"
 - tree "Search results":
   - 'treeitem "Untitled {{workspace}} ## Navigation Summary - alpha nav - beta nav ``` echo WATERFALL ```"'

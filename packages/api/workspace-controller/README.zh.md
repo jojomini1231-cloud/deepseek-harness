@@ -22,9 +22,9 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-Host 控制器会串行执行正确性取决于当前注册表状态的变更，并为预期失败抛出带有稳定错误码的 `RemoteError`。它的 `follow()` 流会同步订阅持久 Workspace 变更，先发出一份完整 baseline，再按顺序发出 `upsert`、`remove`、`order`、`archived` 和 `pinned` 增量。归档与置顶集合都是会话 id 数组，置顶数组把最近置顶的 id 放在前面。重连会以替换 baseline 开始新一代，因此消费方不依赖收到断线期间的每个增量。不带 `stopActivity` 的 `archiveSession` 会以 `workspace/session-active` 拒绝仍有工作在跑的会话，其 details 按族（`turn`、`subagent`、`job`、`schedule`）列出这些工作及各项的 id 与名称；带 `stopActivity: true` 时注册表的提供方先停止这些工作，归档集合持久化后即返回响应，停止在后台收敛。
+Host 控制器会串行执行正确性取决于当前注册表状态的变更，并为预期失败抛出带有稳定错误码的 `RemoteError`。它的 `follow()` 流会同步订阅持久 Workspace 变更，先发出一份完整 baseline，再按顺序发出 `upsert`、`remove`、`order`、`archived`、`pinned` 和 `temporary` 增量。归档、置顶与临时集合都是会话 id 数组，置顶数组把最近置顶的 id 放在前面。重连会以替换 baseline 开始新一代，因此消费方不依赖收到断线期间的每个增量。不带 `stopActivity` 的 `archiveSession` 会以 `workspace/session-active` 拒绝仍有工作在跑的会话，其 details 按族（`turn`、`subagent`、`job`、`schedule`）列出这些工作及各项的 id 与名称；带 `stopActivity: true` 时注册表的提供方先停止这些工作，归档集合持久化后即返回响应，停止在后台收敛。
 
-Client 入口提供 `ClientWorkspaceModel` 和 `createWorkspaceStateStream()`。该模型拥有 Workspace 行、registry 顺序、归档与置顶会话身份、一元变更回显，以及流与一元调用的竞态处理。较新的 Host 行按 `updatedAt` 获胜；已提交的流顺序优先于较旧的一元响应；已经移除的 Workspace id 不会被延迟数据复活。置顶快照仅在会话身份或顺序变化时更新。该包公开与框架无关的快照和订阅，把导航策略与 React 钩子留给 UI owner。`WorkspaceController.archiveSession(sessionId, { stopActivity })` 抛出携带 Host `rpcError` 的 `WorkspaceArchiveError`，界面因此能区分"仍有工作在跑"的拒绝与会话缺失或载体故障，并提议停止这些工作。
+Client 入口提供 `ClientWorkspaceModel` 和 `createWorkspaceStateStream()`。该模型拥有 Workspace 行、registry 顺序、归档、置顶与临时会话身份、一元变更回显，以及流与一元调用的竞态处理。较新的 Host 行按 `updatedAt` 获胜；已提交的流顺序优先于较旧的一元响应；已经移除的 Workspace id 不会被延迟数据复活。置顶快照仅在会话身份或顺序变化时更新。该包公开与框架无关的快照和订阅，把导航策略与 React 钩子留给 UI owner。`WorkspaceController.archiveSession(sessionId, { stopActivity })` 抛出携带 Host `rpcError` 的 `WorkspaceArchiveError`，界面因此能区分"仍有工作在跑"的拒绝与会话缺失或载体故障，并提议停止这些工作。
 
 <a id="first-use-workspace"></a>
 ### 首次使用工作区
@@ -38,9 +38,17 @@ Client 入口提供 `ClientWorkspaceModel` 和 `createWorkspaceStateStream()`。
 | 配置 | 默认值 | 用途 |
 | --- | --- | --- |
 | `documentsDirectory` | 系统 Documents 目录 | 完全限定的 Host 目录覆盖值 |
+| `temporaryWorkspaceDirectory` | `<Documents>/deepseek-harness/temporary-workspaces` | 临时会话目录的完全限定根目录；volatile，可在「设置 → 通用」中编辑 |
 | `documentsLookupTimeoutMs` | `10000` | 操作系统目录查询的正数最大时长，单位为毫秒 |
 
 Documents 查询占用注册表变更队列，因此其他 Workspace 变更（包括登记已选目录）最多可能等待 `documentsLookupTimeoutMs`。取消可以停止查询；解析成功后，取消不会回滚创建或登记。
+
+<a id="temporary-workspace-root"></a>
+### 临时工作区根目录
+
+`temporaryRoot(signal)` 解析每个无工作区会话创建目录所用的根：设置了 volatile 的 `temporaryWorkspaceDirectory` 时用它，否则通过默认工作区相同的平台查询与 `documentsLookupTimeoutMs` 期限回落到 `<Documents>/deepseek-harness/temporary-workspaces`。它会递归创建该目录并用 `fs.realpath` 规范化，使创建路径按会话执行 `mkdir` 时与唯一拼写一致。它不是 Remote verb：只有 Host 的 [Session 创建路径](../../api/session-controller/README.zh.md#temporary-sessions)需要它；配置的目录不是完全限定路径时会大声失败。
+
+该设置是 volatile schema 字段，这正是它出现在设置界面的原因；保持未设置是常态，因此设置行清除用户层，而不是写入一个客户端猜出的值。修改它只影响此后创建的会话——已创建的临时会话保留其已存储的目录。
 
 -----
 
@@ -59,6 +67,8 @@ Documents 查询占用注册表变更队列，因此其他 Workspace 变更（�
 
 - `follow()` 在重连后替换完整投影，不提供持久 cursor 或增量追赶协议。
 - 进程内删除标记只会在 Client 模型生命周期内阻止延迟数据复活已移除的 Workspace。
+- 归档或删除会话时不会移除临时会话的目录；归档只作用于显示层，清理策略延期。
+- 修改 `temporaryWorkspaceDirectory` 不会移动或接管已创建临时会话的目录。
 
 
 <a id="dev-note"></a>

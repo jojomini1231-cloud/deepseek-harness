@@ -59,6 +59,26 @@ exports[`sidebar shell snapshots > renders Windows caption controls in expanded 
         </span>
       </span>
     </button>
+    <button
+      aria-label="New temporary session"
+      class="newTemporary"
+      type="button"
+    >
+      <span
+        class="newTemporaryContent"
+      >
+        <svg
+          aria-hidden="true"
+          data-content="827a63da"
+          fill="none"
+          height="16"
+          stroke-width="1"
+          viewBox="0 0 16 16"
+          width="16"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+      </span>
+    </button>
     <div
       class="regionArea"
     >
@@ -202,6 +222,31 @@ exports[`sidebar shell snapshots > renders Windows caption controls in expanded 
         </span>
       </span>
     </button>
+    <button
+      aria-label="New temporary session"
+      class="newTemporary"
+      type="button"
+    >
+      <span
+        class="newTemporaryContent"
+      >
+        <svg
+          aria-hidden="true"
+          data-content="827a63da"
+          fill="none"
+          height="14"
+          stroke-width="1"
+          viewBox="0 0 16 16"
+          width="14"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+        <span
+          class="newTemporaryLabel wide"
+        >
+          Temporary session
+        </span>
+      </span>
+    </button>
     <div
       class="regionArea"
     >
@@ -309,6 +354,26 @@ exports[`sidebar shell snapshots > renders the collapsed rail after the crossfad
             xmlns="http://www.w3.org/2000/svg"
           />
         </span>
+      </span>
+    </button>
+    <button
+      aria-label="New temporary session"
+      class="newTemporary"
+      type="button"
+    >
+      <span
+        class="newTemporaryContent"
+      >
+        <svg
+          aria-hidden="true"
+          data-content="827a63da"
+          fill="none"
+          height="18"
+          stroke-width="1"
+          viewBox="0 0 16 16"
+          width="18"
+          xmlns="http://www.w3.org/2000/svg"
+        />
       </span>
     </button>
     <div
@@ -454,6 +519,31 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
         </span>
       </span>
     </button>
+    <button
+      aria-label="New temporary session"
+      class="newTemporary"
+      type="button"
+    >
+      <span
+        class="newTemporaryContent"
+      >
+        <svg
+          aria-hidden="true"
+          data-content="827a63da"
+          fill="none"
+          height="14"
+          stroke-width="1"
+          viewBox="0 0 16 16"
+          width="14"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+        <span
+          class="newTemporaryLabel wide"
+        >
+          Temporary session
+        </span>
+      </span>
+    </button>
     <div
       class="regionArea"
     >
@@ -594,6 +684,31 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
           >
             新会话
           </span>
+        </span>
+      </span>
+    </button>
+    <button
+      aria-label="新建临时会话"
+      class="newTemporary"
+      type="button"
+    >
+      <span
+        class="newTemporaryContent"
+      >
+        <svg
+          aria-hidden="true"
+          data-content="827a63da"
+          fill="none"
+          height="14"
+          stroke-width="1"
+          viewBox="0 0 16 16"
+          width="14"
+          xmlns="http://www.w3.org/2000/svg"
+        />
+        <span
+          class="newTemporaryLabel wide"
+        >
+          临时会话
         </span>
       </span>
     </button>

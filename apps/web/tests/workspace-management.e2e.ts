@@ -415,7 +415,7 @@ describe('web e2e: workspace management (create / rename / grouping / hover affo
     // under Ungrouped; the created workspaces are empty groups).
     await expect.poll(() => page.getByText('Workspaces', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
     // Grouping and ordering moved into the View options menu.
-    await page.getByRole('button', { name: 'View options' }).click()
+    await page.getByRole('button', { name: 'View options', exact: true }).click()
     await page.getByRole('menuitem', { name: 'In one list' }).click()
     // Flat mode: the section label flips and the seeded session is a
     // top-level row with no group headers above it.
@@ -429,7 +429,7 @@ describe('web e2e: workspace management (create / rename / grouping / hover affo
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
     await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 15_000 }).toBe(0)
-    await page.getByRole('button', { name: 'View options' }).click()
+    await page.getByRole('button', { name: 'View options', exact: true }).click()
     await page.getByRole('menuitem', { name: 'WorkSpace', exact: true }).click()
     await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
     expect(tripwire.pageErrors).toEqual([])

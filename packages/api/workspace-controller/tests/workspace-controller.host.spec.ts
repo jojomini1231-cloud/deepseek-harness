@@ -68,7 +68,8 @@ async function harness(options: { systemDocuments?: boolean } = {}) {
     lookups: { configure: () => dispose },
     contexts: { configureHost: () => dispose },
   } as never)
-  const controller = new WorkspaceController(ctx, options.systemDocuments === true ? {} : { documentsDirectory: root })
+  await ctx.plugin(WorkspaceController, options.systemDocuments === true ? {} : { documentsDirectory: root })
+  const controller = ctx.workspaceController
   return { controller, ctx, root, storageDomain }
 }
 
@@ -352,7 +353,7 @@ describe('WorkspaceController follow', () => {
     const iterator = controller.follow(abort.signal)[Symbol.asyncIterator]()
     await expect(nextFrame(iterator)).resolves.toEqual({
       type: 'baseline',
-      value: { items: [], archivedSessionIds: [], pinnedSessionIds: [] },
+      value: { items: [], archivedSessionIds: [], pinnedSessionIds: [], temporarySessionIds: [] },
     })
 
     const first = await controller.create({ path: stageDir(root, 'first') })

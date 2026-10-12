@@ -241,6 +241,11 @@ export type WorkspaceBrowserInjected = {
    * then the recent Workspace, or clear into the New Session view.
    */
   startSession: (workspaceId?: WorkspaceId, options?: StartSessionOptions) => void
+  /**
+   * Create a workspace-less temporary Session and show it. Never reuses a
+   * blank: each call yields a fresh temporary workspace.
+   */
+  startTemporarySession: () => void
   /** Open a real Session. */
   open: (sessionId: SessionId) => void
   /**

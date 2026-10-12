@@ -1,3 +1,5 @@
+import type { SettingsFormLabels } from '@deepseek-ai/dsh-client-ui-primitives'
+
 /**
  * `workspace` namespace dictionaries: the browsing region (section header,
  * search, tree rows, dialogs) and the pick/add flow. Runtime failure
@@ -10,7 +12,22 @@ export const zh = {
   'draft.workspaceRequired': '请先选择工作区',
   'draft.initializationFailed': '暂时无法填入草稿，请稍后重试',
   'group.ungrouped': '未分组',
+  'group.temporary': '临时工作区',
+  'temporaryDirectory.title': '临时工作区目录',
+  'temporaryDirectory.description': '每个临时会话都会在这里创建独立目录，作为它的工作目录。',
+  'temporaryDirectory.field': '根目录',
+  'temporaryDirectory.hint': '留空则使用文档目录下的 deepseek-harness/temporary-workspaces。',
+  'temporaryDirectory.overridden': '已覆盖',
+  'temporaryDirectory.reset': '恢复默认',
+  'temporaryDirectory.invalid': '请输入一个目录路径，或留空使用默认值。',
+  'temporaryDirectory.browse': '浏览…',
+  'settings.unavailable': '该插件当前未加载，暂时无法配置。',
+  'settings.readOnly': '本部署的设置为只读。',
+  'settings.saveFailed': '本部署没有接受这些值，已保留供你修改。',
+  'settings.save': '保存',
+  'settings.saving': '保存中…',
   'session.new': '新会话',
+  'session.new.temporary': '新建临时会话',
   'session.untitled': '未命名',
   'shortcut.noSession': '请先选择一个会话',
   'shortcut.noPicker': '目录选择器不可用',
@@ -19,7 +36,9 @@ export const zh = {
   'shortcut.forkFailed': '无法分叉会话，请重试',
   'section.workspaces': '工作区',
   'section.sessions': '会话',
+  'section.temporary': '临时工作区',
   'viewOptions.label': '视图选项',
+  'viewOptions.temporary.label': '临时工作区视图选项',
   'groupBy.label': '分组方式',
   'groupBy.workspace': '按工作区',
   'groupBy.workspaceTree': '按工作区树',
@@ -39,7 +58,9 @@ export const zh = {
   'empty.noMatches': '无匹配结果',
   'workspace.add': '添加工作区',
   'search.sessions.aria': '搜索会话',
+  'search.temporary.aria': '搜索临时会话',
   'search.placeholder': '搜索会话名称',
+  'search.temporary.placeholder': '搜索临时会话名称',
   'search.clear': '清除搜索',
   'search.results.aria': '搜索结果',
   'search.pending': '正在搜索会话历史…',
@@ -127,13 +148,43 @@ export const zh = {
 /** The workspace namespace key union. */
 export type WorkspaceKey = keyof typeof zh
 
+/**
+ * The staged settings form's frame copy, read from this plugin's dictionary.
+ * @param t - the row's locale reader.
+ * @returns the labels the shared settings form renders.
+ */
+export function formLabels(t: (key: WorkspaceKey) => string): SettingsFormLabels {
+  return {
+    unavailable: t('settings.unavailable'),
+    readOnly: t('settings.readOnly'),
+    saveFailed: t('settings.saveFailed'),
+    save: t('settings.save'),
+    saving: t('settings.saving'),
+  }
+}
+
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
   'defaultWorkspace.failed': 'Unable to create default workspace. Use Choose workspace to select a folder.',
   'draft.workspaceRequired': 'Choose a workspace first.',
   'draft.initializationFailed': 'Could not fill the draft. Please try again shortly.',
   'group.ungrouped': 'Ungrouped',
+  'group.temporary': 'Temporary',
+  'temporaryDirectory.title': 'Temporary workspace directory',
+  'temporaryDirectory.description': 'Each temporary session gets its own directory here and uses it as its working directory.',
+  'temporaryDirectory.field': 'Root directory',
+  'temporaryDirectory.hint': 'Leave blank to use deepseek-harness/temporary-workspaces under your Documents folder.',
+  'temporaryDirectory.overridden': 'Overridden',
+  'temporaryDirectory.reset': 'Reset to default',
+  'temporaryDirectory.invalid': 'Enter a directory path, or leave blank to use the default.',
+  'temporaryDirectory.browse': 'Browse…',
+  'settings.unavailable': 'This plugin is not loaded, so it cannot be configured right now.',
+  'settings.readOnly': 'This deployment stores settings read-only.',
+  'settings.saveFailed': 'The deployment did not accept these values; they were left for you to correct.',
+  'settings.save': 'Save',
+  'settings.saving': 'Saving…',
   'session.new': 'New Session',
+  'session.new.temporary': 'New temporary session',
   'session.untitled': 'Untitled',
   'shortcut.noSession': 'Select a session first',
   'shortcut.noPicker': 'Directory picker unavailable',
@@ -142,7 +193,9 @@ export const en = {
   'shortcut.forkFailed': 'Could not fork the session. Try again.',
   'section.workspaces': 'Workspaces',
   'section.sessions': 'Sessions',
+  'section.temporary': 'Temporary workspaces',
   'viewOptions.label': 'View options',
+  'viewOptions.temporary.label': 'Temporary section view options',
   'groupBy.label': 'Group by',
   'groupBy.workspace': 'WorkSpace',
   'groupBy.workspaceTree': 'Workspace Tree',
@@ -162,7 +215,9 @@ export const en = {
   'empty.noMatches': 'No matches',
   'workspace.add': 'Add workspace',
   'search.sessions.aria': 'Search sessions',
+  'search.temporary.aria': 'Search temporary sessions',
   'search.placeholder': 'Search session names',
+  'search.temporary.placeholder': 'Search temporary session names',
   'search.clear': 'Clear search',
   'search.results.aria': 'Search results',
   'search.pending': 'Searching session history…',

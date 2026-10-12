@@ -78,6 +78,10 @@ Hide a session from the grouping when it should stop appearing there: it disappe
 
 Workspace registration does not establish ownership of its directory. A future destructive filesystem action must be separately named, explicitly confirmed, and enforce ownership and safety checks.
 
+### Recording temporary sessions
+
+`markTemporarySession(sessionId)` records one session in the registry-global temporary set, which a browser surface reads to group sessions created through the workspace-less entry point. The [Host session create path](../../api/session-controller/README.md#temporary-sessions) owns when to call it: it decides once, from the create request rather than from the session's directory, so a session keeps its classification when its working directory later moves or is removed. The call is idempotent — an already-recorded id resolves without writing — and the id is not re-checked for existence, because the caller has just created the session. The set does not participate in the one-owner accounting invariant, so it never affects which project a session belongs to. `initializeDefault` treats a non-empty temporary set as history: an installation that has used temporary sessions is not an empty install and gets no automatic default Workspace.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -114,7 +118,7 @@ Archive admission is a capability seam over two Host events this package declare
 
 ### Durable shape
 
-The registry opens the `workspace` domain (version 2): a `workspaces` table keyed by `WorkspaceId` plus one global state holding `workspaceIds` (the authoritative display order), `archivedSessionIds`, `pinnedSessionIds`, the optional `defaultWorkspaceId` first-use identity, and the optional `pendingMutation` marker. Archive and pin sets contain Session id strings, default to empty, and carry no per-entry objects or timestamps; the pin array keeps the most recently pinned id first. Archiving clears the pin in the same global-state write without changing Workspace membership. Unarchive runs no session-existence probe, because dropping an id from the set cannot introduce an unknown one, while archive verifies the session before adding it.
+The registry opens the `workspace` domain (version 2): a `workspaces` table keyed by `WorkspaceId` plus one global state holding `workspaceIds` (the authoritative display order), `archivedSessionIds`, `pinnedSessionIds`, `temporarySessionIds`, the optional `defaultWorkspaceId` first-use identity, and the optional `pendingMutation` marker. Archive, pin, and temporary sets contain Session id strings, default to empty, and carry no per-entry objects or timestamps; the pin array keeps the most recently pinned id first. The temporary set records creation entry point, not directory, and stays out of the one-owner accounting invariant. Archiving clears the pin in the same global-state write without changing Workspace membership. Unarchive runs no session-existence probe, because dropping an id from the set cannot introduce an unknown one, while archive verifies the session before adding it. All three sets default to empty, so records written before a field was added parse unchanged.
 
 ### Lifecycle
 

@@ -260,6 +260,7 @@ export class WorkspaceRegistry extends Service {
       const sessions = this.ctx.get('sessions')
       if (sessions === undefined) throw new Error('default Workspace initialization requires the Session store')
       if (state.workspaceIds.length > 0 || state.archivedSessionIds.length > 0
+        || state.temporarySessionIds.length > 0
         || sessions.list().length > 0 || (await this.listStoredHeaders()).length > 0) return undefined
 
       const path = await resolveDirectory()
@@ -459,6 +460,38 @@ export class WorkspaceRegistry extends Service {
       await this.setState({
         ...state,
         pinnedSessionIds: state.pinnedSessionIds.filter(id => id !== sessionId),
+      })
+    })
+  }
+
+  /**
+   * The registry-global temporary set: sessions created through the
+   * workspace-less entry point. Membership is decided once, by the Host at
+   * create time, from the request rather than from the session's directory, so
+   * a session keeps its classification when its working directory is later
+   * moved or removed.
+   * @returns the temporary session ids in creation order.
+   */
+  get temporarySessionIds(): readonly SessionId[] {
+    return this.requireState().temporarySessionIds
+  }
+
+  /**
+   * Record one session as temporary durably. The Host calls this after the
+   * session exists; the id is not re-checked here because the caller just
+   * created it. Idempotent: an already-recorded id resolves without writing.
+   * @param sessionId - The session to record.
+   * @returns resolution after durability.
+   */
+  markTemporarySession(sessionId: SessionId): Promise<void> {
+    return this.enqueueOperation(async () => {
+      // The chain slot serializes against every other registry write, so this
+      // check-then-write pair cannot interleave with a concurrent write.
+      const state = this.requireState()
+      if (state.temporarySessionIds.includes(sessionId)) return
+      await this.setState({
+        ...state,
+        temporarySessionIds: [...state.temporarySessionIds, sessionId],
       })
     })
   }
@@ -729,6 +762,7 @@ export class WorkspaceRegistry extends Service {
         workspaceIds,
         archivedSessionIds: state.archivedSessionIds,
         pinnedSessionIds: state.pinnedSessionIds,
+        temporarySessionIds: state.temporarySessionIds,
       })
     }
     await this.setState({
@@ -736,6 +770,7 @@ export class WorkspaceRegistry extends Service {
       workspaceIds,
       archivedSessionIds: state.archivedSessionIds,
       pinnedSessionIds: state.pinnedSessionIds,
+      temporarySessionIds: state.temporarySessionIds,
     })
   }
 

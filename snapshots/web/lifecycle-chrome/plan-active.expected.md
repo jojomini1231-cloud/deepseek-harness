@@ -1,6 +1,7 @@
 - button "New session"
 - button "Collapse sidebar"
 - button "New session": New Session
+- button "New temporary session": Temporary session
 - navigation "Global panels":
   - button "Plugins"
   - button "Automation tasks"
@@ -12,6 +13,12 @@
 - tree "Sessions":
   - treeitem "workspace" [expanded]
   - treeitem "New Session" [selected]
+- text: Temporary workspaces
+- button "Search temporary sessions"
+- textbox "Search temporary session names"
+- button "Temporary section view options"
+- button "New temporary session"
+- tree "Temporary workspaces"
 - button "Settings"
 - banner:
   - button "Open right sidebar"

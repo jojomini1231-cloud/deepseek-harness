@@ -22,9 +22,9 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
-The Host controller serializes mutations whose correctness depends on current registry state and throws `RemoteError` with a stable error code for expected failures. Its `follow()` stream synchronously attaches to durable Workspace changes, emits one complete baseline first, then emits ordered `upsert`, `remove`, `order`, `archived`, and `pinned` increments. Archive and pin sets are Session id arrays, with the most recently pinned id first in the pin array. A reconnect starts another generation with a replacement baseline, so consumers do not depend on receiving every increment while disconnected. `archiveSession` without `stopActivity` refuses a Session with running work as `workspace/session-active`, whose details list that work by family (`turn`, `subagent`, `job`, `schedule`) with item ids and labels; with `stopActivity: true` the registry's providers stop the work first and the response arrives once the archive set is durable, while the stops settle in the background.
+The Host controller serializes mutations whose correctness depends on current registry state and throws `RemoteError` with a stable error code for expected failures. Its `follow()` stream synchronously attaches to durable Workspace changes, emits one complete baseline first, then emits ordered `upsert`, `remove`, `order`, `archived`, `pinned`, and `temporary` increments. Archive, pin, and temporary sets are Session id arrays, with the most recently pinned id first in the pin array. A reconnect starts another generation with a replacement baseline, so consumers do not depend on receiving every increment while disconnected. `archiveSession` without `stopActivity` refuses a Session with running work as `workspace/session-active`, whose details list that work by family (`turn`, `subagent`, `job`, `schedule`) with item ids and labels; with `stopActivity: true` the registry's providers stop the work first and the response arrives once the archive set is durable, while the stops settle in the background.
 
-The Client entry provides `ClientWorkspaceModel` and `createWorkspaceStateStream()`. The model owns Workspace rows, registry order, archived and pinned Session identities, unary mutation echoes, and stream/unary race resolution. A newer Host row wins by `updatedAt`; a committed stream order outranks an older unary response; a removed Workspace id cannot be resurrected by delayed data. Pin snapshots change only when their identities or order change. The package exposes framework-neutral snapshots and subscriptions, leaving navigation policy and React hooks to the UI owner. `WorkspaceController.archiveSession(sessionId, { stopActivity })` throws `WorkspaceArchiveError` with the Host's `rpcError`, so a surface can tell the running-work refusal from a missing Session or a carrier fault and offer to stop the work.
+The Client entry provides `ClientWorkspaceModel` and `createWorkspaceStateStream()`. The model owns Workspace rows, registry order, archived, pinned, and temporary Session identities, unary mutation echoes, and stream/unary race resolution. A newer Host row wins by `updatedAt`; a committed stream order outranks an older unary response; a removed Workspace id cannot be resurrected by delayed data. Pin snapshots change only when their identities or order change. The package exposes framework-neutral snapshots and subscriptions, leaving navigation policy and React hooks to the UI owner. `WorkspaceController.archiveSession(sessionId, { stopActivity })` throws `WorkspaceArchiveError` with the Host's `rpcError`, so a surface can tell the running-work refusal from a missing Session or a carrier fault and offer to stop the work.
 
 <a id="first-use-workspace"></a>
 ### First-use Workspace
@@ -38,9 +38,17 @@ The [Workspace registry](../../workspace/workspace/README.md#first-use-workspace
 | Configuration | Default | Purpose |
 | --- | --- | --- |
 | `documentsDirectory` | System Documents directory | Fully qualified Host directory override |
+| `temporaryWorkspaceDirectory` | `<Documents>/deepseek-harness/temporary-workspaces` | Fully qualified root for temporary Session directories; volatile, editable on Settings → General |
 | `documentsLookupTimeoutMs` | `10000` | Positive maximum duration of OS directory lookup, in milliseconds |
 
 Documents lookup holds the registry mutation queue, so other Workspace mutations, including registration of a picked directory, can wait up to `documentsLookupTimeoutMs`. Cancellation can stop the lookup; after resolution succeeds, it does not roll back creation or registration.
+
+<a id="temporary-workspace-root"></a>
+### Temporary Workspace root
+
+`temporaryRoot(signal)` resolves the root under which each workspace-less Session's directory is created: the volatile `temporaryWorkspaceDirectory` when set, otherwise `<Documents>/deepseek-harness/temporary-workspaces` through the same platform lookup and `documentsLookupTimeoutMs` deadline as the default Workspace. It creates the directory recursively and canonicalizes it with `fs.realpath`, so the create path's per-Session `mkdir` agrees with one spelling. It is not a Remote verb: only the Host [Session create path](../../api/session-controller/README.md#temporary-sessions) needs it, and it fails loud when the configured directory is not a fully qualified path.
+
+The setting is a volatile schema field, which is what places it on the Settings surface; leaving it unset is the normal state, so the Settings row clears the user layer rather than writing a guessed value. Changing it affects only Sessions created afterwards — an already-created temporary Session keeps its stored directory.
 
 -----
 
@@ -59,6 +67,8 @@ No direct effect; Workspace mutations do not alter model requests.
 
 - `follow()` replaces the whole projection after reconnect and has no durable cursor or incremental catch-up protocol.
 - Process-local deletion markers prevent delayed data from reviving a removed Workspace only for the lifetime of the Client model.
+- A temporary Session's directory is not removed when the Session is archived or deleted; archiving acts on the display layer, and cleanup policy is deferred.
+- Changing `temporaryWorkspaceDirectory` does not move or adopt directories of already-created temporary Sessions.
 
 
 <a id="dev-note"></a>

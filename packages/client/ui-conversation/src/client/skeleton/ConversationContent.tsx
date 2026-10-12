@@ -69,6 +69,7 @@ export function ConversationContent(props: ConversationContentProps) {
   const sessionWorkspace = sessionId === undefined
     ? undefined
     : workspaces.items.find(workspace => workspace.sessionIds.includes(sessionId))
+  const temporaryWorkspace = sessionId !== undefined && workspaces.temporarySessionIds.includes(sessionId)
   const pendingWorkspace = workspaces.items.find(
     workspace => workspace.workspaceId === pendingWorkspaceId,
   )
@@ -93,16 +94,20 @@ export function ConversationContent(props: ConversationContentProps) {
   //   4. list still loading → cwd folder name bridges so the title does not
   //      flash on refresh (empty cwd → placeholder);
   //   5. list ready but no owning workspace (deleted from the sidebar) →
-  //      placeholder, never the deleted folder's name via cwd.
+  //      placeholder, never the deleted folder's name via cwd;
+  //   6. a temporary session → its group name, so the composer is live without
+  //      a Workspace and never shows the derived directory (a session id).
   // A title still automatic reads in the reader's language, matching the
   // sidebar row the same Workspace has there.
   const storedChipTitle = pendingWorkspace?.title
     ?? (sessionId === undefined
       ? undefined
-      : sessionWorkspace?.title
-        ?? (workspaces.phase === 'ready' || cwd === undefined || cwd === ''
-          ? undefined
-          : workspaceLabel(cwd)))
+      : temporaryWorkspace
+        ? t('temporary.workspace')
+        : sessionWorkspace?.title
+          ?? (workspaces.phase === 'ready' || cwd === undefined || cwd === ''
+            ? undefined
+            : workspaceLabel(cwd)))
   const chipTitle = storedChipTitle === undefined
     ? undefined
     : workspaceDisplayTitle(storedChipTitle, t('workspace.defaultName'))

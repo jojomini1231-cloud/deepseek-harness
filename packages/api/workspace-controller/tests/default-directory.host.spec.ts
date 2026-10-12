@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { NativeCommandRunner } from '@deepseek-ai/dsh-native-command'
-import { defaultWorkspaceDirectory, validateDocumentsDirectory } from '../src/default-directory.ts'
+import {
+  defaultWorkspaceDirectory, temporaryWorkspaceDirectory, validateDocumentsDirectory,
+} from '../src/default-directory.ts'
 
 describe('system Documents directory', () => {
   it.each([
@@ -44,5 +46,22 @@ describe('system Documents directory', () => {
   it('accepts redirected UNC Documents directories', () => {
     expect(validateDocumentsDirectory('\\\\server\\share\\Documents', 'win32')).toBe('\\\\server\\share\\Documents')
     expect(() => validateDocumentsDirectory('relative', 'linux')).toThrow('fully qualified')
+  })
+})
+
+describe('temporary Session root', () => {
+  // The temporary root shares the Documents lookup with the default Workspace
+  // root and differs only in its leaf, so the leaf is the whole contract here.
+  it('resolves the temporary leaf, not the default workspace leaf', async () => {
+    await expect(temporaryWorkspaceDirectory('/documents', new AbortController().signal, { platform: 'linux' }))
+      .resolves.toBe('/documents/deepseek-harness/temporary-workspaces')
+  })
+
+  it('propagates lookup failure and cancellation', async () => {
+    const run: NativeCommandRunner = async () => { throw new Error('lookup denied') }
+    await expect(temporaryWorkspaceDirectory(undefined, new AbortController().signal, { platform: 'darwin', run }))
+      .rejects.toThrow('lookup denied')
+    await expect(temporaryWorkspaceDirectory('/documents', AbortSignal.abort(), { platform: 'linux' }))
+      .rejects.toThrow()
   })
 })

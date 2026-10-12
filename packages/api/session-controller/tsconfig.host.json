@@ -111,6 +111,9 @@
       "path": "../../workspace/workspace"
     },
     {
+      "path": "../workspace-controller/tsconfig.host.json"
+    },
+    {
       "path": "../../session/working-directory"
     }
   ]
