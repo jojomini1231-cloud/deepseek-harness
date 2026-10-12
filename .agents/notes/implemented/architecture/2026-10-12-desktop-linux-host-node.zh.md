@@ -18,7 +18,7 @@ Status: implemented
 
 Linux 不会向 Host 链接任何 GLib，因此打包的 libvips 绑定能解析自身符号，解码可用。Host 保留 `--expose-internals`，Cordis 加载器需要它，普通 Node 也接受它。Desktop Linux 不打包 ASAR——打包后的 Linux 资源是普通 `app` 目录——因此真正的 Node 可以原样读取该运行时树。
 
-包操作仍使用 Host 自身的可执行文件：`process.execPath` 加 `--expose-internals` 和内置 pnpm。[node-mode.ts](../../../../apps/desktop-host/src/node-mode.ts) 中的 `packageManagerEnvironment` 仅在该可执行文件是 Electron 时加入 `ELECTRON_RUN_AS_NODE`，并始终用 `DSH_DESKTOP_NODE_EXECUTABLE` 指向它，使私有 `node` shell 启动器转发到同一运行时。`versions.json` 与 `desktop-runtime.json` 的 `node` 字段记录执行 Host 的 Node：Electron 的 Node 版本，Linux 上则是内置 Node 的版本。产物 smoke 会断言该字段，从而为打包应用钉住运行时选择。
+包操作仍使用 Host 自身的可执行文件：`process.execPath` 加 `--expose-internals` 和内置 pnpm。[node-mode.ts](../../../../apps/desktop-host/src/node-mode.ts) 中的 `packageManagerEnvironment` 仅在该可执行文件是 Electron 时加入 `ELECTRON_RUN_AS_NODE`，并始终用 `DSH_DESKTOP_NODE_EXECUTABLE` 指向它，使私有 `node` shell 启动器转发到同一运行时。`versions.json` 与 `desktop-runtime.json` 的 `node` 字段记录执行 Host 的 Node：Electron 的 Node 版本，Linux 上则是内置 Node 的版本。产物 smoke 在 Host 的可执行文件下运行，并断言描述符记录的 Node 版本，因此记录的运行时与执行产物的运行时不一致会使打包失败。本版本中 Electron 的 Node 与内置 Node 报告相同版本，因此该断言本身不足以区分两者，起作用的是启动 smoke 所用的可执行文件。
 
 产物 smoke 在各平台都会执行 sharp 的编码与解码，包管理器 smoke 通过 shell 生命周期脚本安装并断言其运行所处的运行时，准备产物 smoke 则在 Host 的可执行文件下运行这两者。Linux 可以验证打包应用中的图片附件解码，因为打包树与准备树是同一个普通目录。
 
