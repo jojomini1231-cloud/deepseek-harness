@@ -19,7 +19,7 @@
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
-  FishLogo, IconNewChatOutlineMedium, IconNewChatOutlineRegular, IconPanelLeftOutlineRegular,
+  FishLogo, IconNewChatOutlineMedium, IconNewChatOutlineRegular, IconPanelLeftOutlineRegular, IconSparkleRegular,
   isDarwinDesktop, ShortcutKeys, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
@@ -291,9 +291,7 @@ export function SidebarRoot({
           onClick={() => { startTemporarySession() }}
         >
           <span className={css.newTemporaryContent}>
-            {wide
-              ? <IconNewChatOutlineMedium size={14} />
-              : <IconNewChatOutlineRegular size={desktopCaption ? 16 : 18} />}
+            <IconSparkleRegular size={wide ? 14 : desktopCaption ? 16 : 18} />
             {wide && <span className={clsx(css.newTemporaryLabel, css.wide)}>{t('session.new.temporary')}</span>}
           </span>
         </button>
