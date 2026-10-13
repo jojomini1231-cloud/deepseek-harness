@@ -22,11 +22,12 @@ import { createHash, randomBytes } from 'node:crypto'
 import {
   SessionPersistence, SessionPersistenceRevision, SessionFormatUnsupportedError,
   SessionPersistenceCorruptionError,
-  SessionAlreadyExistsError, SessionPersistenceNotFoundError,
+  SessionAlreadyExistsError, SessionAlreadyOwnedError, SessionPersistenceNotFoundError,
   assertStoredId, materializeCreateHeader, sessionFormatVersionRefusal, validateStoredEvents,
   type SessionAccess, type SessionHandle,
   type SessionHandleReadResult,
   type SessionLocation, type SessionPersistenceCreateOptions,
+  type SessionPersistenceDeleteOptions,
   type SessionPersistenceListOptions, type SessionPersistenceOpenOptions,
   type SessionPersistenceSnapshot, type SessionPersistenceStatOptions,
   type SessionPersistenceRevision as PersistenceRevision,
@@ -513,6 +514,59 @@ class JsonlSessionPersistence extends SessionPersistence {
     }
     signal?.throwIfAborted()
     return snapshots
+  }
+
+  /**
+   * Permanently delete one stored session's complete footprint: every format
+   * generation under its session directory, the session directory itself, and
+   * the directory's write lock file. The directory is the whole footprint —
+   * it is named from the session id alone ({@link sessionDir}) and holds
+   * nothing another session owns — so no artifact kind can be left behind.
+   *
+   * A created-but-unmaterialized session has no footprint: its create claim
+   * is cancelled and the call resolves. A write handle still open on the id
+   * refuses with {@link SessionAlreadyOwnedError}, because its later appends
+   * would recreate the log this call removed.
+   *
+   * The directory's kernel write lock is taken before the tree is removed, so
+   * a writer in another process cannot be mid-append while the log disappears.
+   * @param id - the stored session to delete.
+   * @param options - optional cancellation.
+   * @throws {SessionPersistenceNotFoundError} when the session does not exist.
+   * @throws {SessionAlreadyOwnedError} while an open write handle holds the id.
+   */
+  async delete(id: SessionId, options?: SessionPersistenceDeleteOptions): Promise<void> {
+    const signal = options?.signal
+    signal?.throwIfAborted()
+    await this.ensureRootEncoding()
+    signal?.throwIfAborted()
+    // A created-but-unmaterialized session owns no artifact yet: its create
+    // claim is what must go, so the id is free and no later append of the
+    // still-open creator handle can resurrect it. This check must precede the
+    // owner refusal — the creator's own handle is the claim being cancelled.
+    if (this.tracker.hasPending(id)) {
+      this.tracker.cancelCreated(id)
+      return
+    }
+    if (this.tracker.writerHandle(id) !== undefined) throw new SessionAlreadyOwnedError(id)
+    const selected = await this.findLog(id, signal)
+    if (selected === undefined) throw new SessionPersistenceNotFoundError(id)
+    signal?.throwIfAborted()
+    const dir = dirname(selected.sourcePath)
+    const lease = await SessionWriteLease.acquire(dir, id)
+    try {
+      signal?.throwIfAborted()
+      // The claim is dropped only now, immediately before the unlink: a claim
+      // left behind would refuse this id for the rest of the process, and one
+      // dropped earlier would let a concurrent create materialize the very
+      // artifact this call is about to remove.
+      this.tracker.releaseClaim(id)
+      await rm(dir, { recursive: true, force: true })
+      this.coldLogMemo.delete(id)
+      this.migrationPreparations.delete(id)
+    } finally {
+      await lease.release()
+    }
   }
 
   // --- handle-facing storage internals (package-private via the handle class below) ---

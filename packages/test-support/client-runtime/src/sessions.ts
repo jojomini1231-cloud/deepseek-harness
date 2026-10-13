@@ -311,7 +311,7 @@ export class TestSessions implements ISessions {
 
   /** Calls observed on the service-level face, newest last. */
   readonly calls: {
-    method: 'create' | 'refreshProjections' | 'refresh' | 'search' | 'fork'
+    method: 'create' | 'refreshProjections' | 'refresh' | 'search' | 'fork' | 'delete'
     args: unknown[]
   }[] = []
 
@@ -321,6 +321,7 @@ export class TestSessions implements ISessions {
   /** Replaceable search behavior (see {@link TestSessions.stubSearch}). */
   private searchStub: ((query: string, signal: AbortSignal) => { items: SessionSearchResultItem[]; hasMore: boolean }) | undefined
   private createStub: ((opts: Parameters<ISessions['create']>[0]) => Promise<SessionId>) | undefined
+  private deleteStub: ((sessionId: SessionId, options: { readonly stopActivity?: boolean }) => Promise<void>) | undefined
 
   /**
    * @param stabilize - the owning runtime's act wrapper.
@@ -680,6 +681,33 @@ export class TestSessions implements ISessions {
   fork(opts: Parameters<ISessions['fork']>[0]): Promise<SessionId> {
     this.calls.push({ method: 'fork', args: [opts] })
     return Promise.resolve(opts.sessionId)
+  }
+
+  /**
+   * Delete through the installed test behavior: the row leaves the catalog
+   * and any retained generation is marked removed, exactly as production
+   * reconciles its own removal. Refuses an id with no installed behavior, so
+   * a spec that expects a deletion must say so.
+   * @param sessionId - session to delete.
+   * @param options - `stopActivity` is recorded for assertions.
+   */
+  async delete(sessionId: SessionId, options: { readonly stopActivity?: boolean } = {}): Promise<void> {
+    this.calls.push({ method: 'delete', args: [sessionId, options] })
+    if (this.deleteStub === undefined) {
+      throw new Error('test sessions: delete is not stubbed — call stubDelete() first')
+    }
+    await this.deleteStub(sessionId, options)
+    await this.remove(sessionId)
+  }
+
+  /**
+   * Install Session deletion behavior for navigation tests. The default
+   * resolution removes the fixture; a stub may reject with a
+   * `SessionDeleteError` to exercise a refusal path.
+   * @param impl - implementation receiving the addressed id and options.
+   */
+  stubDelete(impl: (sessionId: SessionId, options: { readonly stopActivity?: boolean }) => Promise<void>): void {
+    this.deleteStub = impl
   }
 
   /**

@@ -28,8 +28,10 @@ import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/client
 import { createSettingsShellStore } from './shell-store.ts'
 import { SettingsRoot } from './SettingsRoot.tsx'
 import { DesktopUpdateBadge } from './DesktopUpdateIndicator.tsx'
-import type { DesktopUpdateBridge } from '../types.ts'
+import type { DesktopUpdateBridge, DesktopWebAccessBridge } from '../types.ts'
 import { DesktopUpdateSource } from './desktop-update-source.ts'
+import { DesktopWebAccessSource } from './web-access-source.ts'
+import { WebAccessRow, type WebAccessRowInjected } from './WebAccessRow.tsx'
 import { CloseLabel, HeaderContent, TriggerContent } from './chrome.tsx'
 import { GeneralSection } from './GeneralSection.tsx'
 import { CurrentVersionRow } from './CurrentVersionRow.tsx'
@@ -68,6 +70,14 @@ const NS = 'settings'
 export const inject = ['slots', 'locale', 'connection', 'remote', 'remote.settings', 'configForms', 'shortcuts']
 
 /**
+ * Port bounds the Web access row refuses drafts against, and the port it offers before any
+ * status arrives. The Electron shell validates the same range and remains the authority;
+ * it owns the canonical numbers and `apps/desktop/tests/web-access.spec.ts` pins agreement.
+ */
+const WEB_ACCESS_PORT_RANGE = { min: 1, max: 65_535 }
+const DEFAULT_WEB_ACCESS_PORT = 3080
+
+/**
  * Register the `settings` dictionaries, the chrome content, and the General
  * section, each once its slot declaration is on the ledger.
  * @param ctx - client root context.
@@ -86,9 +96,26 @@ export function apply(ctx: ClientContext): void {
   }, CurrentVersionRow))
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-settings-general: dictionaries')
   const connection = ctx.get('connection') as ConnectionHandle
-  const carrier = (globalThis as typeof globalThis & { dshDesktop?: { protocolVersion: number; updates?: DesktopUpdateBridge } }).dshDesktop
+  const carrier = (globalThis as typeof globalThis & {
+    dshDesktop?: { protocolVersion: number; updates?: DesktopUpdateBridge; webAccess?: DesktopWebAccessBridge }
+  }).dshDesktop
   const desktopUpdate = new DesktopUpdateSource(carrier?.protocolVersion === 1 ? carrier.updates : undefined)
   ctx.effect(() => () => { desktopUpdate.dispose() }, 'ui-settings-general: desktop update carrier')
+  // The Web access row is the shell's own loopback listener; a browser deployment has no carrier to drive.
+  const desktopWebAccess = new DesktopWebAccessSource(carrier?.protocolVersion === 1 ? carrier.webAccess : undefined)
+  ctx.effect(() => () => { desktopWebAccess.dispose() }, 'ui-settings-general: desktop web access carrier')
+  if (desktopWebAccess.available) {
+    ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+      name: 'settings.general.item', id: 'web-access', order: 20, locale: NS,
+      inject: (): WebAccessRowInjected => ({
+        hooks: { webAccess: desktopWebAccess.store },
+        update: next => desktopWebAccess.update(next),
+        open: () => desktopWebAccess.open(),
+        portRange: WEB_ACCESS_PORT_RANGE,
+        defaultPort: DEFAULT_WEB_ACCESS_PORT,
+      }),
+    }, WebAccessRow))
+  }
   ctx.slots.inject('sidebar.toggle.badge', () => ctx.slots.register({
     name: 'sidebar.toggle.badge', locale: NS,
     inject: () => ({ hooks: { desktopUpdate: desktopUpdate.store, connectionState: connection.state } }),

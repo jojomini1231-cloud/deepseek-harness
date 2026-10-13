@@ -497,6 +497,39 @@ export class WorkspaceRegistry extends Service {
   }
 
   /**
+   * Forget one session durably: drop it from the registry-global temporary,
+   * archive, and pin sets, and from every Workspace account that still lists
+   * it. The Host calls this after a temporary Session's log and directory are
+   * deleted, so no set keeps an id whose session no longer exists — nothing
+   * re-derives temporary membership, and the archive and pin sets are the
+   * only remaining references a grouping surface would render.
+   *
+   * The three set removals are one durable write; the account removals are
+   * one idempotent detach per owning Workspace. An id in none of them
+   * resolves without writing.
+   * @param sessionId - The deleted session to forget.
+   * @returns resolution after durability.
+   */
+  forgetSession(sessionId: SessionId): Promise<void> {
+    return this.enqueueOperation(async () => {
+      // The chain slot serializes against every other registry write, so this
+      // check-then-write pair cannot interleave with a concurrent write.
+      const state = this.requireState()
+      const temporarySessionIds = state.temporarySessionIds.filter(id => id !== sessionId)
+      const archivedSessionIds = state.archivedSessionIds.filter(id => id !== sessionId)
+      const pinnedSessionIds = state.pinnedSessionIds.filter(id => id !== sessionId)
+      if (temporarySessionIds.length !== state.temporarySessionIds.length
+        || archivedSessionIds.length !== state.archivedSessionIds.length
+        || pinnedSessionIds.length !== state.pinnedSessionIds.length) {
+        await this.setState({ ...state, temporarySessionIds, archivedSessionIds, pinnedSessionIds })
+      }
+      for (const workspace of this.entities.values()) {
+        if (workspace.sessionIds.includes(sessionId)) await workspace.detachSession(sessionId)
+      }
+    })
+  }
+
+  /**
    * Whether a session is live, header-indexed, or present in a fresh
    * persistence listing. Only a definite miss returns false — a failing
    * `sessionPersistence.list()` propagates so storage faults never

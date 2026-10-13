@@ -610,5 +610,84 @@ export function runPersistenceContract(name: string, make: () => Promise<Contrac
         await dispose()
       }
     })
+
+    it('delete removes every trace of the session and frees the id', async () => {
+      const { persistence, dispose } = await make()
+      try {
+        const m = meta('deletable', '/work')
+        const handle = await persistence.create(m)
+        await handle.append(oneTurnLog())
+        await handle.close()
+
+        await persistence.delete(m.id)
+
+        expect(await persistence.stat(m.id)).toBeUndefined()
+        expect((await persistence.list()).some(s => s.header.id === m.id)).toBe(false)
+        await expect(persistence.open(m.id, 'read')).rejects.toThrow(SessionPersistenceNotFoundError)
+
+        // The id is free: a later create over it succeeds and stores fresh content.
+        const recreated = await persistence.create(m)
+        await recreated.append(oneTurnLog())
+        expect((await recreated.read()).events).toEqual(oneTurnLog())
+        await recreated.close()
+      } finally {
+        await dispose()
+      }
+    })
+
+    it('delete cancels a created-but-unmaterialized session', async () => {
+      const { persistence, dispose } = await make()
+      try {
+        const m = meta('deletable-pending')
+        const handle = await persistence.create(m)
+        // Nothing appended or flushed: this session has no durable artifact.
+        await persistence.delete(m.id)
+        await handle.close()
+
+        expect(await persistence.stat(m.id)).toBeUndefined()
+        expect((await persistence.list()).some(s => s.header.id === m.id)).toBe(false)
+        const recreated = await persistence.create(m)
+        expect(recreated.header).toMatchObject(m)
+        await recreated.close()
+      } finally {
+        await dispose()
+      }
+    })
+
+    it('delete of an unknown session rejects and leaves the corpus untouched', async () => {
+      const { persistence, dispose } = await make()
+      try {
+        const kept = meta('kept', '/work')
+        const handle = await persistence.create(kept)
+        await handle.append(oneTurnLog())
+        await handle.close()
+
+        await expect(persistence.delete(SessionId('absent-delete')))
+          .rejects.toThrow(SessionPersistenceNotFoundError)
+        expect(await persistence.stat(kept.id)).toBeDefined()
+      } finally {
+        await dispose()
+      }
+    })
+
+    it('delete refuses while an open write handle holds the id', async () => {
+      const { persistence, dispose } = await make()
+      try {
+        const m = meta('deletable-owned', '/work')
+        const handle = await persistence.create(m)
+        await handle.append(oneTurnLog())
+
+        await expect(persistence.delete(m.id)).rejects.toThrow(SessionAlreadyOwnedError)
+
+        // The refusal removed nothing: the owner keeps appending to a live log.
+        await handle.append(secondTurn())
+        expect((await handle.read()).events).toHaveLength(oneTurnLog().length + secondTurn().length)
+        await handle.close()
+        await persistence.delete(m.id)
+        expect(await persistence.stat(m.id)).toBeUndefined()
+      } finally {
+        await dispose()
+      }
+    })
   })
 }

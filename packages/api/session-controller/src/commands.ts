@@ -2,7 +2,8 @@
 
 import { modelAvailable } from './catalog.ts'
 import { randomUUID } from 'node:crypto'
-import { isAbsolute, join, relative } from 'node:path'
+import { rm } from 'node:fs/promises'
+import { basename, dirname, isAbsolute, join, relative } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { Agent, ModelSelection as AgentModelSelection } from '@deepseek-ai/dsh-agent'
@@ -20,6 +21,7 @@ import { buildForkSeed } from '@deepseek-ai/dsh-session/fork'
 import { SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
+import { SessionPersistenceNotFoundError } from '@deepseek-ai/dsh-session-persistence'
 import { SessionTitleInvalidError } from '@deepseek-ai/dsh-session-title'
 import { canonicalClientTimeZone } from '@deepseek-ai/dsh-util-time'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
@@ -43,6 +45,8 @@ import type {
   SessionCancelValue,
   SessionCreateRequest,
   SessionCreateValue,
+  SessionDeleteRequest,
+  SessionDeleteValue,
   SessionForkRequest,
   SessionForkValue,
   SessionPromptRequest,
@@ -135,10 +139,10 @@ export class SessionCommandController {
         })
       }
     }
-    const cwd = workspace?.path ?? request.cwd
-      ?? (request.temporary === true
-        ? await this.temporaryCwd(sessionId, request.sessionId !== undefined, signal)
-        : this.defaultCwd)
+    const temporary = request.temporary === true
+      ? await this.temporaryCwd(sessionId, request.sessionId !== undefined, signal)
+      : undefined
+    const cwd = workspace?.path ?? request.cwd ?? temporary?.cwd ?? this.defaultCwd
     let adopted: Agent
     try {
       adopted = await this.agents.ensureSession(
@@ -161,7 +165,11 @@ export class SessionCommandController {
         )
       }
     }
-    if (request.temporary === true) {
+    // Only a directory this Host minted classifies the Session. An adopting
+    // request reuses a stored working directory and must never add an existing
+    // Session to the temporary set, because that set is the sole authorization
+    // for the irreversible deletion below.
+    if (temporary?.minted === true) {
       try {
         await this.ctx.workspaceRegistry.markTemporarySession(sessionId)
       } catch (error) {
@@ -181,6 +189,161 @@ export class SessionCommandController {
   }
 
   /**
+   * Permanently delete one temporary Session: its stored log, its
+   * Session-local directory under the temporary root, and its classification
+   * in the Workspace registry.
+   *
+   * Only a temporary Session may be deleted. A Session with subagent
+   * descendants is refused, because the deletion would leave children that no
+   * surface can reach. Running work is reported by the Workspace registry's
+   * providers and refused as `session/active` unless `stopActivity` asks for
+   * the stops first.
+   * @param request - Session identity and whether to stop its running work.
+   * @param signal - caller lifetime; cancels the temporary root's native Documents lookup.
+   * @returns deletion confirmation.
+   */
+  async delete(request: SessionDeleteRequest, signal: AbortSignal = AbortSignal.timeout(30_000)): Promise<SessionDeleteValue> {
+    const { sessionId } = request
+    if (!this.ctx.workspaceRegistry.temporarySessionIds.includes(sessionId)) {
+      throw new RemoteError(
+        'session/not-temporary',
+        `session "${sessionId}" is not a temporary session and cannot be deleted`,
+        { sessionId },
+      )
+    }
+    const descendants = await this.descendantSessions(sessionId, signal)
+    if (descendants.length > 0) {
+      throw new RemoteError(
+        'session/descendants',
+        `session "${sessionId}" still owns subagent sessions: ${descendants.join(', ')}`,
+        { sessionId, descendants },
+      )
+    }
+    if (request.stopActivity !== true) {
+      const activity = await this.ctx.waterfall(
+        'workspace/session-activity', { sessionId }, () => Promise.resolve([]),
+      )
+      if (activity.length > 0) {
+        throw new RemoteError(
+          'session/active',
+          `session "${sessionId}" still has running work`,
+          { sessionId, activity },
+        )
+      }
+    } else {
+      await this.stopSessionActivity(sessionId)
+    }
+    // Read the directory before anything is removed: it is the Session's own
+    // stored working directory, and the log that carries it is about to go.
+    const directory = await this.storedCwdOf(sessionId, signal)
+    try {
+      // The Agent must be gone before its log is removed: its persistence
+      // write handle would otherwise recreate the artifact this call deletes.
+      await this.agents.disposeAgent(sessionId)
+      await this.deleteStoredLog(sessionId, signal)
+      await this.removeTemporaryDirectory(sessionId, directory)
+      await this.ctx.workspaceRegistry.forgetSession(sessionId)
+    } catch (error: unknown) {
+      if (remoteErrorOf(error) !== undefined) throw error
+      throw new RemoteError(
+        'session/delete-failed',
+        `failed to delete session "${sessionId}": ${String(error)}`,
+        { sessionId },
+        { cause: error },
+      )
+    }
+    return { deleted: true }
+  }
+
+  /**
+   * Remove one deleted Session's stored log. An absent log resolves: a retry
+   * after a partial failure reaches this step with the log already gone, and
+   * that is the state this step exists to reach rather than a failure. Without
+   * it every later failure would leave the Session permanently undeletable.
+   */
+  private async deleteStoredLog(sessionId: SessionId, signal: AbortSignal): Promise<void> {
+    try {
+      await this.ctx.get('sessionPersistence')?.delete(sessionId, { signal })
+    } catch (error: unknown) {
+      if (!(error instanceof SessionPersistenceNotFoundError)) throw error
+    }
+  }
+
+  /**
+   * The live or stored subagent descendants of one Session, by durable
+   * lineage. A fork shares the parent field without the subagent origin and
+   * is an independent conversation, so only the origin-bearing children
+   * count — the same rule the Subagent runtime's archive admission applies.
+   */
+  private async descendantSessions(rootId: SessionId, signal: AbortSignal): Promise<readonly SessionId[]> {
+    const descendants: SessionId[] = []
+    const visited = new Set<SessionId>([rootId])
+    const pending: SessionId[] = [rootId]
+    const records = await this.ctx.sessionQuery.listSessions(signal)
+    while (pending.length > 0) {
+      const parentId = pending.shift() as SessionId
+      for (const record of records) {
+        const { parentSession, origin, id } = record.header
+        if (origin !== 'subagent' || parentSession !== parentId || visited.has(id)) continue
+        visited.add(id)
+        descendants.push(id)
+        pending.push(id)
+      }
+    }
+    return descendants
+  }
+
+  /**
+   * Request every provider's stop, refusing the deletion when any provider
+   * fails. A provider that did not stop may still be writing into the very
+   * directory the deletion is about to remove, and the caller asked to stop it
+   * before deleting; continuing would report a stop that never happened.
+   * @param sessionId - Session whose running work must stop.
+   * @throws {RemoteError} `session/stop-failed` when any provider refused.
+   */
+  private async stopSessionActivity(sessionId: SessionId): Promise<void> {
+    let failures: readonly unknown[] = []
+    try {
+      await this.ctx.parallel('workspace/session-stop', { sessionId })
+    } catch (error: unknown) {
+      // ctx.parallel settles every listener and rejects with one AggregateError.
+      failures = error instanceof AggregateError ? error.errors : [error]
+    }
+    if (failures.length === 0) return
+    const reasons = failures.map(failure => String(failure))
+    for (const reason of reasons) {
+      this.ctx.logger.warn(`session-controller: stopping session '${sessionId}' for deletion failed: ${reason}`)
+    }
+    throw new RemoteError(
+      'session/stop-failed',
+      `session "${sessionId}" could not be stopped for deletion: ${reasons.join('; ')}`,
+      { sessionId, reasons },
+    )
+  }
+
+  /**
+   * Remove one deleted Session's own directory.
+   *
+   * The target is the Session's stored working directory, never a path
+   * re-derived from the current temporary root: the deployment may have
+   * re-pointed that root since the Session was made, and re-deriving would
+   * erase an unrelated directory while leaving the real one behind. The leaf
+   * name is what proves the directory is the one this Host minted for this
+   * Session — the create path mints it as `<root>/<sessionId>` — so the proof
+   * holds whatever root it was created under. A Session whose working
+   * directory was moved elsewhere keeps that directory; nothing here removes a
+   * path the user pointed somewhere themselves.
+   * @param sessionId - the deleted Session whose leaf directory name applies.
+   * @param directory - its stored working directory, or undefined when unknown.
+   */
+  private async removeTemporaryDirectory(sessionId: SessionId, directory: string | undefined): Promise<void> {
+    if (directory === undefined || basename(directory) !== sessionId) return
+    // A filesystem root has no parent; removing one is never this call's intent.
+    if (dirname(directory) === directory) return
+    await rm(directory, { recursive: true, force: true })
+  }
+
+  /**
    * Resolve the working directory for a workspace-less temporary Session:
    * `<temporary root>/<sessionId>`. An adopting request whose Session already
    * exists keeps its stored cwd, so changing the configured root never
@@ -189,26 +352,21 @@ export class SessionCommandController {
    * @param sessionId - the (possibly client-supplied) Session id that names the leaf directory.
    * @param adopting - whether the request carried an explicit Session id to adopt.
    * @param signal - caller lifetime; cancels the native Documents lookup.
-   * @returns the absolute temporary working directory.
+   * @returns the absolute working directory, and whether this call minted it.
    */
-  private async temporaryCwd(sessionId: SessionId, adopting: boolean, signal: AbortSignal): Promise<string> {
+  private async temporaryCwd(
+    sessionId: SessionId, adopting: boolean, signal: AbortSignal,
+  ): Promise<{ readonly cwd: string; readonly minted: boolean }> {
     if (adopting) {
-      let storedCwd: string | undefined
-      try {
-        using observation = await this.ctx.sessionQuery.observeSession(sessionId, { projectionMode: 'none', signal })
-        storedCwd = observation.header.cwd
-      } catch (error: unknown) {
-        if (!(error instanceof SessionQueryError)
-          || error.code !== 'SESSION_QUERY_SESSION_NOT_FOUND') throw error
-      }
+      const storedCwd = await this.storedCwdOf(sessionId, signal)
       // An adopting request reuses the stored directory: it was chosen when the
       // Session was made, and every create path that produces a temporary
       // Session puts it under the temporary root. A stored cwd that is not
-      // under that root is an ordinary Session, whose classification this
-      // request must not overwrite.
+      // under that root is an ordinary Session, which this request must not
+      // reclassify as temporary.
       if (storedCwd !== undefined) {
         const root = await this.requireTemporaryRoot(signal)
-        if (isUnder(root, storedCwd)) return storedCwd
+        if (isUnder(root, storedCwd)) return { cwd: storedCwd, minted: false }
         throw new RemoteError(
           'gateway/bad-request',
           `session "${sessionId}" is not a temporary session: its cwd "${storedCwd}" is outside "${root}"`,
@@ -219,7 +377,25 @@ export class SessionCommandController {
     if (sessionId === '' || sessionId === '.' || sessionId === '..' || /[/\\]/.test(sessionId)) {
       throw new RemoteError('gateway/bad-request', `session id "${sessionId}" is not a usable directory name`, {})
     }
-    return join(await this.requireTemporaryRoot(signal), sessionId)
+    return { cwd: join(await this.requireTemporaryRoot(signal), sessionId), minted: true }
+  }
+
+  /**
+   * One stored Session's working directory, or undefined when no such Session
+   * exists yet.
+   * @param sessionId - the Session to look up.
+   * @param signal - caller lifetime.
+   * @returns the stored cwd, or undefined for an unknown Session.
+   */
+  private async storedCwdOf(sessionId: SessionId, signal: AbortSignal): Promise<string | undefined> {
+    try {
+      using observation = await this.ctx.sessionQuery.observeSession(sessionId, { projectionMode: 'none', signal })
+      return observation.header.cwd
+    } catch (error: unknown) {
+      if (!(error instanceof SessionQueryError)
+        || error.code !== 'SESSION_QUERY_SESSION_NOT_FOUND') throw error
+      return undefined
+    }
   }
 
   /**

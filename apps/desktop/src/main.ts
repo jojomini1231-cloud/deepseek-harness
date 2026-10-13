@@ -29,7 +29,7 @@ import { DesktopPlatformView, PLATFORM_IPC, platformBounds } from './platform-vi
 import { installDesktopDirectoryPicker } from './directory-picker.ts'
 import { installMicrophonePermissions } from './microphone-permissions.ts'
 import { DesktopBackendController } from './backend-controller.ts'
-import { DESKTOP_IPC, SCHEME, assertDesktopSender, type DesktopUpdateState } from './ipc.ts'
+import { DESKTOP_IPC, SCHEME, assertDesktopSender, type DesktopUpdateState, type DesktopWebAccessStatus } from './ipc.ts'
 import { readDeviceInfo } from './device-info.ts'
 import { desktopUpdateReadyConfirmation, formatDesktopMessage, resolveDesktopLocale, resolveDesktopStartupLocale } from './locale.ts'
 import { claimDesktopSingleInstance } from './single-instance.ts'
@@ -51,7 +51,8 @@ import { DesktopMandatoryUpdatePolicy, resolveDesktopPolicyConfig, type DesktopP
 import { desktopClientMetadata, desktopClientVersion } from './client-metadata.ts'
 import { DesktopMandatoryUpdateWindow } from './mandatory-update-window.ts'
 import { DesktopPolicyTestAuth } from './policy-test-auth.ts'
-import { readDesktopSettings } from './settings.ts'
+import { MAX_WEB_ACCESS_PORT, MIN_WEB_ACCESS_PORT, readDesktopSettings, writeWebAccessSettings } from './settings.ts'
+import { webAccessAddress, webAccessBindArgs, webAccessRestartRequired } from './web-access.ts'
 import { DesktopUpdateDialog, type UpdateDialogOptions } from './update-dialog.ts'
 import { readDesktopRuntime } from './runtime-tree.ts'
 import { DesktopBrowserGuests } from './browser-guests.ts'
@@ -334,6 +335,10 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
 
 async function main(): Promise<void> {
   const desktopSettings = readDesktopSettings(app.getPath('userData'))
+  // The Host child binds this snapshot's port once at startup; a later change is applied
+  // by the next launch, which `webAccess.restartRequired` reports to the product page.
+  const startedWebAccess = desktopSettings.web
+  const hostBindArgs = webAccessBindArgs(startedWebAccess)
   void pruneCrashReports(app.getPath('logs'))
   const journalDirectory = process.env.DSH_DESKTOP_UPDATE_JOURNAL_DIR
   const updateJournal = journalDirectory === undefined ? undefined : new DesktopUpdateJournal(journalDirectory, app.getVersion())
@@ -420,6 +425,7 @@ async function main(): Promise<void> {
   const applicationUrl = `${SCHEME}://app/`
   let hostUrl: string | undefined
   let hostCookie: string | undefined
+  let hostBoundPort: number | undefined
   const browserGuests = new DesktopBrowserGuests(() => hostUrl)
   let injections: readonly unknown[] = []
   let welcomeBackend: DesktopWelcomeBackend | undefined
@@ -468,12 +474,13 @@ async function main(): Promise<void> {
       resources.dsh, activeProject,
       hostInspectPort, { ...hostEnvironment, DSH_CLIENT_VERSION: desktopClientVersion() }, onFailure,
       primaryRuntime,
-      resources, (next) => { platformView.setSession(next) })
+      resources, (next) => { platformView.setSession(next) }, hostBindArgs)
     return {
       start: async () => {
         const ready = await host.start()
         hostCookie = await authenticateWebHost(ready.url)
         hostUrl = ready.url
+        hostBoundPort = Number(new URL(ready.url).port)
         if (ready.injections === undefined) throw new Error('Desktop Host did not provide boot injections')
         injections = ready.injections
         welcomeBackend = await connectDesktopWelcome(ready.url, (input, init) => net.fetch(input, init), async () => (await session.defaultSession.cookies.get({ url: ready.url })).map(cookie => `${cookie.name}=${cookie.value}`).join('; '))
@@ -729,6 +736,45 @@ async function main(): Promise<void> {
   ipcMain.handle(DESKTOP_IPC.browserRelease, (event, lease: unknown) => {
     assertProductSender(event)
     return browserGuests.release(event.sender, lease)
+  })
+
+  const webAccessStatus = (): DesktopWebAccessStatus => {
+    const stored = readDesktopSettings(app.getPath('userData')).web
+    return {
+      ...stored,
+      address: hostBoundPort === undefined ? null : webAccessAddress(startedWebAccess, hostBoundPort),
+      restartRequired: webAccessRestartRequired(stored, startedWebAccess),
+    }
+  }
+  const publishWebAccess = (): void => {
+    const window = mainWindow
+    if (window === undefined || window.isDestroyed()) return
+    window.webContents.send(DESKTOP_IPC.webAccessChanged, webAccessStatus())
+  }
+  ipcMain.handle(DESKTOP_IPC.webAccessStatus, (event) => {
+    assertProductSender(event)
+    return webAccessStatus()
+  })
+  ipcMain.handle(DESKTOP_IPC.webAccessUpdate, async (event, next: unknown) => {
+    assertProductSender(event)
+    if (typeof next !== 'object' || next === null) throw new Error('dsh desktop: web access update must be an object')
+    const { enabled, port } = next as { enabled?: unknown; port?: unknown }
+    if (typeof enabled !== 'boolean') throw new Error('dsh desktop: web access enabled must be true or false')
+    if (typeof port !== 'number' || !Number.isInteger(port)
+      || port < MIN_WEB_ACCESS_PORT || port > MAX_WEB_ACCESS_PORT) {
+      throw new Error(`dsh desktop: web access port must be an integer from ${String(MIN_WEB_ACCESS_PORT)} through ${String(MAX_WEB_ACCESS_PORT)}`)
+    }
+    await writeWebAccessSettings(app.getPath('userData'), { enabled, port })
+    const status = webAccessStatus()
+    publishWebAccess()
+    return status
+  })
+  ipcMain.handle(DESKTOP_IPC.webAccessOpen, (event) => {
+    assertProductSender(event)
+    // The authenticated URL carries this process's launch token, so it is spent here and
+    // never returned to the renderer.
+    if (!startedWebAccess.enabled || hostUrl === undefined) throw new Error('dsh desktop: web access is not running')
+    return shell.openExternal(hostUrl)
   })
 
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['ws://127.0.0.1/*', 'wss://127.0.0.1/*'] }, (details, callback) => {

@@ -27,6 +27,10 @@ export const DESKTOP_IPC = {
   updatesStatus: 'dsh-desktop:updates-status',
   updatesOpen: 'dsh-desktop:updates-open',
   updatesPresentation: 'dsh-desktop:updates-presentation',
+  webAccessStatus: 'dsh-desktop:web-access-status',
+  webAccessUpdate: 'dsh-desktop:web-access-update',
+  webAccessOpen: 'dsh-desktop:web-access-open',
+  webAccessChanged: 'dsh-desktop:web-access-changed',
   nativeThemeSet: 'dsh-desktop:native-theme-set',
   windowFullscreen: 'dsh-desktop:window-fullscreen',
   windowControl: 'dsh-desktop:window-control',
@@ -89,6 +93,33 @@ export interface DshDesktopProductApi {
     open(): Promise<void>
     subscribe(listener: (state: DesktopUpdatePresentation) => void): () => void
   }
+  /**
+   * Web access for this machine's browsers. `address` is safe to render; the launch
+   * token lives only in the main process, which `open()` spends on the caller's behalf.
+   */
+  readonly webAccess: {
+    status(): Promise<DesktopWebAccessStatus>
+    update(next: DesktopWebAccessChoice): Promise<DesktopWebAccessStatus>
+    open(): Promise<void>
+    subscribe(listener: (status: DesktopWebAccessStatus) => void): () => void
+  }
+}
+
+/** Web access preferences as the product page sends them. */
+export interface DesktopWebAccessChoice {
+  readonly enabled: boolean
+  readonly port: number
+}
+
+/** Web access state as the product page renders it. */
+export interface DesktopWebAccessStatus extends DesktopWebAccessChoice {
+  /**
+   * `host:port` a browser on this machine types while the setting is on, otherwise null.
+   * Never carries the launch token.
+   */
+  readonly address: string | null
+  /** Whether the stored choice differs from the one the running Host was started with. */
+  readonly restartRequired: boolean
 }
 
 /** Scheme of Desktop-owned application documents. */

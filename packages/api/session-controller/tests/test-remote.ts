@@ -18,6 +18,7 @@ import {
   type SessionAccess,
   type SessionHandle,
   type SessionHandleReadOptions,
+  type SessionPersistenceDeleteOptions,
   type SessionPersistenceListOptions,
   type SessionPersistenceOpenOptions,
   type SessionPersistenceSnapshot,
@@ -41,6 +42,8 @@ import type {
   SessionControlFrame,
   SessionCreateRequest,
   SessionCreateValue,
+  SessionDeleteRequest,
+  SessionDeleteValue,
   SessionForkRequest,
   SessionForkValue,
   SessionFollowFrame,
@@ -74,6 +77,7 @@ export interface TestSessionRemote {
   list(request: SessionListRequest, signal?: AbortSignal): Promise<RemoteResult<SessionListValue>>
   search(request: SessionSearchRequest, signal?: AbortSignal): Promise<RemoteResult<SessionSearchValue>>
   create(request: SessionCreateRequest): Promise<RemoteResult<SessionCreateValue>>
+  delete(request: SessionDeleteRequest, signal?: AbortSignal): Promise<RemoteResult<SessionDeleteValue>>
   selectModel(request: SessionSelectModelRequest): Promise<RemoteResult<SessionSelectModelValue>>
   modelCatalog(): Promise<RemoteResult<ModelCatalog>>
   rename(request: SessionRenameRequest): Promise<RemoteResult<SessionRenameValue>>
@@ -124,6 +128,7 @@ interface TestSessionInspection {
 
 type LegacyTestPersistence = Record<string, unknown> & {
   readonly list?: (signal?: AbortSignal) => Promise<readonly SessionHeader[]>
+  readonly delete?: (sessionId: SessionId, options?: SessionPersistenceDeleteOptions) => Promise<void>
   readonly inspect?: (
     sessionId: SessionId,
     signal?: AbortSignal,
@@ -211,6 +216,10 @@ export function testSessionPersistence(
       return testReadHandle(sessionId, inspection)
     }
   }
+  // A double that declares no deletion cannot satisfy the seam: the Session
+  // Controller's delete path calls it unconditionally, so the absence would
+  // surface as a TypeError far from the fixture.
+  adapted.delete ??= () => Promise.reject(new Error('test persistence double declares no delete'))
   return adapted
 }
 
@@ -360,6 +369,10 @@ export function createSessionTestRemote(
       signal,
     ),
     create: request => remoteResult(() => direct.create(request)),
+    delete: (request, signal = new AbortController().signal) => remoteResult(
+      () => direct.delete(request, signal),
+      signal,
+    ),
     selectModel: request => remoteResult(() => direct.selectModel(request)),
     modelCatalog: () => remoteResult(() => direct.modelCatalog()),
     rename: request => remoteResult(() => direct.rename(request)),

@@ -1258,6 +1258,44 @@ describe('registry-global temporary sessions', () => {
     const upgraded = await harness({ pool: legacy })
     expect(upgraded.registry.temporarySessionIds).toEqual([])
   })
+
+  it('forgets a deleted session from every registry-global set in one durable write', async () => {
+    const result = await harness({ sessions: [header('gone', '/work/gone', 100), header('kept', '/work/kept', 200)] })
+    await result.registry.markTemporarySession(SessionId('gone'))
+    await result.registry.markTemporarySession(SessionId('kept'))
+    await result.registry.archiveSession(SessionId('gone'))
+    await result.registry.pinSession(SessionId('kept'))
+    // Pinning is refused for an archived Session; unarchiving drops nothing
+    // else, so the deleted id can then be pinned alongside its archive entry.
+    await result.registry.unarchiveSession(SessionId('gone'))
+    await result.registry.pinSession(SessionId('gone'))
+
+    await result.registry.forgetSession(SessionId('gone'))
+
+    expect(result.registry.temporarySessionIds).toEqual(['kept'])
+    expect(result.registry.archivedSessionIds).toEqual([])
+    expect(result.registry.pinnedSessionIds).toEqual(['kept'])
+    expect(storedState(result.pool)).toMatchObject({
+      temporarySessionIds: [SessionId('kept')],
+      archivedSessionIds: [],
+      pinnedSessionIds: [SessionId('kept')],
+    })
+  })
+
+  it('forgets an unknown id without writing and detaches it from a Workspace account', async () => {
+    const dir = await makeDir('forget-detach')
+    const result = await harness({ sessions: [header('accounted', dir, 100)] })
+    const workspace = result.registry.list()[0]!
+    expect(workspace.sessionIds).toEqual(['accounted'])
+
+    const globalWrites = (): number => result.changes.filter(change => change.table === '').length
+    const before = globalWrites()
+    await expect(result.registry.forgetSession(SessionId('never-seen'))).resolves.toBeUndefined()
+    expect(globalWrites()).toBe(before)
+
+    await result.registry.forgetSession(SessionId('accounted'))
+    expect(result.registry.list()[0]!.sessionIds).toEqual([])
+  })
 })
 
 describe('registry-global session unpin', () => {

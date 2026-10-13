@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { WorkspaceId, WorkspaceSnapshot } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type { SessionActivity } from '@deepseek-ai/dsh-workspace/types'
 import type { SessionStatusSnapshot } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
@@ -21,11 +22,15 @@ import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type {
   MenuOpenState, RowToast, RowToastState, SessionArchiveConfirmInjected, SessionArchiveConfirmRequest,
+  SessionDeleteConfirmInjected, SessionDeleteConfirmRequest,
   SessionRenameDialogInjected, SessionRenameTarget,
 } from '../src/client/contract/slots.ts'
 import {
   ArchiveSessionMenuItem, ArchiveSessionRowButton, SessionArchiveConfirmDialog,
 } from '../src/client/session-actions/ArchiveSession.tsx'
+import {
+  DeleteSessionMenuItem, DeleteSessionRowButton, SessionDeleteConfirmDialog,
+} from '../src/client/session-actions/DeleteSession.tsx'
 import { ForkSessionMenuItem } from '../src/client/session-actions/ForkSession.tsx'
 import { PinSessionMenuItem, PinSessionRowButton } from '../src/client/session-actions/PinSession.tsx'
 import { RenameSessionMenuItem, SessionRenameDialog } from '../src/client/session-actions/RenameSession.tsx'
@@ -51,7 +56,9 @@ function hook<T>(snapshot: T) {
 const idSet = (...ids: string[]): ReadonlySet<SessionId> => new Set(ids.map(sid))
 
 /** The row every action is rendered for: its owner share as the browser passes it. */
-const ROW = { sessionId: sid('one'), displayTitle: 'Session title' }
+const ROW = { sessionId: sid('one'), displayTitle: 'Session title', temporary: false }
+/** The same row for an action that only applies to temporary Sessions. */
+const TEMPORARY_ROW = { ...ROW, temporary: true }
 const one: SessionSummary = {
   id: ROW.sessionId, displayTitle: ROW.displayTitle, running: false, blank: false, updatedAt: 1, retainedBy: {},
 }
@@ -87,12 +94,15 @@ type ActionRowProps = PropsRuntime<'sidebar.workspaces.session.row.action'> & Pr
 type OverlayProps = PropsRuntime<'shell.overlay'> & PropsLocale<'workspace'>
 
 /** Owner share, standard seat, locale seat, and the bound open-state hook of one menu row. */
-function menuRow(menu: MenuOpenState): MenuRowProps {
-  return { ...ROW, useMenuOpenState: () => menu, useShortcuts: hook([]), t, ...standard }
+function menuRow(menu: MenuOpenState, owner: typeof ROW = ROW): MenuRowProps {
+  return { ...owner, useMenuOpenState: () => menu, useShortcuts: hook([]), t, ...standard }
 }
 
 /** Owner share, standard seat, and locale seat of one hover button. */
 const actionRow: ActionRowProps = { ...ROW, t, ...standard }
+
+/** The same hover-button seat for a row the browser marked temporary. */
+const temporaryActionRow: ActionRowProps = { ...TEMPORARY_ROW, t, ...standard }
 
 /** Standard and locale seats of a `shell.overlay` entry (no owner share). */
 const overlay: OverlayProps = { t, ...standard }
@@ -206,6 +216,134 @@ describe('archive action', () => {
     fireEvent.click(screen.getByRole('button', { name: '取消归档' }))
     expect(archive.unarchiveSession).toHaveBeenCalledWith(sid('one'))
     expect(archive.archiveSession).toHaveBeenCalledOnce()
+  })
+})
+
+describe('delete action', () => {
+  /** The delete share: the single callback the entries call. */
+  const deleteShare = () => ({ requestSessionDelete: vi.fn() })
+
+  it('menu row closes the menu, then asks for the confirmation', () => {
+    const { state, setMenuOpen } = openMenu()
+    const share = deleteShare()
+    render(<DeleteSessionMenuItem {...menuRow(state, TEMPORARY_ROW)} {...share} />)
+    const row = screen.getByRole('menuitem', { name: '删除会话' })
+    // Deletion is irreversible: the row carries the destructive styling.
+    expect(row.className).toMatch(/danger/)
+    fireEvent.click(row)
+    expect(share.requestSessionDelete).toHaveBeenCalledWith(sid('one'), 'Session title')
+    expect(setMenuOpen).toHaveBeenCalledWith(false)
+    expect(callOrder(setMenuOpen)).toBeLessThan(callOrder(share.requestSessionDelete))
+  })
+
+  it('menu row is absent for a Session the browser did not mark temporary', () => {
+    render(<DeleteSessionMenuItem {...menuRow([true, vi.fn()])} {...deleteShare()} />)
+    expect(screen.queryByRole('menuitem')).toBeNull()
+  })
+
+  it('row button asks for the confirmation and is absent on ordinary Sessions', () => {
+    const share = deleteShare()
+    const view = render(<DeleteSessionRowButton {...temporaryActionRow} {...share} />)
+    fireEvent.click(screen.getByRole('button', { name: '删除会话' }))
+    expect(share.requestSessionDelete).toHaveBeenCalledWith(sid('one'), 'Session title')
+    view.rerender(<DeleteSessionRowButton {...actionRow} {...share} />)
+    expect(screen.queryByRole('button', { name: '删除会话' })).toBeNull()
+  })
+})
+
+describe('SessionDeleteConfirmDialog', () => {
+  /** The dialog over a test-owned request source; settling clears the request the way apply does. */
+  function deleteDialog(deleteSession: SessionDeleteConfirmInjected['deleteSession'], translate = t) {
+    const request = createSnapshotStore<SessionDeleteConfirmRequest | null>(null)
+    const settleSessionDelete = vi.fn(() => { request.set(null) })
+    render(
+      <SessionDeleteConfirmDialog
+        {...overlay}
+        t={translate}
+        useDeleteRequest={bindSnapshotSelector(request)}
+        settleSessionDelete={settleSessionDelete}
+        deleteSession={deleteSession}
+      />,
+    )
+    const ask = (): void => {
+      act(() => { request.set({ sessionId: sid('one'), displayTitle: 'Draft notes' }) })
+    }
+    return { settleSessionDelete, ask }
+  }
+
+  it('renders nothing until a confirmation is requested', () => {
+    deleteDialog(vi.fn(async () => undefined))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('states the deletion is permanent and deletes on confirm', async () => {
+    const pending = Promise.withResolvers<readonly SessionActivity[] | undefined>()
+    const deleteSession = vi.fn(() => pending.promise)
+    const { settleSessionDelete, ask } = deleteDialog(deleteSession)
+    ask()
+    const dialog = screen.getByRole('dialog', { name: '永久删除此临时会话？' })
+    expect(dialog.textContent).toContain('“Draft notes”的会话记录与临时工作目录都会被永久删除')
+    expect(screen.getByRole('note').textContent).toBe('此操作不可撤销。')
+    // Nothing was reported running yet, so no work list and no stop step.
+    expect(screen.queryByRole('list')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '删除会话' }))
+    expect(deleteSession).toHaveBeenCalledWith(sid('one'), {})
+    expect(screen.getByRole('status').textContent).toBe('正在删除会话…')
+    await act(async () => { pending.resolve(undefined) })
+    expect(settleSessionDelete).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('turns the Host refusal for running work into the stop step of the same confirmation', async () => {
+    const deleteSession = vi.fn<SessionDeleteConfirmInjected['deleteSession']>()
+      .mockResolvedValueOnce([
+        { kind: 'turn' },
+        { kind: 'subagent', items: [{ id: 'child-1', label: 'reviewer' }] },
+        { kind: 'job', items: [{ id: 'bash-1', label: 'pnpm run build' }] },
+      ])
+      .mockResolvedValueOnce(undefined)
+    const { settleSessionDelete, ask } = deleteDialog(deleteSession)
+    ask()
+    // The first ask is refused; the dialog keeps itself open and reports the work.
+    fireEvent.click(screen.getByRole('button', { name: '删除会话' }))
+    await waitFor(() => { expect(screen.queryByRole('list')).not.toBeNull() })
+    expect(settleSessionDelete).not.toHaveBeenCalled()
+    const lines = [...screen.getByRole('list', { name: '删除前将被停止的工作' }).querySelectorAll('li')]
+      .map(li => li.textContent)
+    expect(lines).toEqual([
+      '进行中的回合',
+      '1 个运行中的子智能体：reviewer',
+      '1 个后台任务：pnpm run build',
+    ])
+    // The second ask carries the stop request and finishes the deletion.
+    fireEvent.click(screen.getByRole('button', { name: '停止并删除' }))
+    expect(deleteSession).toHaveBeenLastCalledWith(sid('one'), { stopActivity: true })
+    await waitFor(() => { expect(settleSessionDelete).toHaveBeenCalledOnce() })
+  })
+
+  it('describes a family merged by another provider with the generic line', async () => {
+    const deleteSession = vi.fn<SessionDeleteConfirmInjected['deleteSession']>()
+      .mockResolvedValueOnce([{ kind: 'probe', items: [{ id: 'probe-1' }] }])
+    const { ask } = deleteDialog(deleteSession)
+    ask()
+    fireEvent.click(screen.getByRole('button', { name: '删除会话' }))
+    await waitFor(() => { expect(screen.queryByRole('list')).not.toBeNull() })
+    const lines = [...screen.getByRole('list', { name: '删除前将被停止的工作' }).querySelectorAll('li')]
+      .map(li => li.textContent)
+    expect(lines).toEqual(['1 项其他工作（probe）'])
+  })
+
+  it('keeps the dialog open with a rejection surfaced, and Cancel settles without deleting', async () => {
+    const deleteSession = vi.fn<SessionDeleteConfirmInjected['deleteSession']>()
+      .mockRejectedValueOnce(new Error('delete exploded'))
+    const { settleSessionDelete, ask } = deleteDialog(deleteSession)
+    ask()
+    fireEvent.click(screen.getByRole('button', { name: '删除会话' }))
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe('delete exploded') })
+    expect(settleSessionDelete).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(settleSessionDelete).toHaveBeenCalledOnce()
+    expect(deleteSession).toHaveBeenCalledOnce()
   })
 })
 
@@ -586,8 +724,15 @@ describe('RowActionToast', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it('treats a view without a persisted filter as the hidden default and keeps the filter action', () => {
-    const { notify } = toastSurface({})
+  it('shows the deletion notice with no recovery action, because the deletion is permanent', () => {
+    const { notify } = toastSurface()
+    notify({ kind: 'deleted' })
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toBe('会话已删除')
+    expect(alert.querySelector('button')).toBeNull()
+  })
+
+  it('treats a view without a persisted filter as the hidden default and keeps the filter action', () => {    const { notify } = toastSurface({})
     notify({ kind: 'archived', sessionId: sid('one') })
     expect(screen.getByRole('alert').textContent).toBe('会话已归档，可撤销或筛选已归档会话')
   })

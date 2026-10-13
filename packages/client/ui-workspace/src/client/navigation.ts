@@ -16,9 +16,11 @@ import type {
   IWorkspaces, WorkspaceId, WorkspaceSnapshot, WorkspaceView,
 } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { SessionActivity } from '@deepseek-ai/dsh-workspace/types'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { DraftInitializationOptions } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { RowToast } from './contract/slots.ts'
+import { activeSessionDeletionRefusal } from './session-actions/derived.ts'
 import { pinOrderAccounts, pinOrderSource } from './pin-order.ts'
 import type { WorkspaceViewStoreActions } from './stores.ts'
 
@@ -91,6 +93,18 @@ export interface UiWorkspace {
    * @param sessionId - Session to unarchive.
    */
   unarchiveSession(sessionId: SessionId): Promise<void>
+  /**
+   * Permanently delete a temporary Session and clear it when it is the
+   * current selection. The Host removes the stored log, the Session-local
+   * directory, and the classification; nothing remains to restore.
+   * @param sessionId - temporary Session to delete.
+   * @param options - `stopActivity` asks the Host to stop the Session's running work instead of refusing.
+   * @returns the running work the Host refused for, or `undefined` once the deletion completed.
+   */
+  deleteSession(
+    sessionId: SessionId,
+    options?: { readonly stopActivity?: boolean },
+  ): Promise<readonly SessionActivity[] | undefined>
   /**
    * Pin a Session on the Host, then lead it in its accounts' saved orders
    * (its Workspace group or Ungrouped, and the flat list). The order write
@@ -338,6 +352,21 @@ class UiWorkspaceService extends Service implements UiWorkspace {
 
   async unarchiveSession(sessionId: SessionId): Promise<void> {
     await this.workspaces.unarchiveSession(sessionId)
+  }
+
+  async deleteSession(
+    sessionId: SessionId,
+    options: { readonly stopActivity?: boolean } = {},
+  ): Promise<readonly SessionActivity[] | undefined> {
+    try {
+      await this.sessions.delete(sessionId, options)
+    } catch (error: unknown) {
+      const activity = activeSessionDeletionRefusal(error)
+      if (activity === undefined) throw error
+      return activity
+    }
+    if (this.mainReference?.sessionId === sessionId) this.clearMain()
+    return undefined
   }
 
   async pinSession(sessionId: SessionId): Promise<void> {

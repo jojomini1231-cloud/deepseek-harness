@@ -224,7 +224,7 @@ None; this package neither assembles nor sends a provider request.
 These limits define the search depth, the archive surface, and the picking carrier; they are current package constraints.
 
 - **No fuzzy content search or event deep links** — the content backend uses literal token/phrase matching, and selecting a result opens the Session rather than the matching event.
-- **No Session deletion** — sessions can be archived but never deleted; archived rows stay recoverable in place through the archived view filter and the search results' unarchive action, and Workspace registration deletion does not delete Sessions.
+- **Session deletion is permanent and temporary-only** — a temporary Session can be deleted from its row menu, which removes its stored log, its Session-local directory, and its classification with no recovery; every other Session remains archive-only, and Workspace registration deletion never deletes Sessions.
 - **Temporary membership is by entry point, not directory** — a temporary Session stays in the Temporary Workspaces section after its working directory moves to a registered Workspace; moving it out would require deleting and recreating it, which no surface offers.
 - **Pending user interaction is not aggregated into collapsed groups** — a waiting row inside a collapsed group lights no group-header indicator and becomes visible only after that group is expanded.
 - **Native folder selection depends on the local Host carrier** — under the `-native` composition, in-process or remote browser deployments cannot open a local operating-system dialog; remote-capable picking is the `-browse` composition's in-app flow.

@@ -54,6 +54,17 @@ export function RowActionToast({ useToast, useStore, dismissToast, undoArchive, 
       />
     )
   }
+  if (toast.kind === 'deleted') {
+    // Deletion is irreversible, so this notice offers no recovery action.
+    return (
+      <Toast
+        key={`toast-${String(toast.seq)}`}
+        text={t('toast.deleted')}
+        tone="success"
+        onDone={dismissToast}
+      />
+    )
+  }
   if (toast.kind === 'createFailed') {
     return (
       <Toast
@@ -77,7 +88,7 @@ export function RowActionToast({ useToast, useStore, dismissToast, undoArchive, 
 
 /** The copy of one plain warning, keyed by the notice kind the union closes over. */
 function plainNoticeText(
-  toast: Exclude<RowToastState, { kind: 'archived' | 'stoppedAndArchived' | 'createFailed' | 'forkRequiresOpen' }>,
+  toast: Exclude<RowToastState, { kind: 'archived' | 'stoppedAndArchived' | 'createFailed' | 'forkRequiresOpen' | 'deleted' }>,
   t: RowToastProps['t'],
 ): string {
   switch (toast.kind) {

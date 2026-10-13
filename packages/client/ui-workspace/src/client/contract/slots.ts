@@ -26,11 +26,11 @@
  * row of a Session's "..." menu is an entry of
  * `sidebar.workspaces.session.menu.item`, and every hover button at the row's
  * end is an entry of `sidebar.workspaces.session.row.action`. The shipped
- * actions — pin, rename, fork, archive — are ordinary entries this package
- * registers from `apply`, each carrying its own behavior in its own inject
- * face and reading its own Host state through hooks that face injects, so a
- * client plugin's action lands beside them by `order` and needs nothing from
- * the browser beyond the row identity.
+ * actions — pin, rename, fork, archive, delete — are ordinary entries this
+ * package registers from `apply`, each carrying its own behavior in its own
+ * inject face and reading its own Host state through hooks that face injects,
+ * so a client plugin's action lands beside them by `order` and needs nothing
+ * from the browser beyond the row identity.
  *
  * The browser entry additionally declares two `list` seats per Session row
  * (`sidebar.session.row.leading` / `sidebar.session.row.hover`) for ambient
@@ -79,6 +79,12 @@ export interface SessionRowOwnerProps {
   sessionId: SessionId
   /** Row display title: persisted title, or empty when the Session has none. */
   displayTitle: string
+  /**
+   * Whether the Host classifies this Session as temporary. Carried as a plain
+   * fact beside the id so an action that applies only to temporary Sessions
+   * (the permanent deletion) gates itself without reading a second source.
+   */
+  temporary: boolean
 }
 
 /** The row menu's open state as its owner holds it: the `useState` pair. */
@@ -136,9 +142,9 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     /**
      * The rows of one Session's "..." menu, in ascending `order`. ui-workspace
      * registers the shipped rows here — `pin` (100), `rename` (200), `fork`
-     * (300), `archive` (400) — so a plugin row is placed by its own `order`
-     * among them. Use a package-namespaced `id`; reusing a shipped id at
-     * another `priority` shadows that row. Each entry renders one
+     * (300), `archive` (400), `delete` (500) — so a plugin row is placed by its
+     * own `order` among them. Use a package-namespaced `id`; reusing a shipped
+     * id at another `priority` shadows that row. Each entry renders one
      * `role="menuitem"` `<button>` (the shipped rows use ui-primitives'
      * `MenuItemButton`, which adds the host styling and `separatorBefore`),
      * decides its own visibility from its own state, and dismisses the menu
@@ -176,11 +182,11 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     }
     /**
      * The hover buttons at the end of one Session row, in ascending `order`,
-     * after the "..." menu trigger. ui-workspace registers `archive` (100) and
-     * `pin` (200) here. An entry renders one icon button (or nothing, when its
-     * action does not apply to the row) and owns the action it performs. Clicks
-     * inside the strip stay in the strip, so the button needs no propagation
-     * handling to keep the row from opening.
+     * after the "..." menu trigger. ui-workspace registers `archive` (100),
+     * `pin` (200), and `delete` (300) here. An entry renders one icon button
+     * (or nothing, when its action does not apply to the row) and owns the
+     * action it performs. Clicks inside the strip stay in the strip, so the
+     * button needs no propagation handling to keep the row from opening.
      */
     'sidebar.workspaces.session.row.action': { kind: 'list'; scope: 'root'; owner: SessionRowOwnerProps }
   }
@@ -267,6 +273,13 @@ export type WorkspaceBrowserInjected = {
   /** Delete only a Host Workspace registration; directory and Session logs remain. */
   deleteWorkspace: (workspaceId: WorkspaceId) => Promise<void>
   /**
+   * Permanently delete one temporary Session — its stored log, its
+   * Session-local directory, and its classification. Irreversible, and
+   * refused by the Host for a Session with running work unless
+   * `stopActivity` asks for the stops first.
+   */
+  deleteSession: (sessionId: SessionId, options?: { readonly stopActivity?: boolean }) => Promise<void>
+  /**
    * Reorder a Workspace in the durable registry display order.
    * Omitted anchor appends to the end.
    */
@@ -296,6 +309,7 @@ export type SessionRowActionProps<Injected extends object = object> =
 export type RowToast =
   | { kind: 'archived'; sessionId: SessionId }
   | { kind: 'stoppedAndArchived'; sessionId: SessionId }
+  | { kind: 'deleted' }
   | { kind: 'pinFailed' }
   | { kind: 'unpinFailed' }
   | { kind: 'archivedNotOpenable' }
@@ -391,6 +405,56 @@ export interface ForkSessionInjected {
   forkSession: (sessionId: SessionId) => void
 }
 
+/**
+ * Delete action share (menu row and hover button). The row's own `temporary`
+ * fact decides whether the action renders at all; the callback carries the
+ * whole behavior — the Host call, the confirmation a running-work refusal
+ * raises, the success notice, and the diagnostics for any other rejection.
+ */
+export interface DeleteSessionInjected {
+  /**
+   * Delete a Session permanently. A Session with running work is not deleted
+   * by this call: the Host's refusal opens the confirmation instead, which
+   * offers to stop that work first.
+   */
+  requestSessionDelete: (sessionId: SessionId, displayTitle: string) => void
+}
+
+/**
+ * A deletion the delete action asked for. The action raises one of these for
+ * every click, so the confirmation is the only path to a deletion.
+ */
+export interface SessionDeleteConfirmRequest {
+  /** Session to delete. */
+  sessionId: SessionId
+  /** The row's display title, named in the dialog. */
+  displayTitle: string
+}
+
+/**
+ * Delete dialog share: the pending confirmation, its settlement, and the
+ * deletion hop the dialog confirms with.
+ */
+export interface SessionDeleteConfirmInjected {
+  hooks: {
+    /** The confirmation asked for, until the dialog consumes or cancels it. */
+    deleteRequest: HostObservable<SessionDeleteConfirmRequest | null>
+  }
+  /** Consume or cancel the pending confirmation. */
+  settleSessionDelete: () => void
+  /**
+   * Delete a Session; `stopActivity` asks the Host to stop its running work
+   * first. Resolves `undefined` once the log, the directory, and the
+   * classification are gone, or the running work the Host refused for — which
+   * the dialog renders and offers to stop before asking again. Any other
+   * failure rejects.
+   */
+  deleteSession: (
+    sessionId: SessionId,
+    options?: { readonly stopActivity?: boolean },
+  ) => Promise<readonly SessionActivity[] | undefined>
+}
+
 /** Rename action share: the row only raises the request; the dialog entry answers it. */
 export interface RenameSessionInjected {
   /** Ask for the rename dialog, seeded with the row's current title. */
@@ -446,6 +510,13 @@ export type SessionArchiveConfirmProps =
   & PropsLocale<'workspace'>
   & Omit<SessionArchiveConfirmInjected, 'hooks'>
   & PropsHooks<SessionArchiveConfirmInjected['hooks']>
+
+/** Props of the permanent-deletion dialog entry in `shell.overlay`. */
+export type SessionDeleteConfirmProps =
+  PropsRuntime<'shell.overlay'>
+  & PropsLocale<'workspace'>
+  & Omit<SessionDeleteConfirmInjected, 'hooks'>
+  & PropsHooks<SessionDeleteConfirmInjected['hooks']>
 
 /**
  * Props of the row toast entry in `shell.overlay`. The declared viewing store

@@ -164,6 +164,8 @@ const harness = await vi.hoisted(async () => {
       readonly inspectPort?: number, readonly environment?: NodeJS.ProcessEnv, readonly onFailure?: (error: Error) => void,
       readonly primaryRuntime?: string,
       readonly packageManager?: { pnpm: string; nodeBin: string },
+      readonly onPlatformSession?: (session: unknown) => void,
+      readonly bindArgs?: readonly string[],
     ) { hosts.push(this) }
   }
   const app = Object.assign(new EventEmitter(), {
@@ -491,6 +493,64 @@ describe('desktop main startup', () => {
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining(path), expect.any(Error))
     expect(harness.dialog.showMessageBox).not.toHaveBeenCalledWith(expect.objectContaining({ title: en.startupFailed }))
     expect(readFileSync(path, 'utf8')).toBe(raw)
+  })
+
+  it('binds the stored Web access port at startup and keeps the OS-assigned one while it is off', async () => {
+    const directory = join(harness.app.getPath('userData'), 'desktop')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'settings.json'), JSON.stringify({ web: { enabled: true, port: 4123 } }))
+    await workspaceReady()
+    expect(harness.hosts[0]!.bindArgs).toEqual(['--host', '127.0.0.1', '--port', '4123'])
+  })
+
+  it('answers Web access status, persists an accepted change, and never hands the renderer the token', async () => {
+    const directory = join(harness.app.getPath('userData'), 'desktop')
+    mkdirSync(directory, { recursive: true })
+    const path = join(directory, 'settings.json')
+    writeFileSync(path, JSON.stringify({ updates: { allowTestAuthPopupWindow: false }, web: { enabled: true, port: 4123 } }))
+    await workspaceReady()
+    expect(await invoke(DESKTOP_IPC.webAccessStatus, 'app')).toEqual({
+      enabled: true, port: 4123, address: '127.0.0.1:3080', restartRequired: false,
+    })
+    // The running Host still binds the port the process started with, so a change asks for a restart.
+    expect(await invoke(DESKTOP_IPC.webAccessUpdate, 'app', { enabled: true, port: 4124 })).toEqual({
+      enabled: true, port: 4124, address: '127.0.0.1:3080', restartRequired: true,
+    })
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({
+      updates: { allowTestAuthPopupWindow: false }, web: { enabled: true, port: 4124 },
+    })
+    await expect(invoke(DESKTOP_IPC.webAccessUpdate, 'app', { enabled: true, port: 0 })).rejects.toThrow(/port must be an integer/)
+    await expect(invoke(DESKTOP_IPC.webAccessUpdate, 'app', { enabled: 'yes', port: 4124 })).rejects.toThrow(/enabled must be true or false/)
+    expect(readFileSync(path, 'utf8')).not.toContain('token')
+    await invoke(DESKTOP_IPC.webAccessOpen, 'app')
+    expect(harness.openExternal).toHaveBeenCalledWith('http://127.0.0.1:3080/?token=test')
+    // The status and browser handlers are synchronous, so their refusal is a throw rather than a rejection.
+    expect(() => invoke(DESKTOP_IPC.webAccessStatus, 'shell')).toThrow('unowned renderer')
+  })
+
+  it('refuses the browser action while Web access is off', async () => {
+    const directory = join(harness.app.getPath('userData'), 'desktop')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'settings.json'), JSON.stringify({ web: { enabled: false, port: 4123 } }))
+    await workspaceReady()
+    expect(await invoke(DESKTOP_IPC.webAccessStatus, 'app')).toEqual({
+      enabled: false, port: 4123, address: null, restartRequired: false,
+    })
+    expect(() => invoke(DESKTOP_IPC.webAccessOpen, 'app')).toThrow(/not running/)
+    expect(harness.openExternal).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the default Web access settings when the settings document is invalid', async () => {
+    const directory = join(harness.app.getPath('userData'), 'desktop')
+    mkdirSync(directory, { recursive: true })
+    const path = join(directory, 'settings.json')
+    writeFileSync(path, JSON.stringify({ web: { enabled: true, port: 70000 } }))
+    await workspaceReady()
+    expect(harness.hosts[0]!.bindArgs).toEqual(['--host', '127.0.0.1', '--port', '0'])
+    expect(await invoke(DESKTOP_IPC.webAccessStatus, 'app')).toEqual({
+      enabled: false, port: 3080, address: null, restartRequired: false,
+    })
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining(path), expect.any(Error))
   })
 
   it('routes shell update documents and assets through the registered main protocol handler', async () => {
@@ -1279,6 +1339,16 @@ describe('desktop main startup', () => {
     harness.hosts[0]!.ready.resolve()
     await harness.navigated.promise
     return harness.hosts[0]!
+  }
+
+  /**
+   * The main entry with its Host reported ready and the workspace open. The boot IPC is
+   * the readiness probe: it awaits the backend start, which is what publishes `hostUrl`.
+   */
+  async function workspaceReady(): Promise<void> {
+    await readyForUpdate()
+    await invoke(DESKTOP_IPC.boot)
+    expect(harness.windows[0]!.urls).toContain('dsh-app://app/')
   }
 
   it.each([

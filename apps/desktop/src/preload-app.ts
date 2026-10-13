@@ -2,7 +2,7 @@
 
 import type { DesktopShortcutInput, ShortcutConfigSnapshot, ShortcutSaveResult } from '@deepseek-ai/dsh-client-shortcuts/protocol'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { DESKTOP_IPC, SCHEME, type DshDesktopProductApi, type DesktopUpdatePresentation } from './ipc.ts'
+import { DESKTOP_IPC, SCHEME, type DshDesktopProductApi, type DesktopUpdatePresentation, type DesktopWebAccessStatus } from './ipc.ts'
 import { PLATFORM_IPC } from './platform-ipc.ts'
 import { markDocumentPlatform, syncWindowFullscreen } from './preload-platform.ts'
 import { syncNativeTheme } from './preload-theme.ts'
@@ -53,6 +53,16 @@ function createProductApi(): DshDesktopProductApi {
         const handle = (_event: Electron.IpcRendererEvent, state: DesktopUpdatePresentation): void => { listener(state) }
         ipcRenderer.on(DESKTOP_IPC.updatesPresentation, handle)
         return () => { ipcRenderer.off(DESKTOP_IPC.updatesPresentation, handle) }
+      },
+    },
+    webAccess: {
+      status: () => ipcRenderer.invoke(DESKTOP_IPC.webAccessStatus) as Promise<DesktopWebAccessStatus>,
+      update: next => ipcRenderer.invoke(DESKTOP_IPC.webAccessUpdate, next) as Promise<DesktopWebAccessStatus>,
+      open: () => ipcRenderer.invoke(DESKTOP_IPC.webAccessOpen) as Promise<void>,
+      subscribe(listener) {
+        const handle = (_event: Electron.IpcRendererEvent, status: DesktopWebAccessStatus): void => { listener(status) }
+        ipcRenderer.on(DESKTOP_IPC.webAccessChanged, handle)
+        return () => { ipcRenderer.off(DESKTOP_IPC.webAccessChanged, handle) }
       },
     },
   }

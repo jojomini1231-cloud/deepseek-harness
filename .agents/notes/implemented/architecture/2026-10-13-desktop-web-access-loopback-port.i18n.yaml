@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-13-desktop-web-access-loopback-port.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-10-13-desktop-web-access-loopback-port.md
+/agent-note-desktop-web-access-on-a-chosen-loopback-port:
+  en: 2d3f85e3cbea2f4f
+  zh: 2a0d53c40e562aef
+/agent-note-desktop-web-access-on-a-chosen-loopback-port/problem:
+  en: 470204148f854271
+  zh: bfd51ac44a4c89b3
+/agent-note-desktop-web-access-on-a-chosen-loopback-port/decision:
+  en: 24a031f798b03a07
+  zh: b6977a53447866c2
+/agent-note-desktop-web-access-on-a-chosen-loopback-port/alternatives-considered:
+  en: c8bf6e5c6c8f11b6
+  zh: 9bf39b5984478307
+/agent-note-desktop-web-access-on-a-chosen-loopback-port/consequences:
+  en: d20c9fcf7e3f9239
+  zh: dc45d4f1415e2d95

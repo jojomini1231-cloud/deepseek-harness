@@ -543,6 +543,28 @@ export class SessionManager {
   }
 
   /**
+   * Permanently delete one temporary Session on the Host. The Host's own
+   * removal frame is the normal path; a local removal is recorded here too so
+   * the row is gone the moment the call resolves, and a lost frame cannot
+   * leave it behind.
+   * @param sessionId - the temporary Session to delete.
+   * @param options - `stopActivity` asks the Host to stop the Session's running work instead of refusing.
+   * @returns the generated Remote result.
+   */
+  delete(
+    sessionId: SessionId,
+    options: { readonly stopActivity?: boolean } = {},
+  ): Promise<RemoteResult<{ readonly deleted: true }>> {
+    return this.remote.session.delete({
+      sessionId,
+      ...(options.stopActivity === true ? { stopActivity: true as const } : {}),
+    }).then((result) => {
+      if (result.ok) this.handleSessionRemoved(sessionId)
+      return result
+    })
+  }
+
+  /**
    * Contract session.fork; on success merge the child into summaries
    * immediately (same synchronous-addressability guarantee as create).
    * Blankness starts provisionally true so the authoritative Host summary can

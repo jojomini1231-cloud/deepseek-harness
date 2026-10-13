@@ -97,6 +97,27 @@ export class SessionForkError extends Error {
   }
 }
 
+/**
+ * Permanent deletion failed on the Host. `rpcError.code` distinguishes the
+ * running-work refusal (`session/active`, whose details name what still runs),
+ * the descendant refusal, and a Session that is not temporary, from a carrier
+ * fault.
+ */
+export class SessionDeleteError extends Error {
+  override readonly name = 'SessionDeleteError'
+
+  /**
+   * @param rpcError - Host business or folded transport error.
+   * @param sessionId - the session the deletion addressed.
+   */
+  constructor(
+    readonly rpcError: RemoteFailure,
+    readonly sessionId: SessionId,
+  ) {
+    super(`session delete failed: ${rpcError.code}: ${rpcError.message}`)
+  }
+}
+
 /** Identity-stable logical binding for one materialized Client Session. */
 export interface SessionBinding {
   readonly sessionId: SessionId
@@ -477,6 +498,21 @@ export class ClientSessions implements ISessions {
       if (!renamed.ok) throw new Error(`fork child rename failed: ${renamed.error.code}: ${renamed.error.message}`)
     }
     return childId
+  }
+
+  /**
+   * Permanently delete one temporary Session: its stored log, its
+   * Session-local directory, and its classification. The catalog row and any
+   * resident generation leave with the call.
+   * @param sessionId - the temporary Session to delete.
+   * @param options - `stopActivity` asks the Host to stop the Session's running work instead of refusing.
+   * @throws {SessionDeleteError} when the Host refuses; `session/active` means
+   *   running work must be stopped first, and its details name what runs.
+   */
+  async delete(sessionId: SessionId, options: { readonly stopActivity?: boolean } = {}): Promise<void> {
+    const result = await this.manager.delete(sessionId, options)
+    if (!result.ok) throw new SessionDeleteError(result.error, sessionId)
+    this.projectList()
   }
 
   /**

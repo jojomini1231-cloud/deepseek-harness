@@ -8,6 +8,16 @@ The desktop application is an Electron shell around the complete dsh Web applica
 
 Desktop binds `127.0.0.1`, the address Electron dials for the ready URL and the WebSocket credential filter. WebSocket streams use `ws:` or `wss:` according to the Host listener; credentials require matching authority and scheme.
 
+<a id="web-access-for-this-machine-s-browsers"></a>
+
+## Web access for this machine's browsers
+
+Settings → General → **Browser access** turns the OS-assigned port into a chosen one, so this machine's browsers reach the running application at `http://127.0.0.1:<port>`. A session already running in the desktop window then streams its execution trace to that browser, and a prompt typed there enters the same session: the live stream is per viewer and the session accepts prompts from either surface.
+
+The stored choice lives in `userData/desktop/settings.json` and is read once at startup, so enabling it, changing the port, or turning it off takes effect the next time the application starts; the row says so while a stored choice differs from the running listener. The port defaults to `3080`, the Web profile's own default, and using the same port as a running `dsh --profile web` fails the listener with the `EADDRINUSE` startup diagnostic rather than silently reassigning it.
+
+The listener binds loopback only, and the row never receives the launch token: the address it shows carries none, and **Open in browser** hands the complete authenticated URL to the operating system from the main process. That token is a process credential, so treat the opened URL as one.
+
 The first application-menu command, **About DeepSeek Harness**, opens Electron's native About panel with the application icon, product name, and installed release version. The menu follows the Desktop shell locale. On macOS, Hide, Hide Others, Show All, and Quit use localized labels; Hide and Quit include the DeepSeek Harness product name. These commands retain their native actions and shortcuts. macOS reads the icon from its application bundle, so an unpackaged development launch displays Electron's icon; Windows receives the packaged PNG.
 
 Desktop’s local native directory flow opens an Electron folder dialog attached to the application window, restoring, showing, and focusing that window first. Concurrent requests share one dialog; cancellation returns no path and failures remain retryable. Ordinary Web uses the Host chooser. Browse mode lists Host directories. On Linux without zenity or kdialog, automatic selection uses browse instead of the Electron dialog.
@@ -497,11 +507,15 @@ On first launch, including after an upgrade, Desktop creates this document if it
 {
   "updates": {
     "allowTestAuthPopupWindow": false
+  },
+  "web": {
+    "enabled": false,
+    "port": 3080
   }
 }
 ```
 
-Existing documents are never overwritten; an omitted `updates` object or field resolves to `false`. Set the field to `true` to permit test authentication dialogs, then fully quit and restart the application. Set it back to `false` and restart to suppress them again. Creation, read, or validation failures use the default `false` without blocking startup. Desktop attempts to warn through the Electron console with the file path; unavailable logging does not block startup. Correct the file and restart to apply an explicit setting. Unknown fields are preserved. Installation updates retain this user-data file; Windows uninstallation removes it under the [uninstall rules](#windows-uninstall-rules).
+Existing documents are never overwritten; an omitted `updates` object or field resolves to `false`, and an omitted `web` object or field resolves to disabled on port `3080`. Set `updates.allowTestAuthPopupWindow` to `true` to permit test authentication dialogs, then fully quit and restart the application. Set it back to `false` and restart to suppress them again. `web` is the [Web access](#web-access-for-this-machine-s-browsers) listener: a port outside `1` through `65535`, or a non-boolean `enabled`, is refused and the whole document falls back to the defaults below. Creation, read, or validation failures use those defaults without blocking startup. Desktop attempts to warn through the Electron console with the file path; unavailable logging does not block startup. Correct the file and restart to apply an explicit setting. Unknown fields are preserved, and a Web access change from Settings rewrites only the `web` object. Installation updates retain this user-data file; Windows uninstallation removes it under the [uninstall rules](#windows-uninstall-rules).
 
 <a id="mandatory-update-policy"></a>
 

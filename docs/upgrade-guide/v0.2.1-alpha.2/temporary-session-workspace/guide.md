@@ -15,7 +15,7 @@ The `workspace-controller` cordis.yml entry gains a `temporaryWorkspaceDirectory
 
 ## Migration
 
-1. **The `workspace-controller` entry now requires its Config.** `temporaryWorkspaceDirectory` is a required key, `documentsLookupTimeoutMs` is no longer optional, and the plugin constructor no longer defaults its argument. A cordis.yml row that supplied no `config` block, and any programmatic `new WorkspaceController(ctx)` with no argument, now fail to load. Supply the block with `temporaryWorkspaceDirectory: !!js undefined` to keep the derived default, or point it at a directory.
+1. **The `workspace-controller` entry now requires its Config.** `temporaryWorkspaceDirectory` is a required key, `documentsLookupTimeoutMs` is no longer optional, and the plugin constructor no longer defaults its argument. Programmatic construction — `new WorkspaceController(ctx)` with no argument — now fails to compile and to load. A cordis.yml row that omitted its `config` block still loads: the schema tolerates an absent or empty object, deriving `documentsLookupTimeoutMs` from its default and `temporaryWorkspaceDirectory` as unset. Supply the block with `temporaryWorkspaceDirectory: !!js undefined` to keep the derived default, or point it at a directory.
 2. No stored data changes: existing workspace storage records parse unchanged, because `temporarySessionIds` defaults to `[]`. No profile patch or Session file needs rewriting.
 3. To pin the temporary root, set it on Settings → General, or add `temporaryWorkspaceDirectory` to the `@deepseek-ai/dsh-api-workspace-controller` row in cordis.yml.
 4. Confirm the entry loads with no validation error and that a new temporary Session's directory lands under the configured root.

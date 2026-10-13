@@ -112,27 +112,36 @@ function useNativeDragAcceptance(active: boolean): void {
 function ViewOptionsMenu({
   groupBy, orderBy, archivedFilter, label, onGroupPick, onOrderPick, onArchivedFilterPick, t,
 }: {
-  groupBy: SessionGroupBy
+  /**
+   * Grouping mode this menu edits. Absent for a section that has no grouping
+   * of its own, which drops the group-by group rather than offering a control
+   * that would edit the whole region and unmount the section hosting it.
+   */
+  groupBy?: SessionGroupBy
   orderBy: SessionOrderBy
   archivedFilter: ArchivedFilter
   /** Accessible name distinguishing this menu from the other section's. */
   label: string
-  onGroupPick: (mode: SessionGroupBy) => void
+  /** Supplied together with {@link groupBy}; absent together with it. */
+  onGroupPick?: (mode: SessionGroupBy) => void
   onOrderPick: (mode: SessionOrderBy) => void
   onArchivedFilterPick: (filter: ArchivedFilter) => void
   t: WorkspaceBrowserProps['t']
 }) {
   const [open, setOpen] = useState(false)
+  const groupItems = groupBy === undefined ? [] : [
+    { type: 'label' as const, id: 'group-by', text: t('groupBy.label') },
+    { id: 'workspace', label: t('groupBy.workspace'), icon: <IconFolderCloseRegular /> },
+    { id: 'workspace-tree', label: t('groupBy.workspaceTree'), icon: <IconWorkspaceTreeOutlineRegular /> },
+    { id: 'flat', label: t('groupBy.flat'), icon: <IconFlatListOutlineRegular /> },
+    { type: 'separator' as const, id: 'order-by-separator' },
+  ]
   return (
     <Menu
       open={open}
       onClose={() => { setOpen(false) }}
       items={[
-        { type: 'label' as const, id: 'group-by', text: t('groupBy.label') },
-        { id: 'workspace', label: t('groupBy.workspace'), icon: <IconFolderCloseRegular /> },
-        { id: 'workspace-tree', label: t('groupBy.workspaceTree'), icon: <IconWorkspaceTreeOutlineRegular /> },
-        { id: 'flat', label: t('groupBy.flat'), icon: <IconFlatListOutlineRegular /> },
-        { type: 'separator' as const, id: 'order-by-separator' },
+        ...groupItems,
         { type: 'label' as const, id: 'order-by', text: t('orderBy.label') },
         { id: 'manual', label: t('orderBy.manual'), icon: <IconChevronsUpDownOutlineRegular /> },
         { id: 'updated', label: t('orderBy.updated'), icon: <IconClockOutlineRegular /> },
@@ -143,12 +152,12 @@ function ViewOptionsMenu({
         { id: 'only-archived', label: t('viewOptions.onlyArchived'), icon: <IconArchiveCheckOutlineRegular /> },
       ]}
       selectedIds={[
-        groupBy,
+        ...(groupBy === undefined ? [] : [groupBy]),
         orderBy,
         { default: 'hide-archived', show: 'show-archived', only: 'only-archived' }[archivedFilter],
       ]}
       onSelect={(id) => {
-        if (id === 'workspace' || id === 'workspace-tree' || id === 'flat') onGroupPick(id)
+        if (id === 'workspace' || id === 'workspace-tree' || id === 'flat') onGroupPick?.(id)
         else if (id === 'manual' || id === 'updated') onOrderPick(id)
         else if (id === 'hide-archived') onArchivedFilterPick('default')
         else if (id === 'show-archived') onArchivedFilterPick('show')
@@ -1496,11 +1505,9 @@ export function WorkspaceBrowser({
       shortcutAria={undefined}
       menu={(
         <ViewOptionsMenu
-          groupBy={groupBy}
           orderBy={temporaryOrderBy}
           archivedFilter={temporaryArchivedFilter}
           label={t('viewOptions.temporary.label')}
-          onGroupPick={actions.setGroupBy}
           onOrderPick={actions.setTemporaryOrderBy}
           onArchivedFilterPick={actions.setTemporaryArchivedFilter}
           t={t}
@@ -1663,11 +1670,12 @@ export function WorkspaceBrowser({
                     )}
                   </>
                 )}
-            <span className={css.fade} />
           </div>
         )}
+        {/* Outside the scroller: an absolutely positioned fade inside it would
+            scroll away with the rows instead of pinning to the visible bottom. */}
+        {wide && <span className={css.fade} />}
       </div>
-
       {/* Add flow + its error dialog (same package — direct composition). The
           menu portals, so its anchor's place in the tree does not matter. */}
       <WorkspacePickFlow

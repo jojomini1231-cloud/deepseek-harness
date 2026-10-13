@@ -144,6 +144,29 @@ describe('temporary Session creation', () => {
     // The stored directory is reused, so the adopting request creates nothing new.
     expect(ensureSession).toHaveBeenCalledWith(sessionId, stored, true, undefined)
   })
+
+  it('never classifies an adopted Session as temporary', async () => {
+    // The temporary set is the sole authorization for permanent deletion, so an
+    // adopting request must not be able to add an existing Session to it — an
+    // ordinary Session created directly under the temporary root is exactly the
+    // shape that would otherwise become deletable by asking.
+    const sessionId = SessionId('adopted-not-mine')
+    const stored = join(ROOT, 'adopted-not-mine')
+    const marked: string[] = []
+    const ctx = await temporaryContext({
+      observe: () => lease(stored),
+      registry: { markTemporarySession: (id: string) => { marked.push(id); return Promise.resolve() } },
+    })
+    const ensureSession = vi.fn(() => {
+      const session = ctx.sessions.create(sessionId, { meta: { cwd: stored } })
+      return Promise.resolve({ id: sessionId, session } as Agent)
+    })
+    const controller = new SessionCommandController(ctx, controllerAgents({ ensureSession }), '/default-workspace')
+
+    await expect(controller.create({ sessionId, temporary: true })).resolves.toMatchObject({ sessionId })
+
+    expect(marked).toEqual([])
+  })
 })
 
 describe('Workspace attachment after creation', () => {

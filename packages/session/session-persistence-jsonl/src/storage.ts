@@ -466,6 +466,29 @@ export class JsonlBackendTracker {
   }
 
   /**
+   * The open write handle bound to one id, or `undefined` when none is
+   * adopted yet — a mid-construction claim (`null`) counts as none, because
+   * that handle cannot append before it publishes.
+   * @param id - the session to look up.
+   * @returns the adopted write handle, or `undefined`.
+   */
+  writerHandle(id: SessionId): JsonlSessionHandle | undefined {
+    return this.writers.get(id) ?? undefined
+  }
+
+  /**
+   * Cancel a created-but-unmaterialized session: drop both its write claim
+   * and its pending entry, so the id becomes unknown to this process and the
+   * handle that later closes releases nothing. The deletion primitive calls
+   * this for a session that never reached durable storage.
+   * @param id - the created session to cancel.
+   */
+  cancelCreated(id: SessionId): void {
+    this.writers.delete(id)
+    this.pending.delete(id)
+  }
+
+  /**
    * Drop a pending entry once the session materialized durably.
    * @param id - the session that reached durable storage.
    */

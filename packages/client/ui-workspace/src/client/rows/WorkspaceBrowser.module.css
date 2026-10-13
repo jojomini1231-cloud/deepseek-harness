@@ -302,9 +302,12 @@
   display: flex;
   flex-direction: column;
   margin-right: calc(-1 * var(--dsh-session-list-edge-inset));
-  /* Kept out of the scroll clip so the absolutely positioned first-boundary
-     marker can occupy the gap above the first section header; the row insets
-     the scroller below would otherwise cancel move onto the scroller itself. */
+  /* Positioned ancestor for the bottom fade overlay, which must not scroll
+     with the rows; and kept out of the scroll clip so the absolutely
+     positioned first-boundary marker can occupy the gap above the first
+     section header. The row insets the scroller below carries would
+     otherwise cancel on the scroller itself. */
+  position: relative;
   overflow: visible;
 }
 
@@ -312,12 +315,13 @@
   margin-right: 0;
 }
 
-/* Relative for the bottom fade overlay, and now the region's ONLY scroll
-   container: the section headers scroll away with their rows, so both sections
-   share this clip instead of each owning one. Block children keep their design
-   heights under content overflow. The 2px edge offset, stable 5px themed
-   scrollbar, and remaining padding equal the shell's right inset, with or
-   without overflow, so moving the bar does not move the rows. */
+/* The region's ONLY scroll container — the section headers scroll away with
+   their rows, so both sections share this clip instead of each owning one —
+   and the positioned ancestor for the first-boundary drop marker that sits
+   above the first section header. Block children keep their design heights
+   under content overflow. The 2px edge offset, stable 5px themed scrollbar,
+   and remaining padding equal the shell's right inset, with or without
+   overflow, so moving the bar does not move the rows. */
 .treeBody {
   flex: 1;
   min-height: 0;
@@ -594,6 +598,14 @@
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-secondary);
+}
+
+/* The permanent-deletion dialog's irreversibility statement, above the list of work the confirmation also stops. */
+.deleteWarning {
+  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-state-error-primary);
 }
 
 /* The stop-and-archive dialog's list of work that will be stopped. */

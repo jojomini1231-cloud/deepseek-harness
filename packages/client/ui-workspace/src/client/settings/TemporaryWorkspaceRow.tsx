@@ -8,6 +8,7 @@ import { SettingsForm, SettingsValueField } from '@deepseek-ai/dsh-client-ui-pri
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { formLabels } from '../locales.ts'
 import type { TemporaryWorkspaceRowInjected } from './temporary-workspace-controller.ts'
+import { TEMPORARY_DIRECTORY_FIELD } from './temporary-workspace-controller.ts'
 import css from './TemporaryWorkspaceRow.module.css'
 
 /** Full Settings-row props: runtime share, locale seat, and the row's staged form face. */
@@ -39,8 +40,8 @@ export function TemporaryWorkspaceRow(props: TemporaryWorkspaceRowProps) {
           invalidLabel={t('temporaryDirectory.invalid')}
           disabled={disabled}
           {...state.directory}
-          onEdit={(text) => { props.edit('temporaryWorkspaceDirectory', text) }}
-          onReset={() => { props.resetField('temporaryWorkspaceDirectory') }}
+          onEdit={(text) => { props.edit(TEMPORARY_DIRECTORY_FIELD, text) }}
+          onReset={() => { props.resetField(TEMPORARY_DIRECTORY_FIELD) }}
         />
         <button
           type="button"

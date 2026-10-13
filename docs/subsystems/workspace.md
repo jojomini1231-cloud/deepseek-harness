@@ -618,6 +618,22 @@ unpinSession(sessionId: SessionId): Promise<void>
 markTemporarySession(sessionId: SessionId): Promise<void>
 
 /**
+ * Forget one session durably: drop it from the registry-global temporary,
+ * archive, and pin sets, and from every Workspace account that still lists
+ * it. The Host calls this after a temporary Session's log and directory are
+ * deleted, so no set keeps an id whose session no longer exists — nothing
+ * re-derives temporary membership, and the archive and pin sets are the
+ * only remaining references a grouping surface would render.
+ *
+ * The three set removals are one durable write; the account removals are
+ * one idempotent detach per owning Workspace. An id in none of them
+ * resolves without writing.
+ * @param sessionId - The deleted session to forget.
+ * @returns resolution after durability.
+ */
+forgetSession(sessionId: SessionId): Promise<void>
+
+/**
  * Resolve by canonical directory path without creating or mutating a
  * workspace. A missing path rejects during `realpath`; an existing unowned
  * directory returns `undefined`.

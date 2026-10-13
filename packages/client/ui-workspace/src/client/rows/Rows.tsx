@@ -680,11 +680,13 @@ export function SessionNodeItem({
           >
             {renderSlot(
               'sidebar.workspaces.session.menu.item',
-              { sessionId: node.id, displayTitle: row.title },
+              { sessionId: node.id, displayTitle: row.title, temporary: row.temporary },
               { hookContext: menuOpenState },
             )}
           </Menu>
-          {renderSlot('sidebar.workspaces.session.row.action', { sessionId: node.id, displayTitle: row.title })}
+          {renderSlot('sidebar.workspaces.session.row.action', {
+            sessionId: node.id, displayTitle: row.title, temporary: row.temporary,
+          })}
         </span>
       )}
     </div>

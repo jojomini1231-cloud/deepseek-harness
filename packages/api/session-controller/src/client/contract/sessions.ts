@@ -91,6 +91,17 @@ export interface ISessions {
     temporary?: true
   }): Promise<SessionId>
   /**
+   * Permanently delete one temporary Session: its stored log, its
+   * Session-local directory, and its classification. Irreversible, and
+   * refused for a Session outside the temporary set or one with subagent
+   * descendants.
+   * @param sessionId - the temporary Session to delete.
+   * @param options - `stopActivity` asks the Host to stop the Session's running work instead of refusing.
+   * @throws {SessionDeleteError} when the Host refuses; `session/active` means
+   *   running work must be stopped first, and its details name what runs.
+   */
+  delete(sessionId: SessionId, options?: { readonly stopActivity?: boolean }): Promise<void>
+  /**
    * Resolve an already discovered direct-parent address without opening it.
    * @param id - possible addressed child id.
    * @returns a retained, catalog-derived, or unknown-mode listed address, without retaining a new selection or scope.

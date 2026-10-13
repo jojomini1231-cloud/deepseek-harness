@@ -33,3 +33,23 @@ export interface DesktopUpdateView {
   readonly failed: boolean
   readonly opening: boolean
 }
+
+/** Web access preferences as the row writes them. */
+export interface DesktopWebAccessChoice {
+  readonly enabled: boolean
+  readonly port: number
+}
+
+/** Web access state as the row renders it. `address` never carries the launch token. */
+export interface DesktopWebAccessStatus extends DesktopWebAccessChoice {
+  readonly address: string | null
+  readonly restartRequired: boolean
+}
+
+/** Optional carrier API; it can open the Host's browser URL but never receives its token. */
+export interface DesktopWebAccessBridge {
+  status(): Promise<DesktopWebAccessStatus>
+  update(next: DesktopWebAccessChoice): Promise<DesktopWebAccessStatus>
+  open(): Promise<void>
+  subscribe(listener: (status: DesktopWebAccessStatus) => void): () => void
+}

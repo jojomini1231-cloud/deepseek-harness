@@ -80,6 +80,21 @@ afterEach(async () => {
 })
 
 describe('desktop host process', () => {
+  it('appends the supplied bind arguments and keeps the loopback default without them', async () => {
+    const runtime = projectWithHost(HTTP_HOST.replace('runtime: process.argv[2]',
+      'argv: process.argv.slice(2), runtime: process.argv[2]'))
+    const bound = new DesktopHostProcess(fixtureRuntime(false), runtime, runtime, undefined, process.env,
+      undefined, undefined, undefined, undefined, ['--host', '127.0.0.1', '--port', '4123'])
+    const plain = new DesktopHostProcess(fixtureRuntime(false), runtime, runtime, undefined, process.env)
+    hosts.push(bound, plain)
+    const boundBody = await (await fetch((await bound.start()).url)).json() as { argv: string[] }
+    const plainBody = await (await fetch((await plain.start()).url)).json() as { argv: string[] }
+    expect(boundBody.argv.at(-2)).toBe('--port')
+    expect(boundBody.argv.at(-1)).toBe('4123')
+    expect(plainBody.argv.at(-2)).toBe('--port')
+    expect(plainBody.argv.at(-1)).toBe('0')
+  })
+
   it('correlates task inspections and admission changes over private IPC', async () => {
     const host = hostProcess(projectWithHost())
     await expect(host.updateTasks('inspect')).rejects.toThrow('Host is unavailable')

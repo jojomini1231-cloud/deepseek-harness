@@ -7,9 +7,12 @@
  * ordinary Session row the tree needs comes from a seeded fixture reused
  * read-only (the seeded-history seed — no new recording).
  */
-import { readFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { mkdir, readFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { chromium, type Browser, type Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import {
@@ -21,6 +24,7 @@ import { newEnglishPage, saveFailureShot } from './support.ts'
 const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/temporary-workspace', import.meta.url))
 const SEED = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.v3.jsonl', import.meta.url))
 const SIDEBAR_EXPECTED = join(SNAPSHOT_DIR, 'sidebar.expected.md')
+const DELETED_EXPECTED = join(SNAPSHOT_DIR, 'deleted.expected.md')
 const MODE = webSnapshotMode()
 
 describe('web e2e: temporary workspace', () => {
@@ -90,6 +94,64 @@ describe('web e2e: temporary workspace', () => {
     )
 
     expect(tripwire.pageErrors).toEqual([])
-    await assertFixtureInventory(SNAPSHOT_DIR, ['sidebar.expected.md'])
+  })
+
+  it('deletes the temporary Session, its log, and its directory from the row menu', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-temporary-workspace-delete'))
+    const sidebar = page.locator('[class*="treeBody"]')
+    const temporaryTree = sidebar.getByRole('tree', { name: 'Temporary workspaces' })
+
+    // A provisional New Session row has no content yet and therefore no row
+    // verbs, so the Session this test deletes is seeded with a recorded turn
+    // and classified temporary, with its directory where the entry point would
+    // have put it. That keeps the model out of the case while exercising the
+    // same row the product renders.
+    const sessionId = brandString<SessionId>('temporary-workspace-delete-web-e2e')
+    const directory = join(
+      scaffold.workspaceCwd, 'Documents', 'deepseek-harness', 'temporary-workspaces', sessionId,
+    )
+    await mkdir(directory, { recursive: true })
+    await seedSession(scaffold, await readFile(SEED, 'utf8'), sessionId, undefined, { cwd: directory })
+    await scaffold.ctx.workspaceRegistry.markTemporarySession(sessionId)
+    await page.reload({ waitUntil: 'load' })
+    await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+
+    // The reload restores the blank New Session placeholder the first case
+    // left selected, and that row carries no verbs (nothing has happened in it
+    // yet), so the row under test is selected by its own seeded title.
+    const row = temporaryTree.getByRole('treeitem').filter({ hasText: 'Untitled' })
+    await row.waitFor({ timeout: 15_000 })
+    expect(existsSync(directory)).toBe(true)
+
+    // The row's "..." menu carries the deletion as its last, destructive entry.
+    await row.hover()
+    await row.getByRole('button', { name: /Session actions for/ }).click()
+    await page.getByRole('menuitem', { name: 'Delete session' }).click()
+
+    // Deletion is permanent, so it asks first and says so.
+    const dialog = page.getByRole('dialog', { name: 'Permanently delete this temporary session?' })
+    await dialog.waitFor({ timeout: 10_000 })
+    await dialog.getByRole('button', { name: 'Delete session' }).click()
+
+    // The row leaves the Temporary section and the Host removes both the
+    // stored log and the Session-local directory. The blank New Session
+    // placeholder the section always carries is not the row under test.
+    await expect.poll(() => row.count()).toBe(0)
+    // The section may hold Sessions another case created; this one must be gone.
+    expect(scaffold.ctx.workspaceRegistry.temporarySessionIds).not.toContain(sessionId)
+    await expect.poll(() => existsSync(directory)).toBe(false)
+    await expect.poll(async () => (await scaffold.ctx.sessionPersistence.stat(sessionId)) === undefined)
+      .toBe(true)
+
+    await compareOrRefreshGolden(
+      DELETED_EXPECTED,
+      await captureStableAria(page, '[class*="treeBody"]', scaffold.workspaceCwd),
+      MODE,
+    )
+
+    expect(tripwire.pageErrors).toEqual([])
+    // The one ordinary Session row the seeded fixture supplied is untouched.
+    expect(await sidebar.getByRole('treeitem').count()).toBe(3)
+    await assertFixtureInventory(SNAPSHOT_DIR, ['sidebar.expected.md', 'deleted.expected.md'])
   })
 })

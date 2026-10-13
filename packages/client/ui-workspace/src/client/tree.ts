@@ -75,6 +75,11 @@ export interface SessionNode {
   pinned: boolean
   /** In the registry-global archive set: shown grayed in place and not openable. */
   archived: boolean
+  /**
+   * In the registry-global temporary set: the row may be deleted permanently,
+   * because the Host owns a Session-local directory for it.
+   */
+  temporary: boolean
   updatedAt: number
 }
 
@@ -470,6 +475,7 @@ function sessionNode(
   statuses: SessionStatuses,
   pinned: ReadonlySet<SessionId>,
   archived: ReadonlySet<SessionId>,
+  temporary: ReadonlySet<SessionId>,
 ): SessionNode {
   const status = statuses.get(s.id)
   const pendingInteraction = visiblePendingKind(status?.pendingInteraction?.kind)
@@ -482,6 +488,7 @@ function sessionNode(
     completed: status?.completionUnread === true,
     pinned: !archived.has(s.id) && pinned.has(s.id),
     archived: archived.has(s.id),
+    temporary: temporary.has(s.id),
     updatedAt: s.updatedAt,
     ...(pendingInteraction === undefined ? {} : { pendingInteraction }),
   }
@@ -535,7 +542,7 @@ export function deriveGroups(
       containsCurrent: g.key === currentGroup,
       sessions: expanded
         ? sectionMembers(g.sessions, pinned, archived)
-          .map(session => sessionNode(session, list, statuses, pinned, archived))
+          .map(session => sessionNode(session, list, statuses, pinned, archived, temporary))
         : [],
     })
   }
@@ -628,6 +635,7 @@ export function deriveFlat(
 ): SessionNode[] {
   const archived = new Set(rowState.archivedSessionIds)
   const pinned = new Set(rowState.pinnedSessionIds)
+  const temporary = new Set(rowState.temporarySessionIds)
   const current = mainSessionId(list)
   const members = sessionIds.flatMap((id) => {
     const session = list.byId[id]
@@ -636,7 +644,7 @@ export function deriveFlat(
       : []
   })
   return sectionMembers(members, pinned, archived)
-    .map(session => sessionNode(session, list, statuses, pinned, archived))
+    .map(session => sessionNode(session, list, statuses, pinned, archived, temporary))
 }
 
 /**

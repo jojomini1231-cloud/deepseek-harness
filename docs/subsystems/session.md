@@ -865,6 +865,18 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
 @Remote('create') create(request: SessionCreateRequest): Promise<SessionCreateValue>
 
 /**
+ * Permanently delete one temporary Session: its stored log, its
+ * Session-local directory under the temporary root, and its classification.
+ * Refused for a Session outside the temporary set, for one with subagent
+ * descendants, and — unless `stopActivity` asks for the stops first — for
+ * one with running work.
+ * @param request - Session identity and whether to stop its running work.
+ * @param signal - caller lifetime; cancels the temporary root's native Documents lookup.
+ * @returns deletion confirmation.
+ */
+@Remote('delete') delete(request: SessionDeleteRequest, signal: AbortSignal): Promise<SessionDeleteValue>
+
+/**
  * Select one Session-local model after explicitly resuming the Session; save the default in the background.
  * @param request - Session identity and requested model selection.
  * @returns the normalized selection installed for the Session, without waiting for default persistence.

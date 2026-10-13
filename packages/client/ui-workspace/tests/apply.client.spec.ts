@@ -14,12 +14,15 @@ import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type { WorkspaceBrowserInjected, WorkspacePickerInjected } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import {
-  type ArchiveSessionInjected, type ForkSessionInjected, menuOpenStateFactory, type PinSessionInjected,
-  type RenameSessionInjected, type RowToastInjected, type SessionArchiveConfirmInjected, type SessionRenameDialogInjected,
+  type ArchiveSessionInjected, type DeleteSessionInjected, type ForkSessionInjected,
+  menuOpenStateFactory, type PinSessionInjected,
+  type RenameSessionInjected, type RowToastInjected, type SessionArchiveConfirmInjected,
+  type SessionDeleteConfirmInjected, type SessionRenameDialogInjected,
   type WorkspaceViewStoreHandle,
 } from '../src/client/contract/slots.ts'
 import { WorkspaceBrowser } from '../src/client/rows/WorkspaceBrowser.tsx'
 import { ArchiveSessionMenuItem, ArchiveSessionRowButton, SessionArchiveConfirmDialog } from '../src/client/session-actions/ArchiveSession.tsx'
+import { DeleteSessionMenuItem, DeleteSessionRowButton, SessionDeleteConfirmDialog } from '../src/client/session-actions/DeleteSession.tsx'
 import { ForkSessionMenuItem } from '../src/client/session-actions/ForkSession.tsx'
 import { PinSessionMenuItem, PinSessionRowButton } from '../src/client/session-actions/PinSession.tsx'
 import { RenameSessionMenuItem, SessionRenameDialog } from '../src/client/session-actions/RenameSession.tsx'
@@ -47,8 +50,9 @@ const workspaceState = (
   items: readonly WorkspaceView[],
   archivedSessionIds: readonly SessionId[] = [],
   pinnedSessionIds: readonly SessionId[] = [],
+  temporarySessionIds: readonly SessionId[] = [],
 ): WorkspaceSnapshot => ({
-  items, archivedSessionIds, pinnedSessionIds, temporarySessionIds: [], state: 'idle', phase: 'ready', error: null,
+  items, archivedSessionIds, pinnedSessionIds, temporarySessionIds, state: 'idle', phase: 'ready', error: null,
 })
 
 async function bench() {
@@ -108,6 +112,7 @@ async function bench() {
     operation: (reference: SessionReference) => unknown,
   ) => await operation(retain(target)))
   const fork = vi.fn<ISessions['fork']>(async () => sid('forked'))
+  const deleteSession = vi.fn<ISessions['delete']>(async () => undefined)
   const pinSession = vi.fn(async () => undefined)
   const unpinSession = vi.fn(async () => undefined)
   // The Host snapshots the injected hooks derive from and a pin's order write
@@ -144,6 +149,7 @@ async function bench() {
     subagentAddress: vi.fn(() => undefined),
     refreshProjections: vi.fn(() => Promise.resolve()),
     fork,
+    delete: deleteSession,
   } as never)
   const pickDirectory = vi.fn(() => Promise.resolve({ ok: true as const, value: '/projects/picked' }))
   const directoryPicker = { pick: pickDirectory }
@@ -158,6 +164,7 @@ async function bench() {
   return {
     ctx, slots: ctx.get('slots') as SlotRegistry, locale, create, rename,
     retain, using, selectPanel, search, renameSession, binding, fork, pickDirectory, pinSession, unpinSession,
+    deleteSession,
     workspacesSubscribe, initializeDefault, history, scope, sessionOf,
     setWorkspaces: (snapshot: WorkspaceSnapshot): void => { workspaceSnapshot = snapshot },
     setSessions: (snapshot: SessionListState): void => { sessionSnapshot = snapshot },
@@ -242,9 +249,9 @@ describe('ui-workspace apply', () => {
     await Promise.resolve()
     expect(after.slots.entries('conversation.hero.workspace')[0]!.component).toBe(WorkspacePicker)
     // The row actions follow the browser's own declaration, whenever it lands.
-    expect(after.slots.entries(MENU_ITEM)).toHaveLength(4)
-    expect(after.slots.entries(ROW_ACTION)).toHaveLength(2)
-    expect(after.slots.entries('shell.overlay')).toHaveLength(3)
+    expect(after.slots.entries(MENU_ITEM)).toHaveLength(5)
+    expect(after.slots.entries(ROW_ACTION)).toHaveLength(3)
+    expect(after.slots.entries('shell.overlay')).toHaveLength(4)
   })
 
   it('declares the two Session row lists and registers the shipped actions and overlay surfaces into them', async () => {
@@ -265,14 +272,17 @@ describe('ui-workspace apply', () => {
       ['rename', 200, RenameSessionMenuItem, 'workspace'],
       ['fork', 300, ForkSessionMenuItem, 'workspace'],
       ['archive', 400, ArchiveSessionMenuItem, 'workspace'],
+      ['delete', 500, DeleteSessionMenuItem, 'workspace'],
     ])
     expect(rows(ROW_ACTION)).toEqual([
       ['archive', 100, ArchiveSessionRowButton, 'workspace'],
       ['pin', 200, PinSessionRowButton, 'workspace'],
+      ['delete', 300, DeleteSessionRowButton, 'workspace'],
     ])
     expect(rows('shell.overlay')).toEqual([
       ['workspace.session-rename', undefined, SessionRenameDialog, 'workspace'],
       ['workspace.session-archive', undefined, SessionArchiveConfirmDialog, 'workspace'],
+      ['workspace.session-delete', undefined, SessionDeleteConfirmDialog, 'workspace'],
       ['workspace.row-toast', undefined, RowActionToast, 'workspace'],
     ])
     // The browser and the row toast declare the same viewing-store handle,
@@ -289,7 +299,7 @@ describe('ui-workspace apply', () => {
       expect(registration.store).toBeUndefined()
     }
     // Each share raises its own notices inside its callbacks.
-    for (const id of ['pin', 'archive']) {
+    for (const id of ['pin', 'archive', 'delete']) {
       expect(faceOf(entry(b.slots, MENU_ITEM, id))).not.toHaveProperty('notify')
       expect(faceOf(entry(b.slots, ROW_ACTION, id))).not.toHaveProperty('notify')
     }
@@ -458,6 +468,67 @@ describe('ui-workspace apply', () => {
     } finally {
       warn.mockRestore()
     }
+  })
+
+  it('opens the deletion confirmation for a temporary row; no deletion happens until it is confirmed', async () => {
+    const b = await bench()
+    b.setWorkspaces(workspaceState([], [], [], [sid('temp')]))
+    declare(b.slots, 'sidebar.workspaces', 'shell.overlay')
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const toast = faceOf(entry(b.slots, 'shell.overlay', 'workspace.row-toast')) as RowToastInjected
+    const del = faceOf(entry(b.slots, ROW_ACTION, 'delete')) as DeleteSessionInjected
+    const confirm = faceOf(entry(b.slots, 'shell.overlay', 'workspace.session-delete')) as SessionDeleteConfirmInjected
+
+    // Deletion is irreversible, so the row only asks; nothing is deleted yet.
+    del.requestSessionDelete(sid('temp'), 'Draft notes')
+    expect(confirm.hooks.deleteRequest.getSnapshot())
+      .toEqual({ sessionId: 'temp', displayTitle: 'Draft notes' })
+    expect(b.deleteSession).not.toHaveBeenCalled()
+    expect(toast.hooks.toast.getSnapshot()).toBeNull()
+
+    // Confirming deletes without a stop step when the Host reports no work.
+    await confirm.deleteSession(sid('temp'))
+    expect(b.deleteSession).toHaveBeenCalledWith('temp', {})
+    expect(toast.hooks.toast.getSnapshot()).toEqual({ kind: 'deleted', seq: 1 })
+    confirm.settleSessionDelete()
+    expect(confirm.hooks.deleteRequest.getSnapshot()).toBeNull()
+  })
+
+  it('answers the running-work refusal inside the dialog, which deletes with stopActivity', async () => {
+    const b = await bench()
+    b.setWorkspaces(workspaceState([], [], [], [sid('busy')]))
+    declare(b.slots, 'sidebar.workspaces', 'shell.overlay')
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const activity = [{ kind: 'turn' as const }, { kind: 'job' as const, items: [{ id: 'bash-1', label: 'pnpm run build' }] }]
+    const refusal = Object.assign(new Error('session delete failed: session/active: active'), {
+      name: 'SessionDeleteError',
+      rpcError: new RemoteError('session/active', 'active', { sessionId: sid('busy'), activity }),
+    })
+    b.deleteSession.mockRejectedValueOnce(refusal).mockResolvedValueOnce(undefined)
+    const confirm = faceOf(entry(b.slots, 'shell.overlay', 'workspace.session-delete')) as SessionDeleteConfirmInjected
+    const toast = faceOf(entry(b.slots, 'shell.overlay', 'workspace.row-toast')) as RowToastInjected
+
+    // The refusal is reported back to the open dialog as work, not raised as a
+    // failure: nothing is deleted and no notice appears.
+    await expect(confirm.deleteSession(sid('busy'))).resolves.toEqual(activity)
+    expect(b.deleteSession).toHaveBeenLastCalledWith('busy', {})
+    expect(toast.hooks.toast.getSnapshot()).toBeNull()
+    expect(confirm.hooks.deleteRequest.getSnapshot()).toBeNull()
+
+    // The dialog's second ask carries the stop step and raises the notice.
+    await confirm.deleteSession(sid('busy'), { stopActivity: true })
+    expect(b.deleteSession).toHaveBeenLastCalledWith('busy', { stopActivity: true })
+    expect(toast.hooks.toast.getSnapshot()).toEqual({ kind: 'deleted', seq: 1 })
+  })
+
+  it('keeps a deletion failure a rejection, so the dialog can report it', async () => {
+    const b = await bench()
+    b.setWorkspaces(workspaceState([], [], [], [sid('temp')]))
+    declare(b.slots, 'sidebar.workspaces', 'shell.overlay')
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const confirm = faceOf(entry(b.slots, 'shell.overlay', 'workspace.session-delete')) as SessionDeleteConfirmInjected
+    b.deleteSession.mockRejectedValueOnce(new Error('delete exploded'))
+    await expect(confirm.deleteSession(sid('temp'))).rejects.toThrow('delete exploded')
   })
 
   it('the notice share takes the notice down, undoes an archive, and shows the archived rows', async () => {
@@ -773,9 +844,9 @@ describe('ui-workspace apply', () => {
     declare(b.slots, 'sidebar.workspaces', 'conversation.hero.workspace', 'conversation.empty.workspace', 'shell.overlay')
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
-    expect(b.slots.entries(MENU_ITEM)).toHaveLength(4)
-    expect(b.slots.entries(ROW_ACTION)).toHaveLength(2)
-    expect(b.slots.entries('shell.overlay')).toHaveLength(3)
+    expect(b.slots.entries(MENU_ITEM)).toHaveLength(5)
+    expect(b.slots.entries(ROW_ACTION)).toHaveLength(3)
+    expect(b.slots.entries('shell.overlay')).toHaveLength(4)
     await fiber.dispose()
     expect(b.slots.entries('sidebar.workspaces')).toHaveLength(0)
     expect(b.slots.entries('conversation.hero.workspace')).toHaveLength(0)

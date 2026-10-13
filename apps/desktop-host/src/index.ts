@@ -16,9 +16,22 @@ import { installPlatformSessionPublisher } from './platform-session.ts'
 import { installOfficeEngineResolution } from './office-engine.ts'
 import { packageManagerEnvironment } from './node-mode.ts'
 
+/**
+ * The Web profile bind arguments Electron appended after the launcher-owned arguments.
+ * Positions 2..4 are the runtime directory, the project directory, and the primary-runtime
+ * path; the package-manager pair occupies 5 and 6 when present; anything after that is the
+ * `--host`/`--port` pair, which is absent on a launch that did not supply one.
+ * @param argv - this process's `process.argv`.
+ * @returns the trailing bind arguments, empty when Electron supplied none.
+ */
+export function hostBindArgs(argv: readonly string[]): string[] {
+  return argv.slice(argv[5] === undefined ? 5 : 7)
+}
+
 async function main(): Promise<void> {
   const runtimeDir = process.argv[2] as string
   const projectDir = process.argv[3] as string
+  const bindArgs = hostBindArgs(process.argv)
   installOfficeEngineResolution(runtimeDir)
   const installAnchor = join(runtimeDir, 'node_modules', '@deepseek-ai', 'dsh', 'package.json')
   const profile = loadProfileDirectory('dsh', projectDir, installAnchor)
@@ -28,7 +41,7 @@ async function main(): Promise<void> {
     profile: 'desktop',
     resolvedProfile: { profile, installAnchor },
     patchFiles: [],
-    args: ['--no-open', '--host', '127.0.0.1', '--port', '0'],
+    args: ['--no-open', '--host', '127.0.0.1', '--port', '0', ...bindArgs],
     ...(process.argv[5] === undefined ? {} : {
       packageManager: {
         command: process.execPath,

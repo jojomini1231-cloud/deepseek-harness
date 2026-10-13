@@ -166,6 +166,8 @@ export class DesktopHostProcess {
    *   `office-skills` resources fail Host startup.
    * @param packageManager - Bundled pnpm entry and Node launcher directory, scoped to package operations.
    * @param onPlatformSession - Private credential updates for embedded Platform views.
+   * @param bindArgs - Web profile bind arguments for the Host's listener, from {@link webAccessBindArgs};
+   *   omission keeps the OS-assigned loopback port the application has always used.
    */
   constructor(
     private readonly runtime: DesktopHostRuntime,
@@ -178,6 +180,7 @@ export class DesktopHostProcess {
     private readonly packageManager?: { readonly pnpm: string; readonly nodeBin: string },
 
     private readonly onPlatformSession?: (session: PlatformSession | null) => void,
+    private readonly bindArgs: readonly string[] = ['--host', '127.0.0.1', '--port', '0'],
   ) {}
 
   /**
@@ -195,6 +198,7 @@ export class DesktopHostProcess {
       this.projectDir,
       this.primaryRuntime ?? join(this.runtimeDir, '..', 'runtime', 'primary-runtime'),
       ...this.packageManager === undefined ? [] : [this.packageManager.pnpm, this.packageManager.nodeBin],
+      ...this.bindArgs,
     ], {
       cwd: this.projectDir,
       env: desktopNodeEnvironment(this.runtime, undefined, this.environment),

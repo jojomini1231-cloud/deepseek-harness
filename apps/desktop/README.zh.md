@@ -8,6 +8,16 @@
 
 Desktop 绑定 `127.0.0.1`，即 Electron 为就绪 URL 与 WebSocket 凭据过滤器拨号的地址。WebSocket 流按 Host 监听器使用 `ws:` 或 `wss:`；附加凭据要求 authority 与 scheme 均匹配。
 
+<a id="web-access-for-this-machine-s-browsers"></a>
+
+## 供本机浏览器访问
+
+设置 → 通用设置 → **浏览器访问**把系统分配的端口改成一个指定端口，本机浏览器即可通过 `http://127.0.0.1:<端口>` 访问正在运行的应用。此时在桌面窗口运行的会话会把执行轨迹实时推送到该浏览器，在那里输入的提示词也会进入同一个会话：实时流按查看方各自建立，会话本身接受来自任意一方的提示词。
+
+该选择存放在 `userData/desktop/settings.json`，并在启动时读取一次，因此开启、改端口或关闭都在应用下次启动时生效；当已存选择与正在监听的实例不一致时，该行会明确说明。端口默认为 `3080`，即 Web profile 自身的默认值；与正在运行的 `dsh --profile web` 使用同一端口会以既有的 `EADDRINUSE` 启动诊断失败，而不会被静默改到其他端口。
+
+该监听只绑定回环地址，且该行不会拿到启动令牌：它显示的地址不携带令牌，**在浏览器中打开**由主进程把完整的已认证 URL 交给操作系统。该令牌是进程凭据，请按凭据对待打开的 URL。
+
 应用菜单第一项“**关于 DeepSeek Harness**”打开 Electron 原生关于面板，展示应用图标、产品名称和当前安装的发布版本。菜单文案跟随桌面壳的语言。macOS 的隐藏、隐藏其他、显示全部和退出条目使用本地化文案，隐藏和退出条目包含 DeepSeek Harness 产品名称。这些条目保留原生动作和快捷键。macOS 从应用包读取图标，因此未打包的开发启动会显示 Electron 图标；Windows 使用随包分发的 PNG。
 
 Desktop 的本地原生目录流程打开绑定应用窗口的 Electron 文件夹对话框，并先恢复、显示和聚焦该窗口。并发请求共用一个对话框；取消不返回路径，失败后可以重试。普通 Web 使用 Host 选择器。浏览模式列出 Host 目录。Linux 缺少 zenity 或 kdialog 时，自动选择使用浏览模式，不使用 Electron 对话框。
@@ -499,11 +509,15 @@ Electron 主进程在启动时读取一次 `app.getPath('userData')/desktop/sett
 {
   "updates": {
     "allowTestAuthPopupWindow": false
+  },
+  "web": {
+    "enabled": false,
+    "port": 3080
   }
 }
 ```
 
-已有文件不会被覆盖；缺少 `updates` 对象或该字段时均按 `false` 处理。将字段设为 `true` 后完全退出并重启应用，即可允许测试鉴权弹窗。改回 `false` 并重启即可再次禁止。创建、读取或校验失败时使用默认值 `false`，不阻止启动。Desktop 尝试在 Electron 控制台记录包含文件路径的警告；日志不可用也不阻止启动。修正文件并重启后才会应用显式设置。未知字段会保留。安装更新保留此用户数据文件；Windows 卸载按[卸载规则](#windows-uninstall-rules)删除它。
+已有文件不会被覆盖；缺少 `updates` 对象或该字段时均按 `false` 处理，缺少 `web` 对象或其中的字段时按关闭、端口 `3080` 处理。将 `updates.allowTestAuthPopupWindow` 设为 `true` 后完全退出并重启应用，即可允许测试鉴权弹窗。改回 `false` 并重启即可再次禁止。`web` 是[浏览器访问](#web-access-for-this-machine-s-browsers)监听：端口超出 `1` 至 `65535`，或 `enabled` 不是布尔值，都会被拒绝，整份文档回退到下述默认值。创建、读取或校验失败时使用这些默认值，不阻止启动。Desktop 尝试在 Electron 控制台记录包含文件路径的警告；日志不可用也不阻止启动。修正文件并重启后才会应用显式设置。未知字段会保留，从设置界面修改浏览器访问只会重写 `web` 对象。安装更新保留此用户数据文件；Windows 卸载按[卸载规则](#windows-uninstall-rules)删除它。
 
 <a id="mandatory-update-policy"></a>
 

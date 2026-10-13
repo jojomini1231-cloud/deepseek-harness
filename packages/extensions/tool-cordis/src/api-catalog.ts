@@ -1981,6 +1981,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the Session identity and resolved preset when configured.',
       },
       {
+        signature: '@Remote(\'delete\') delete(request: SessionDeleteRequest, signal: AbortSignal): Promise<SessionDeleteValue>',
+        description: 'Permanently delete one temporary Session: its stored log, its Session-local directory under the temporary root, and its classification. Refused for a Session outside the temporary set, for one with subagent descendants, and — unless `stopActivity` asks for the stops first — for one with running work.',
+        parameters: [{ name: 'request', description: 'Session identity and whether to stop its running work.' }, { name: 'signal', description: 'caller lifetime; cancels the temporary root\'s native Documents lookup.' }],
+        returns: 'deletion confirmation.',
+      },
+      {
         signature: '@Remote(\'selectModel\') selectModel(request: SessionSelectModelRequest): Promise<SessionSelectModelValue>',
         description: 'Select one Session-local model after explicitly resuming the Session; save the default in the background.',
         parameters: [{ name: 'request', description: 'Session identity and requested model selection.' }],
@@ -2154,6 +2160,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'List every stored session visible to this process, in no promised order.',
         parameters: [{ name: 'options', description: 'optional cancellation.' }],
         returns: 'one snapshot per stored session.',
+      },
+      {
+        signature: 'abstract delete(id: SessionId, options?: SessionPersistenceDeleteOptions): Promise<void>',
+        description: 'Permanently delete one stored session\'s complete storage footprint.\n\nThe deletion is irreversible: after it resolves the id behaves as unknown for every subsequent operation, and a later `create` may reuse it. A created-but-unmaterialized session is cancelled and the call resolves — nothing was ever stored. A write handle still open on the id rejects with SessionAlreadyOwnedError: its later appends would recreate what this call removed. The deletion serializes against in-flight mutations on the same id, so no acknowledged append survives it.\n\nDerived state keyed by the id — projection caches, search indexes, and any consumer-owned row — is not this seam\'s to remove; a consumer that keeps such state observes the deletion through its own path.',
+        parameters: [{ name: 'id', description: 'the stored session to delete.' }, { name: 'options', description: 'optional cancellation.' }],
+        throws: ['{SessionPersistenceNotFoundError} when the session does not exist.', '{SessionAlreadyOwnedError} while a write handle holds the id.'],
       },
     ],
   },
@@ -3866,6 +3878,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'markTemporarySession(sessionId: SessionId): Promise<void>',
         description: 'Record one session as temporary durably. The Host calls this after the session exists; the id is not re-checked here because the caller just created it. Idempotent: an already-recorded id resolves without writing.',
         parameters: [{ name: 'sessionId', description: 'The session to record.' }],
+        returns: 'resolution after durability.',
+      },
+      {
+        signature: 'forgetSession(sessionId: SessionId): Promise<void>',
+        description: 'Forget one session durably: drop it from the registry-global temporary, archive, and pin sets, and from every Workspace account that still lists it. The Host calls this after a temporary Session\'s log and directory are deleted, so no set keeps an id whose session no longer exists — nothing re-derives temporary membership, and the archive and pin sets are the only remaining references a grouping surface would render.\n\nThe three set removals are one durable write; the account removals are one idempotent detach per owning Workspace. An id in none of them resolves without writing.',
+        parameters: [{ name: 'sessionId', description: 'The deleted session to forget.' }],
         returns: 'resolution after durability.',
       },
       {
@@ -6790,6 +6808,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionCreateValue {\n    readonly sessionId: SessionId;\n    readonly agentPreset?: string;\n}',
   },
   {
+    name: 'SessionDeleteRequest',
+    declaration: 'export interface SessionDeleteRequest {\n    readonly sessionId: SessionId;\n    readonly stopActivity?: boolean;\n}',
+  },
+  {
+    name: 'SessionDeleteValue',
+    declaration: 'export interface SessionDeleteValue {\n    readonly deleted: true;\n}',
+  },
+  {
     name: 'SessionEndInput',
     declaration: 'export interface SessionEndInput {\n    reason: \'clear\' | \'logout\' | \'prompt_input_exit\' | \'resume\' | \'other\';\n    sessionId: string;\n}',
   },
@@ -7016,6 +7042,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionPersistenceCreateOptions',
     declaration: 'export interface SessionPersistenceCreateOptions {\n    readonly signal?: AbortSignal;\n    readonly inheritedEventCount?: SessionLogOffset;\n}',
+  },
+  {
+    name: 'SessionPersistenceDeleteOptions',
+    declaration: 'export interface SessionPersistenceDeleteOptions {\n    readonly signal?: AbortSignal;\n}',
   },
   {
     name: 'SessionPersistenceListOptions',
