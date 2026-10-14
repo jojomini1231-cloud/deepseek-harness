@@ -111,6 +111,7 @@ export function apply(ctx: ClientContext): void {
         hooks: { webAccess: desktopWebAccess.store },
         update: next => desktopWebAccess.update(next),
         open: () => desktopWebAccess.open(),
+        copyLink: () => desktopWebAccess.copyLink(),
         portRange: WEB_ACCESS_PORT_RANGE,
         defaultPort: DEFAULT_WEB_ACCESS_PORT,
       }),

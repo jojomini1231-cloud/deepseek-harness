@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-10-13-desktop-web-access-published-authority.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-10-13-desktop-web-access-published-authority.md
+/agent-note-desktop-web-access-published-under-one-external-authority:
+  en: 7419a22802b0ba09
+  zh: b685b35508726906
+/agent-note-desktop-web-access-published-under-one-external-authority/problem:
+  en: 01f1bff2bc442cc3
+  zh: cd29e6bb9c919819
+/agent-note-desktop-web-access-published-under-one-external-authority/decision:
+  en: bad84e7de6372cad
+  zh: 68305af9511465d8
+/agent-note-desktop-web-access-published-under-one-external-authority/alternatives-considered:
+  en: 78b2827d027de37a
+  zh: 23960d5a2189de7f
+/agent-note-desktop-web-access-published-under-one-external-authority/consequences:
+  en: 5d65f0fdc41f4b34
+  zh: 084e72f8c4aad100

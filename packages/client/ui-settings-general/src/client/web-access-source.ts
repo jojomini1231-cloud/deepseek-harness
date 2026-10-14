@@ -47,6 +47,16 @@ export class DesktopWebAccessSource {
     await this.bridge.open()
   }
 
+  /**
+   * Ask the shell to put the published, authenticated URL on the system clipboard. The
+   * token it carries is spent inside the main process and never returned here.
+   * @returns Completion; rejection means nothing was copied.
+   */
+  async copyLink(): Promise<void> {
+    if (this.bridge === undefined) throw new Error('Desktop web access is unavailable')
+    await this.bridge.copyLink()
+  }
+
   /** Detach the carrier and ignore any pending status or action completion. */
   dispose(): void { this.live = false; this.unsubscribe?.() }
 }

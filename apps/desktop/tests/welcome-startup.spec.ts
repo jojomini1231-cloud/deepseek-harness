@@ -104,7 +104,7 @@ vi.mock('../src/tray.ts', () => ({ DesktopTray: class { relabel() {} dispose() {
 
 vi.mock('../src/paths.ts', () => ({ resolveDesktopPaths: () => ({ profile: '/profile' }) }))
 vi.mock('../src/settings.ts', () => ({
-  readDesktopSettings: () => ({ updates: { allowTestAuthPopupWindow: false }, web: { enabled: false, port: 3080 } }),
+  readDesktopSettings: () => ({ updates: { allowTestAuthPopupWindow: false }, web: { enabled: false, port: 3080, trustedHost: '' } }),
   writeWebAccessSettings: vi.fn(),
 }))
 vi.mock('../src/login-shell-environment.ts', async importOriginal => ({

@@ -57,18 +57,25 @@ it('limits product documents to update status and a native confirmation action',
   expect(electron.ipcRenderer.off).toHaveBeenCalledWith(DESKTOP_IPC.updatesPresentation, handler)
 })
 
-it('exposes web access status, its writer, and a browser action without the launch token', async () => {
+it('exposes web access status, its writers, and its two actions without the launch token', async () => {
   vi.stubGlobal('location', new URL('dsh-app://app/index.html'))
   await import('../src/preload-app.ts')
   const api = electron.contextBridge.exposeInMainWorld.mock.calls.find(([name]) => name === 'dshDesktop')?.[1] as DshDesktopProductApi
-  const status: DesktopWebAccessStatus = { enabled: true, port: 3080, address: '127.0.0.1:3080', restartRequired: false }
+  const status: DesktopWebAccessStatus = {
+    enabled: true, port: 3080, trustedHost: 'tunnel.example',
+    address: '127.0.0.1:3080', publicAddress: 'https://tunnel.example/', restartRequired: false,
+  }
   electron.ipcRenderer.invoke.mockResolvedValueOnce(status)
   expect(await api.webAccess.status()).toEqual(status)
   electron.ipcRenderer.invoke.mockResolvedValueOnce({ ...status, port: 4000 })
-  expect(await api.webAccess.update({ enabled: true, port: 4000 })).toMatchObject({ port: 4000 })
+  expect(await api.webAccess.update({ enabled: true, port: 4000, trustedHost: 'tunnel.example' })).toMatchObject({ port: 4000 })
   await api.webAccess.open()
+  await api.webAccess.copyLink()
   expect(electron.ipcRenderer.invoke.mock.calls).toEqual([
-    [DESKTOP_IPC.webAccessStatus], [DESKTOP_IPC.webAccessUpdate, { enabled: true, port: 4000 }], [DESKTOP_IPC.webAccessOpen],
+    [DESKTOP_IPC.webAccessStatus],
+    [DESKTOP_IPC.webAccessUpdate, { enabled: true, port: 4000, trustedHost: 'tunnel.example' }],
+    [DESKTOP_IPC.webAccessOpen],
+    [DESKTOP_IPC.webAccessCopyLink],
   ])
   const seen = vi.fn()
   const unsubscribe = api.webAccess.subscribe(seen)

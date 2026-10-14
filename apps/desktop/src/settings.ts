@@ -8,6 +8,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
+import { parseWebAccessEndpoint } from './web-access.ts'
 
 /**
  * Port bounds the shell accepts. 0 is excluded because it would hand the port back to
@@ -29,6 +30,12 @@ export interface DesktopWebAccessSettings {
   readonly enabled: boolean
   /** Port the listener binds while {@link enabled}; ignored while it is false. */
   readonly port: number
+  /**
+   * One external authority this listener is published under, or empty for none. A bare
+   * `host[:port]` derives its `https://` root; an absolute `http(s)://` URL also carries
+   * the mount prefix a proxy strips.
+   */
+  readonly trustedHost: string
 }
 
 /** Resolved shell preferences; absent fields use the defaults without rewriting existing files. */
@@ -39,7 +46,9 @@ export interface DesktopSettings {
   readonly web: DesktopWebAccessSettings
 }
 
-const DEFAULT_WEB_ACCESS: DesktopWebAccessSettings = { enabled: false, port: DEFAULT_WEB_ACCESS_PORT }
+const DEFAULT_WEB_ACCESS: DesktopWebAccessSettings = {
+  enabled: false, port: DEFAULT_WEB_ACCESS_PORT, trustedHost: '',
+}
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -78,7 +87,20 @@ function webAccessSection(value: unknown): DesktopWebAccessSettings {
   if (port !== undefined && !isWebAccessPort(port)) {
     throw new Error(`web.port must be an integer from ${String(MIN_WEB_ACCESS_PORT)} through ${String(MAX_WEB_ACCESS_PORT)}`)
   }
-  return { enabled: enabled ?? false, port: port ?? DEFAULT_WEB_ACCESS_PORT }
+  const trustedHost = value.trustedHost
+  if (trustedHost !== undefined && typeof trustedHost !== 'string') {
+    throw new Error('web.trustedHost must be a string')
+  }
+  // An unusable value is reported here, where the document-level fallback applies. Left
+  // to the boot that spends it, a hand-edited typo would abort startup instead.
+  if (trustedHost !== undefined && trustedHost !== '') {
+    parseWebAccessEndpoint(trustedHost, 'web.trustedHost')
+  }
+  return {
+    enabled: enabled ?? false,
+    port: port ?? DEFAULT_WEB_ACCESS_PORT,
+    trustedHost: trustedHost ?? '',
+  }
 }
 
 /**
@@ -146,6 +168,9 @@ export async function writeWebAccessSettings(userData: string, next: DesktopWebA
     if (!record(parsed)) throw new Error(`desktop settings: ${path} is not a JSON object`)
     document = parsed
   }
-  const stored = { ...document, web: { enabled: next.enabled, port: next.port } }
+  const stored = {
+    ...document,
+    web: { enabled: next.enabled, port: next.port, trustedHost: next.trustedHost },
+  }
   await writeFileAtomic(path, `${JSON.stringify(stored, null, 2)}\n`, { mode: 0o600, dirMode: 0o700 })
 }

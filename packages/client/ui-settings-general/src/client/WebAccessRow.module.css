@@ -23,6 +23,17 @@
   line-height: 18px;
 }
 
+/* Stated on the row itself, beside whatever the fields currently say. */
+.warning {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--dsw-radius-lg);
+  background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 8%, transparent);
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 12px;
+  line-height: 18px;
+}
+
 .controls {
   display: flex;
   flex-direction: column;
@@ -31,17 +42,29 @@
   flex: none;
 }
 
-.port {
+/* The port and the published domain are the same kind of value, so they render as one
+   field treatment in one width. The validation message stacks under its own field: as a
+   sibling on the label's line a long message re-opens the row's width past the settings
+   column and collapses the description beside it. */
+.field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
+.fieldLine {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.port input {
-  width: 96px;
+.field input {
+  width: 180px;
 }
 
-.portLabel {
+.fieldLabel {
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   line-height: 18px;
@@ -60,6 +83,29 @@
   line-height: 18px;
 }
 
+.iconAction {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.iconAction:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.iconAction:disabled {
+  cursor: default;
+}
+
 .notice {
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
@@ -68,7 +114,8 @@
 
 .invalid,
 .alert {
-  color: var(--dsw-alias-label-error, var(--dsw-alias-label-secondary));
+  max-width: 100%;
+  color: var(--dsw-alias-state-error-primary);
   font-size: 12px;
   line-height: 18px;
 }

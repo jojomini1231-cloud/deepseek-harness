@@ -86,13 +86,20 @@ describe('desktop host process', () => {
     const bound = new DesktopHostProcess(fixtureRuntime(false), runtime, runtime, undefined, process.env,
       undefined, undefined, undefined, undefined, ['--host', '127.0.0.1', '--port', '4123'])
     const plain = new DesktopHostProcess(fixtureRuntime(false), runtime, runtime, undefined, process.env)
-    hosts.push(bound, plain)
+    // A published launch appends the two advertising flags after the bind pair, so the
+    // pair is no longer the tail; the child's own slice must still find all of it.
+    const published = new DesktopHostProcess(fixtureRuntime(false), runtime, runtime, undefined, process.env,
+      undefined, undefined, undefined, undefined,
+      ['--host', '127.0.0.1', '--port', '4123', '--trusted-host', 'tunnel.example', '--public-url', 'https://tunnel.example/'])
+    hosts.push(bound, plain, published)
     const boundBody = await (await fetch((await bound.start()).url)).json() as { argv: string[] }
     const plainBody = await (await fetch((await plain.start()).url)).json() as { argv: string[] }
+    const publishedBody = await (await fetch((await published.start()).url)).json() as { argv: string[] }
     expect(boundBody.argv.at(-2)).toBe('--port')
     expect(boundBody.argv.at(-1)).toBe('4123')
     expect(plainBody.argv.at(-2)).toBe('--port')
     expect(plainBody.argv.at(-1)).toBe('0')
+    expect(publishedBody.argv.slice(-4)).toEqual(['--trusted-host', 'tunnel.example', '--public-url', 'https://tunnel.example/'])
   })
 
   it('correlates task inspections and admission changes over private IPC', async () => {

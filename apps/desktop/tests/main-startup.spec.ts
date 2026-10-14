@@ -236,6 +236,7 @@ const harness = await vi.hoisted(async () => {
     set publishUpdate(value: (state: DesktopUpdateState) => DesktopUpdateState) { publishUpdate = value },
     dialog: { showOpenDialog: vi.fn(), showErrorBox: vi.fn(), showMessageBox: vi.fn() },
     openExternal: vi.fn(async () => {}),
+    writeClipboard: vi.fn<(text: string) => Promise<void>>(async () => {}),
     protocolHandle: vi.fn<(scheme: string, handler: (request: Request) => Response | Promise<Response>) => void>(),
     applyRelease: vi.fn(() => { preparing.resolve(); return prepared.promise }),
     disableAllPlugins: vi.fn(async () => {
@@ -298,6 +299,7 @@ vi.mock('electron', () => ({
   BrowserWindow: harness.FakeWindow,
   dialog: harness.dialog,
   shell: { openExternal: harness.openExternal },
+  clipboard: { writeText: harness.writeClipboard },
   nativeTheme: harness.nativeTheme,
   net: { fetch: vi.fn() },
   ipcMain: {
@@ -495,32 +497,46 @@ describe('desktop main startup', () => {
     expect(readFileSync(path, 'utf8')).toBe(raw)
   })
 
-  it('binds the stored Web access port at startup and keeps the OS-assigned one while it is off', async () => {
+  it('binds the stored Web access port at startup and publishes a stored domain under it', async () => {
     const directory = join(harness.app.getPath('userData'), 'desktop')
     mkdirSync(directory, { recursive: true })
-    writeFileSync(join(directory, 'settings.json'), JSON.stringify({ web: { enabled: true, port: 4123 } }))
+    writeFileSync(join(directory, 'settings.json'), JSON.stringify({ web: { enabled: true, port: 4123, trustedHost: 'tunnel.example' } }))
     await workspaceReady()
-    expect(harness.hosts[0]!.bindArgs).toEqual(['--host', '127.0.0.1', '--port', '4123'])
+    // Both publishing flags are the Web profile's own; the shell derives them and adds nothing else.
+    expect(harness.hosts[0]!.bindArgs).toEqual([
+      '--host', '127.0.0.1', '--port', '4123',
+      '--trusted-host', 'tunnel.example', '--public-url', 'https://tunnel.example/',
+    ])
   })
 
   it('answers Web access status, persists an accepted change, and never hands the renderer the token', async () => {
     const directory = join(harness.app.getPath('userData'), 'desktop')
     mkdirSync(directory, { recursive: true })
     const path = join(directory, 'settings.json')
-    writeFileSync(path, JSON.stringify({ updates: { allowTestAuthPopupWindow: false }, web: { enabled: true, port: 4123 } }))
+    writeFileSync(path, JSON.stringify({
+      updates: { allowTestAuthPopupWindow: false },
+      web: { enabled: true, port: 4123, trustedHost: 'tunnel.example' },
+    }))
     await workspaceReady()
     expect(await invoke(DESKTOP_IPC.webAccessStatus, 'app')).toEqual({
-      enabled: true, port: 4123, address: '127.0.0.1:3080', restartRequired: false,
+      enabled: true, port: 4123, trustedHost: 'tunnel.example',
+      address: '127.0.0.1:3080', publicAddress: 'https://tunnel.example/', restartRequired: false,
     })
     // The running Host still binds the port the process started with, so a change asks for a restart.
-    expect(await invoke(DESKTOP_IPC.webAccessUpdate, 'app', { enabled: true, port: 4124 })).toEqual({
-      enabled: true, port: 4124, address: '127.0.0.1:3080', restartRequired: true,
+    expect(await invoke(DESKTOP_IPC.webAccessUpdate, 'app', { enabled: true, port: 4124, trustedHost: 'tunnel.example' })).toEqual({
+      enabled: true, port: 4124, trustedHost: 'tunnel.example',
+      address: '127.0.0.1:3080', publicAddress: 'https://tunnel.example/', restartRequired: true,
     })
     expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({
-      updates: { allowTestAuthPopupWindow: false }, web: { enabled: true, port: 4124 },
+      updates: { allowTestAuthPopupWindow: false },
+      web: { enabled: true, port: 4124, trustedHost: 'tunnel.example' },
     })
-    await expect(invoke(DESKTOP_IPC.webAccessUpdate, 'app', { enabled: true, port: 0 })).rejects.toThrow(/port must be an integer/)
-    await expect(invoke(DESKTOP_IPC.webAccessUpdate, 'app', { enabled: 'yes', port: 4124 })).rejects.toThrow(/enabled must be true or false/)
+    await expect(invoke(DESKTOP_IPC.webAccessUpdate, 'app', { enabled: true, port: 0, trustedHost: '' })).rejects.toThrow(/port must be an integer/)
+    await expect(invoke(DESKTOP_IPC.webAccessUpdate, 'app', { enabled: 'yes', port: 4124, trustedHost: '' })).rejects.toThrow(/enabled must be true or false/)
+    await expect(invoke(DESKTOP_IPC.webAccessUpdate, 'app', { enabled: true, port: 4124 })).rejects.toThrow(/trusted host must be text/)
+    // A value the Host would refuse fails at the settings write, naming the reason.
+    await expect(invoke(DESKTOP_IPC.webAccessUpdate, 'app', { enabled: true, port: 4124, trustedHost: 'tunnel.example:' }))
+      .rejects.toThrow(/trusted host .*non-canonical spelling/)
     expect(readFileSync(path, 'utf8')).not.toContain('token')
     await invoke(DESKTOP_IPC.webAccessOpen, 'app')
     expect(harness.openExternal).toHaveBeenCalledWith('http://127.0.0.1:3080/?token=test')
@@ -528,16 +544,53 @@ describe('desktop main startup', () => {
     expect(() => invoke(DESKTOP_IPC.webAccessStatus, 'shell')).toThrow('unowned renderer')
   })
 
-  it('refuses the browser action while Web access is off', async () => {
+  it('copies the authenticated published link straight to the clipboard, returning nothing', async () => {
     const directory = join(harness.app.getPath('userData'), 'desktop')
     mkdirSync(directory, { recursive: true })
-    writeFileSync(join(directory, 'settings.json'), JSON.stringify({ web: { enabled: false, port: 4123 } }))
+    writeFileSync(join(directory, 'settings.json'), JSON.stringify({
+      web: { enabled: true, port: 4123, trustedHost: 'https://tunnel.example/ui/' },
+    }))
     await workspaceReady()
+    // A published root is advertised, not routed, so the token rides it as written.
+    expect(await invoke(DESKTOP_IPC.webAccessCopyLink, 'app')).toBeUndefined()
+    expect(harness.openExternal).not.toHaveBeenCalled()
+    expect(harness.writeClipboard).toHaveBeenCalledExactlyOnceWith('https://tunnel.example/ui/?token=test')
+    // This handler awaits its clipboard write, so its refusals reject rather than throw.
+    await expect(invoke(DESKTOP_IPC.webAccessCopyLink, 'shell')).rejects.toThrow('unowned renderer')
+    // A clipboard that refuses the write must reach the row, not report success: the
+    // handler awaits it precisely so the row shows the copy failure instead of "Copied".
+    harness.writeClipboard.mockRejectedValueOnce(new Error('clipboard unavailable'))
+    await expect(invoke(DESKTOP_IPC.webAccessCopyLink, 'app')).rejects.toThrow(/clipboard unavailable/)
+  })
+
+  it('refuses the browser and copy actions while Web access is off', async () => {
+    const directory = join(harness.app.getPath('userData'), 'desktop')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'settings.json'), JSON.stringify({ web: { enabled: false, port: 4123, trustedHost: 'tunnel.example' } }))
+    await workspaceReady()
+    // A configured domain on a disabled listener binds exactly what it bound before.
+    expect(harness.hosts[0]!.bindArgs).toEqual(['--host', '127.0.0.1', '--port', '0'])
+    // The status describes the running listener: a disabled one publishes no root, and
+    // `restartRequired` is what tells the row a stored change is waiting.
     expect(await invoke(DESKTOP_IPC.webAccessStatus, 'app')).toEqual({
-      enabled: false, port: 4123, address: null, restartRequired: false,
+      enabled: false, port: 4123, trustedHost: 'tunnel.example',
+      address: null, publicAddress: null, restartRequired: false,
     })
     expect(() => invoke(DESKTOP_IPC.webAccessOpen, 'app')).toThrow(/not running/)
+    await expect(invoke(DESKTOP_IPC.webAccessCopyLink, 'app')).rejects.toThrow(/not running/)
     expect(harness.openExternal).not.toHaveBeenCalled()
+    expect(harness.writeClipboard).not.toHaveBeenCalled()
+  })
+
+  it('publishes no link while the running listener has no domain, even with the setting on', async () => {
+    const directory = join(harness.app.getPath('userData'), 'desktop')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'settings.json'), JSON.stringify({ web: { enabled: true, port: 4123 } }))
+    await workspaceReady()
+    expect(await invoke(DESKTOP_IPC.webAccessStatus, 'app')).toEqual({
+      enabled: true, port: 4123, trustedHost: '', address: '127.0.0.1:3080', publicAddress: null, restartRequired: false,
+    })
+    await expect(invoke(DESKTOP_IPC.webAccessCopyLink, 'app')).rejects.toThrow(/no published address/)
   })
 
   it('falls back to the default Web access settings when the settings document is invalid', async () => {
@@ -548,7 +601,7 @@ describe('desktop main startup', () => {
     await workspaceReady()
     expect(harness.hosts[0]!.bindArgs).toEqual(['--host', '127.0.0.1', '--port', '0'])
     expect(await invoke(DESKTOP_IPC.webAccessStatus, 'app')).toEqual({
-      enabled: false, port: 3080, address: null, restartRequired: false,
+      enabled: false, port: 3080, trustedHost: '', address: null, publicAddress: null, restartRequired: false,
     })
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining(path), expect.any(Error))
   })

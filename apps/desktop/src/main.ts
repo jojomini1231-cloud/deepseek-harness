@@ -52,7 +52,7 @@ import { desktopClientMetadata, desktopClientVersion } from './client-metadata.t
 import { DesktopMandatoryUpdateWindow } from './mandatory-update-window.ts'
 import { DesktopPolicyTestAuth } from './policy-test-auth.ts'
 import { MAX_WEB_ACCESS_PORT, MIN_WEB_ACCESS_PORT, readDesktopSettings, writeWebAccessSettings } from './settings.ts'
-import { webAccessAddress, webAccessBindArgs, webAccessRestartRequired } from './web-access.ts'
+import { webAccessAddress, webAccessBindArgs, webAccessLink, webAccessPublicAddress, webAccessRestartRequired, parseWebAccessEndpoint } from './web-access.ts'
 import { DesktopUpdateDialog, type UpdateDialogOptions } from './update-dialog.ts'
 import { readDesktopRuntime } from './runtime-tree.ts'
 import { DesktopBrowserGuests } from './browser-guests.ts'
@@ -742,7 +742,10 @@ async function main(): Promise<void> {
     const stored = readDesktopSettings(app.getPath('userData')).web
     return {
       ...stored,
+      // Both addresses describe the running listener, so neither is named before the
+      // Host has reported the port it bound.
       address: hostBoundPort === undefined ? null : webAccessAddress(startedWebAccess, hostBoundPort),
+      publicAddress: hostBoundPort === undefined ? null : webAccessPublicAddress(startedWebAccess),
       restartRequired: webAccessRestartRequired(stored, startedWebAccess),
     }
   }
@@ -758,13 +761,16 @@ async function main(): Promise<void> {
   ipcMain.handle(DESKTOP_IPC.webAccessUpdate, async (event, next: unknown) => {
     assertProductSender(event)
     if (typeof next !== 'object' || next === null) throw new Error('dsh desktop: web access update must be an object')
-    const { enabled, port } = next as { enabled?: unknown; port?: unknown }
+    const { enabled, port, trustedHost } = next as { enabled?: unknown; port?: unknown; trustedHost?: unknown }
     if (typeof enabled !== 'boolean') throw new Error('dsh desktop: web access enabled must be true or false')
     if (typeof port !== 'number' || !Number.isInteger(port)
       || port < MIN_WEB_ACCESS_PORT || port > MAX_WEB_ACCESS_PORT) {
       throw new Error(`dsh desktop: web access port must be an integer from ${String(MIN_WEB_ACCESS_PORT)} through ${String(MAX_WEB_ACCESS_PORT)}`)
     }
-    await writeWebAccessSettings(app.getPath('userData'), { enabled, port })
+    if (typeof trustedHost !== 'string') throw new Error('dsh desktop: web access trusted host must be text')
+    // A value the Host would refuse fails at the settings write, naming the reason.
+    if (trustedHost !== '') parseWebAccessEndpoint(trustedHost, 'dsh desktop: web access trusted host')
+    await writeWebAccessSettings(app.getPath('userData'), { enabled, port, trustedHost })
     const status = webAccessStatus()
     publishWebAccess()
     return status
@@ -775,6 +781,14 @@ async function main(): Promise<void> {
     // never returned to the renderer.
     if (!startedWebAccess.enabled || hostUrl === undefined) throw new Error('dsh desktop: web access is not running')
     return shell.openExternal(hostUrl)
+  })
+  ipcMain.handle(DESKTOP_IPC.webAccessCopyLink, async (event) => {
+    assertProductSender(event)
+    if (!startedWebAccess.enabled || hostUrl === undefined) throw new Error('dsh desktop: web access is not running')
+    const link = webAccessLink(startedWebAccess, hostUrl)
+    if (link === null) throw new Error('dsh desktop: web access has no published address to copy')
+    // Await the write: a clipboard failure must reach the row rather than report success.
+    await clipboard.writeText(link)
   })
 
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['ws://127.0.0.1/*', 'wss://127.0.0.1/*'] }, (details, callback) => {

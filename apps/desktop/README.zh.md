@@ -18,6 +18,12 @@ Desktop 绑定 `127.0.0.1`，即 Electron 为就绪 URL 与 WebSocket 凭据过�
 
 该监听只绑定回环地址，且该行不会拿到启动令牌：它显示的地址不携带令牌，**在浏览器中打开**由主进程把完整的已认证 URL 交给操作系统。该令牌是进程凭据，请按凭据对待打开的 URL。
 
+该行可选的**信任域名**把该监听公开在一个外部 authority 下，供转发到它的隧道或反向代理使用。它可以填裸主机名加可选端口（`app.example.com:8443`），也可以填完整的 `http(s)://` URL，其路径即代理会剥掉的挂载前缀。桌面壳据此生成 Web profile 的 `--trusted-host` 与 `--public-url`，因此同一个值既让浏览器信任围栏接受该 authority，也发布浏览器使用的根地址。只发布不授予信任，只授权也不对外显示，两者都必须提供，且都由该字段提供。
+
+从隧道域名访问的浏览器没有可用的会话：cookie 是 host-only 且绑定签发它的 authority，在 `127.0.0.1` 上取得的 cookie 不会被发送，索引请求只会返回鉴权提示页。**复制链接**会把完整 URL（携带启动令牌的公开根地址）写入系统剪贴板，供在另一台设备上打开一次；该请求会用令牌换取绑定隧道 authority 的 cookie。该链接是有效凭据，且与直接交给浏览器的 URL 不同，它会留在剪贴板中，剪贴板管理器或系统剪贴板同步可能长期保留。Host 子进程还会把自身的 `dsh web:` 行打印到本应用的标准输出，配置了域名后该行给出的是公开根地址而非回环地址。令牌一直都在该行中，改变的是它能从多远的地方生效，因此被记录下来的终端或日志中会留下一条在域名可达范围内任意位置都能访问该监听器的链接。
+
+在非回环 authority 下公开会改变 Host 的目录选择器：它会选用浏览器内选择器而非本机原生对话框，因为本机没有任何选择器能服务远端浏览器。此时桌面窗口改为浏览目录，而不再打开文件夹对话框。这两个旗标以及此类部署需要提供的条件见 [Web 应用参考](../../packages/bundle/web-app/README.zh.md#public-deployments)。
+
 应用菜单第一项“**关于 DeepSeek Harness**”打开 Electron 原生关于面板，展示应用图标、产品名称和当前安装的发布版本。菜单文案跟随桌面壳的语言。macOS 的隐藏、隐藏其他、显示全部和退出条目使用本地化文案，隐藏和退出条目包含 DeepSeek Harness 产品名称。这些条目保留原生动作和快捷键。macOS 从应用包读取图标，因此未打包的开发启动会显示 Electron 图标；Windows 使用随包分发的 PNG。
 
 Desktop 的本地原生目录流程打开绑定应用窗口的 Electron 文件夹对话框，并先恢复、显示和聚焦该窗口。并发请求共用一个对话框；取消不返回路径，失败后可以重试。普通 Web 使用 Host 选择器。浏览模式列出 Host 目录。Linux 缺少 zenity 或 kdialog 时，自动选择使用浏览模式，不使用 Electron 对话框。
@@ -512,12 +518,13 @@ Electron 主进程在启动时读取一次 `app.getPath('userData')/desktop/sett
   },
   "web": {
     "enabled": false,
-    "port": 3080
+    "port": 3080,
+    "trustedHost": ""
   }
 }
 ```
 
-已有文件不会被覆盖；缺少 `updates` 对象或该字段时均按 `false` 处理，缺少 `web` 对象或其中的字段时按关闭、端口 `3080` 处理。将 `updates.allowTestAuthPopupWindow` 设为 `true` 后完全退出并重启应用，即可允许测试鉴权弹窗。改回 `false` 并重启即可再次禁止。`web` 是[浏览器访问](#web-access-for-this-machine-s-browsers)监听：端口超出 `1` 至 `65535`，或 `enabled` 不是布尔值，都会被拒绝，整份文档回退到下述默认值。创建、读取或校验失败时使用这些默认值，不阻止启动。Desktop 尝试在 Electron 控制台记录包含文件路径的警告；日志不可用也不阻止启动。修正文件并重启后才会应用显式设置。未知字段会保留，从设置界面修改浏览器访问只会重写 `web` 对象。安装更新保留此用户数据文件；Windows 卸载按[卸载规则](#windows-uninstall-rules)删除它。
+已有文件不会被覆盖；缺少 `updates` 对象或该字段时均按 `false` 处理，缺少 `web` 对象或其中的字段时按关闭、端口 `3080`、无信任域名处理。将 `updates.allowTestAuthPopupWindow` 设为 `true` 后完全退出并重启应用，即可允许测试鉴权弹窗。改回 `false` 并重启即可再次禁止。`web` 是[浏览器访问](#web-access-for-this-machine-s-browsers)监听：端口超出 `1` 至 `65535`、`enabled` 不是布尔值，或 `trustedHost` 不是裸 `host[:port]` 或完整的 `http(s)://` URL，都会被拒绝，整份文档回退到下述默认值。从设置界面写入时会校验同样的取值并说明原因，因此被拒绝的草稿不会写入文件。创建、读取或校验失败时使用这些默认值，不阻止启动。Desktop 尝试在 Electron 控制台记录包含文件路径的警告；日志不可用也不阻止启动。修正文件并重启后才会应用显式设置。未知字段会保留，从设置界面修改浏览器访问只会重写 `web` 对象。安装更新保留此用户数据文件；Windows 卸载按[卸载规则](#windows-uninstall-rules)删除它。
 
 <a id="mandatory-update-policy"></a>
 

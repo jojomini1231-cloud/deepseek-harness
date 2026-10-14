@@ -38,18 +38,23 @@ export interface DesktopUpdateView {
 export interface DesktopWebAccessChoice {
   readonly enabled: boolean
   readonly port: number
+  /** One external authority to publish the listener under, or empty for none. */
+  readonly trustedHost: string
 }
 
 /** Web access state as the row renders it. `address` never carries the launch token. */
 export interface DesktopWebAccessStatus extends DesktopWebAccessChoice {
   readonly address: string | null
+  /** Advertised root this listener is published under; also never carries the launch token. */
+  readonly publicAddress: string | null
   readonly restartRequired: boolean
 }
 
-/** Optional carrier API; it can open the Host's browser URL but never receives its token. */
+/** Optional carrier API; it can open or copy the Host's browser URL but never receives its token. */
 export interface DesktopWebAccessBridge {
   status(): Promise<DesktopWebAccessStatus>
   update(next: DesktopWebAccessChoice): Promise<DesktopWebAccessStatus>
   open(): Promise<void>
+  copyLink(): Promise<void>
   subscribe(listener: (status: DesktopWebAccessStatus) => void): () => void
 }

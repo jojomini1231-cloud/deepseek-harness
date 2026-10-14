@@ -30,6 +30,7 @@ export const DESKTOP_IPC = {
   webAccessStatus: 'dsh-desktop:web-access-status',
   webAccessUpdate: 'dsh-desktop:web-access-update',
   webAccessOpen: 'dsh-desktop:web-access-open',
+  webAccessCopyLink: 'dsh-desktop:web-access-copy-link',
   webAccessChanged: 'dsh-desktop:web-access-changed',
   nativeThemeSet: 'dsh-desktop:native-theme-set',
   windowFullscreen: 'dsh-desktop:window-fullscreen',
@@ -94,13 +95,16 @@ export interface DshDesktopProductApi {
     subscribe(listener: (state: DesktopUpdatePresentation) => void): () => void
   }
   /**
-   * Web access for this machine's browsers. `address` is safe to render; the launch
-   * token lives only in the main process, which `open()` spends on the caller's behalf.
+   * Web access for this machine's browsers. `address` and `publicAddress` are safe to
+   * render; the launch token lives only in the main process, which `open()` and
+   * `copyLink()` spend on the caller's behalf. `copyLink()` puts a live, reusable
+   * credential on the system clipboard, so the recipient shares it deliberately.
    */
   readonly webAccess: {
     status(): Promise<DesktopWebAccessStatus>
     update(next: DesktopWebAccessChoice): Promise<DesktopWebAccessStatus>
     open(): Promise<void>
+    copyLink(): Promise<void>
     subscribe(listener: (status: DesktopWebAccessStatus) => void): () => void
   }
 }
@@ -109,6 +113,8 @@ export interface DshDesktopProductApi {
 export interface DesktopWebAccessChoice {
   readonly enabled: boolean
   readonly port: number
+  /** One external authority to publish the listener under, or empty for none. */
+  readonly trustedHost: string
 }
 
 /** Web access state as the product page renders it. */
@@ -118,6 +124,8 @@ export interface DesktopWebAccessStatus extends DesktopWebAccessChoice {
    * Never carries the launch token.
    */
   readonly address: string | null
+  /** Advertised root this listener is published under, otherwise null. Never carries the launch token. */
+  readonly publicAddress: string | null
   /** Whether the stored choice differs from the one the running Host was started with. */
   readonly restartRequired: boolean
 }

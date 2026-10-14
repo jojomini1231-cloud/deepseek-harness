@@ -59,6 +59,7 @@ function createProductApi(): DshDesktopProductApi {
       status: () => ipcRenderer.invoke(DESKTOP_IPC.webAccessStatus) as Promise<DesktopWebAccessStatus>,
       update: next => ipcRenderer.invoke(DESKTOP_IPC.webAccessUpdate, next) as Promise<DesktopWebAccessStatus>,
       open: () => ipcRenderer.invoke(DESKTOP_IPC.webAccessOpen) as Promise<void>,
+      copyLink: () => ipcRenderer.invoke(DESKTOP_IPC.webAccessCopyLink) as Promise<void>,
       subscribe(listener) {
         const handle = (_event: Electron.IpcRendererEvent, status: DesktopWebAccessStatus): void => { listener(status) }
         ipcRenderer.on(DESKTOP_IPC.webAccessChanged, handle)
