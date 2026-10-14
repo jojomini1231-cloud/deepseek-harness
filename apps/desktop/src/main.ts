@@ -1080,15 +1080,19 @@ async function main(): Promise<void> {
     tray?.relabel()
   }
   refreshApplicationMenu()
-  const trayIconPath = development ? join(app.getAppPath(), 'resources', 'tray-windows.ico') : join(process.resourcesPath, 'tray.ico')
-  if (process.platform === 'win32') {
+  const trayIconPath = development
+    ? join(app.getAppPath(), 'resources', process.platform === 'win32' ? 'tray-windows.ico' : 'tray-linux.png')
+    : join(process.resourcesPath, process.platform === 'win32' ? 'tray.ico' : 'tray.png')
+  if (process.platform === 'win32' || process.platform === 'linux') {
     // The tray is the way back to a hidden window; without it, relaunching the application still focuses it.
+    // Linux needs a StatusNotifierItem host — GNOME shows the icon only with its AppIndicator
+    // extension — and a failed creation keeps Linux quitting on close, because then no way back exists.
     try {
       tray = new DesktopTray({ iconPath: trayIconPath, locale: currentDesktopLocale,
         open: () => { focusPrimaryWindow() }, quit: () => { app.quit() } })
     } catch (error) { console.warn('desktop tray: unavailable', error) }
   }
-  const backgroundNotice = process.platform === 'win32'
+  const backgroundNotice = process.platform === 'win32' || process.platform === 'linux'
     ? new DesktopBackgroundNotice({ markerPath: join(app.getPath('userData'), 'background-close-confirmed'),
       locale: () => locale, show: ordinaryMessageBox, focus: () => { updateDialog.focus() } })
     : undefined
@@ -1183,11 +1187,10 @@ async function main(): Promise<void> {
         return
       }
       if (quitting || shellInstallerOwnsQuit || sessionEnding) return
-      // The drawn close control is a quit, not a hide: an ordinary close leaves
-      // the process running with no way back on a platform that ships no tray.
-      // app.quit() enters the same confirmation the menu and shortcuts use, and
-      // the guard above keeps a click during shutdown from joining it again.
-      app.quit()
+      // The drawn close control follows the window's own close event, which hides to the
+      // tray when one exists and quits when Linux could not create it. The close event
+      // owns that decision, so the control only forwards the closure request.
+      window.close()
     })
   }
 
@@ -1200,6 +1203,21 @@ async function main(): Promise<void> {
       window.hide()
     }
   }
+  /**
+   * The one close decision behind the window's own close event and the drawn Linux close
+   * control: hide to the tray where one exists, quit where Linux could not create it.
+   */
+  const closeMainWindow = (window: BrowserWindow): void => {
+    if (quitting || shellInstallerOwnsQuit || sessionEnding) return
+    if (updateDialog.isOpen) { updateDialog.focus(); return }
+    // Without the tray a hidden Linux window has no way back, so the close keeps quitting.
+    if (process.platform === 'linux' && tray === undefined) { app.quit(); return }
+    const hide = (): void => {
+      if (!quitting && !shellInstallerOwnsQuit && !sessionEnding && !window.isDestroyed()) hideMainWindow(window)
+    }
+    if (backgroundNotice === undefined) hide()
+    else backgroundNotice.close(hide)
+  }
   const createMainWindow = (): BrowserWindow => {
     const window = createWindow(appPreload, false, true)
     mainWindow = window
@@ -1211,16 +1229,7 @@ async function main(): Promise<void> {
     window.on('close', (event) => {
       if (quitting || shellInstallerOwnsQuit || sessionEnding) return
       event.preventDefault()
-      if (updateDialog.isOpen) { updateDialog.focus(); return }
-      // Linux ships no tray, so a hide would leave a running application with no
-      // way back to its window; the drawn close control and the window's own
-      // close both quit, through the same confirmation.
-      if (process.platform === 'linux') { app.quit(); return }
-      const hide = (): void => {
-        if (!quitting && !shellInstallerOwnsQuit && !sessionEnding && !window.isDestroyed()) hideMainWindow(window)
-      }
-      if (backgroundNotice === undefined) hide()
-      else backgroundNotice.close(hide)
+      closeMainWindow(window)
     })
     if (process.platform === 'win32') {
       // Shutdown, restart, and log-off must not wait on a confirmation. query-session-end is only a

@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.1-alpha.2/linux-tray-close-hides/guide.md
+/:
+  en: 1a6aab1691bd9fb4
+  zh: b5662ce19c904211
+/linux-desktop-closes-to-the-tray:
+  en: 0588046276e8cf76
+  zh: 78609adfb33152f8
+/linux-desktop-closes-to-the-tray/change:
+  en: cc8b39ff4c8ba957
+  zh: 382a05d2333a908f
+/linux-desktop-closes-to-the-tray/migration:
+  en: 5b224a027f9a725b
+  zh: 2b03590a912ccd27

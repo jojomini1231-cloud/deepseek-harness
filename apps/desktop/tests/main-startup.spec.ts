@@ -199,11 +199,14 @@ const harness = await vi.hoisted(async () => {
   const analytics = vi.fn(async (_event: unknown) => {})
   const nativeTheme = { themeSource: 'system', shouldUseDarkColors: false }
   const trays: FakeTray[] = []
+  let trayFailure = false
   class FakeTray extends EventEmitter {
     readonly setToolTip = vi.fn()
     readonly setContextMenu = vi.fn()
     readonly destroy = vi.fn()
-    constructor(readonly image: unknown) { super(); trays.push(this) }
+    constructor(readonly image: unknown) {
+      super(); if (trayFailure) throw new Error('no StatusNotifierItem host'); trays.push(this)
+    }
   }
   const backgroundNotice = { close: vi.fn((hide: () => void) => { hide() }), dispose: vi.fn(), markerPath: undefined as string | undefined }
   const shellDialog = { isOpen: false, focus: vi.fn() }
@@ -211,6 +214,8 @@ const harness = await vi.hoisted(async () => {
     failWindow(error: Error) { windowFailure = error },
     windows, hosts, handlers, app, FakeWindow, FakeHost, powerMonitor, nativeTheme, analytics,
     trays, FakeTray, backgroundNotice, shellDialog,
+    get trayFailure() { return trayFailure },
+    set trayFailure(value: boolean) { trayFailure = value },
     menu, popup, socketHeaders: vi.fn(), loginShell, readLoginShell, updateCheck, updateDownload, updateInstall,
     platformDispose,
     platformCloseAndWait,
@@ -265,6 +270,7 @@ const harness = await vi.hoisted(async () => {
       powerMonitor.removeAllListeners()
       app.isPackaged = true
       windowFailure = undefined
+      trayFailure = false
       pluginsEnabled = false
       closeWindowsOnQuit = false
       prepareUpdate = undefined
@@ -1161,7 +1167,9 @@ describe('desktop main startup', () => {
     // Null rather than an empty template: Electron would otherwise install its
     // built-in default menu, which reappears on Alt.
     expect(harness.menu.setApplicationMenu).toHaveBeenLastCalledWith(null)
-    expect(harness.menu.buildFromTemplate).not.toHaveBeenCalled()
+    // The tray context menu is the only native menu Linux builds.
+    expect(harness.trays).toHaveLength(1)
+    expect(harness.trays[0]!.setContextMenu).toHaveBeenCalled()
   })
 
   it('drives minimize, maximize, and close from the drawn Linux controls', async () => {
@@ -1185,7 +1193,10 @@ describe('desktop main startup', () => {
     expect(window.unmaximize).toHaveBeenCalledOnce()
     expect(window.webContents.send).toHaveBeenLastCalledWith(DESKTOP_IPC.windowMaximized, false)
     handler(event, 'close')
-    expect(harness.app.quit).toHaveBeenCalled()
+    // The drawn control forwards the closure to the window's own close path, which
+    // hides to the tray rather than quitting while a way back exists.
+    expect(window.hide).toHaveBeenCalledOnce()
+    expect(harness.app.quit).not.toHaveBeenCalled()
   })
 
   it('relays the Linux maximize state after each change and page load', async () => {
@@ -1211,18 +1222,48 @@ describe('desktop main startup', () => {
     expect(sent()).toHaveLength(relayed)
   })
 
-  it('quits rather than hides when the Linux window is closed', async () => {
-    // Linux ships no tray, so a hidden window would leave a running application
-    // the user cannot get back.
+  it('hides the Linux window on close and reopens it from the tray', async () => {
+    // The tray is the way back to a hidden window; Linux needs a StatusNotifierItem
+    // host — GNOME shows the icon only with its AppIndicator extension.
     vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
-    await import('../src/main.ts')
-    await harness.preparing.promise
+    const host = await readyWorkspace()
     const window = harness.windows[0]!
-    const event = { preventDefault: vi.fn() }
-    window.emit('close', event)
-    expect(event.preventDefault).toHaveBeenCalled()
-    expect(harness.app.quit).toHaveBeenCalled()
+    expect(harness.trays).toHaveLength(1)
+    expect(harness.trays[0]!.image).toEqual({ path: join('desktop-test-resources', 'tray.png') })
+    window.show.mockClear()
+    window.close()
+    expect(window.isDestroyed()).toBe(false)
+    expect(window.hide).toHaveBeenCalledOnce()
+    expect(host.stop).not.toHaveBeenCalled()
+    expect(harness.app.quit).not.toHaveBeenCalled()
+    expect(harness.backgroundNotice.close).toHaveBeenCalledOnce()
+    // libappindicator hosts fire no tray click; the context menu reopens the window.
+    const template = harness.menu.buildFromTemplate.mock.lastCall![0]
+    const open = template.find((item: { label?: string }) => item.label === en.openApplication)!
+    ;(open as { click: () => void }).click()
+    expect(window.show).toHaveBeenCalledOnce()
+    harness.app.emit('second-instance')
+    expect(window.show).toHaveBeenCalledTimes(2)
+  })
+
+  it('quits rather than hides when the Linux tray cannot be created', async () => {
+    // Without a tray a hidden Linux window has no way back, so the close keeps quitting.
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+    harness.trayFailure = true
+    const host = await readyWorkspace()
+    const window = harness.windows[0]!
+    expect(harness.trays).toHaveLength(0)
+    // Startup hides the window once while the welcome flow runs over it.
+    window.hide.mockClear()
+    window.emit('close', { preventDefault: vi.fn() })
     expect(window.hide).not.toHaveBeenCalled()
+    expect(harness.backgroundNotice.close).not.toHaveBeenCalled()
+    harness.app.quit()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(host.stop).toHaveBeenCalledOnce()
+    await host.stopping.promise
+    host.exited.resolve()
+    await harness.quitCompleted.promise
   })
 
   it.each(['en-US', 'zh-CN'])('localizes macOS application commands without changing the application name (%s)', async (locale) => {

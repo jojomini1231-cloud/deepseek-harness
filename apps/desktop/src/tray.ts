@@ -1,11 +1,17 @@
-/** Windows system tray: the always-present way back to a hidden window and the explicit quit entry. */
+/**
+ * System tray: the always-present way back to a hidden window and the explicit quit entry.
+ *
+ * Windows always shows the icon. Linux needs a StatusNotifierItem host — GNOME shows it
+ * only with its AppIndicator extension — and libappindicator hosts fire no click event,
+ * so their context menu is the interaction; the menu still offers open and quit.
+ */
 
 import { Menu, nativeImage, Tray } from 'electron'
 import type { DesktopLocale } from './locale.ts'
 
 /** Main-process actions the tray triggers; both run the same paths as the window and application menu. */
 export interface DesktopTrayOptions {
-  /** Multi-size ICO rendered by `scripts/render-tray-icon.ts`; Windows picks the bitmap for the display scale. */
+  /** Multi-size ICO (`tray-windows.ico`, Windows) or single PNG (`tray-linux.png`) rendered by `scripts/render-tray-icon.ts`. */
   readonly iconPath: string
   readonly locale: () => DesktopLocale
   /** Show and focus the primary window. */
