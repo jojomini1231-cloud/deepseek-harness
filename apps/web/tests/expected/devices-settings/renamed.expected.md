@@ -1,0 +1,33 @@
+- dialog "设置":
+  - navigation:
+    - text: 设置
+    - button "通用设置"
+    - button "模型"
+    - button "内置插件"
+    - button "Agent 预设"
+    - button "设备管理"
+  - button "打开配置文件"
+  - button "关闭"
+  - heading "设备管理" [level=2]
+  - paragraph: 登录过本部署的浏览器。撤销会立刻让它退出登录，只有重新打开 dsh web 打印的链接才能回来。
+  - list:
+    - listitem:
+      - text: Chrome · Linux Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36
+      - term: 最近活跃
+      - definition: {{age}}
+      - term: 首次访问
+      - definition: {{age}}
+      - term: 地址
+      - definition: 127.0.0.1
+      - button "重命名 Chrome · Linux": 重命名
+      - button "撤销 Chrome · Linux": 撤销
+    - listitem:
+      - text: 构建机 node
+      - term: 最近活跃
+      - definition: {{age}}
+      - term: 首次访问
+      - definition: {{age}}
+      - term: 地址
+      - definition: 127.0.0.1
+      - button "重命名 构建机": 重命名
+      - button "撤销 构建机": 撤销

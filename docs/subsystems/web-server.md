@@ -139,9 +139,86 @@ authorizeIndex(request: ConnectionIndexRequest, response: ConnectionIndexRespons
  * @returns tokenized URL for initial login; a mount proxy strips its prefix before {@link authorizeIndex}.
  */
 authenticatedUrl(baseUrl: string): string
+
+/**
+ * Bind browser authentication to the device registry that records and may
+ * revoke the browsers reaching this deployment. Every launch-token exchange
+ * is recorded there, and a cookie bound to a revoked device stops
+ * authenticating. The attachment belongs to the calling context, so its
+ * unload detaches the registry; a second live attachment is refused.
+ * @param store - registry owned by the Host surface that manages devices.
+ * @returns asynchronous disposer detaching this registry.
+ */
+attachBrowserDevices(store: BrowserDeviceStore): () => Promise<void>
 ```
 
 Source: [`packages/client/connection/src/rpc.ts`](../../packages/client/connection/src/rpc.ts)
+
+<a id="ctxdevicecontroller--devicecontroller"></a>
+
+### `ctx.deviceController` — `DeviceController`
+
+Browser-device registry and its Remote face. The class is both the BrowserDeviceStore Connection consults and the owner of the `devices` namespace the Settings page calls.
+
+```ts cordis-catalog
+/**
+ * Record the browser that just exchanged the launch token, reusing the record
+ * its verified cookie already names when this deployment still knows it.
+ * @param session - facts the exchange observed.
+ * @returns the device id the minted cookie is bound to.
+ */
+open(session: BrowserDeviceSession): BrowserDeviceId
+
+/**
+ * Whether one device may still authenticate. Once the durable roster has been
+ * read, only a recorded device is admitted. Before that, the answer is true
+ * only inside the configured grace: an open that rejected, or one still unread
+ * past the grace, admits nothing, because an unanswerable revocation question
+ * must not become an admission.
+ * @param id - device bound to the presented cookie.
+ * @returns true while the device has not been revoked.
+ */
+admits(id: BrowserDeviceId): boolean
+
+/**
+ * Record one authenticated request. Memory always moves so the list shows a
+ * live `lastSeenAt`; the durable record follows at most once a minute.
+ * @param id - device bound to the presented cookie.
+ */
+touch(id: BrowserDeviceId): void
+
+/**
+ * List every device that reached this deployment, most recently active first.
+ * Waits for queued writes so the list is what the roster has recorded, not
+ * what it is still writing.
+ * @returns one view per recorded device.
+ */
+@Remote async list(): Promise<BrowserDeviceView[]>
+
+/**
+ * Set or clear one device's label.
+ * @param id - device to relabel.
+ * @param name - new label; an empty or whitespace-only value clears it.
+ * @returns the device as the list now reads it.
+ * @throws RemoteError with `devices/unknown` when the id is malformed or this
+ * deployment never recorded it, or `devices/rejected` when the label is too long.
+ */
+@Remote async rename(id: string, name: string): Promise<BrowserDeviceView>
+
+/**
+ * Revoke one device. Its signed cookie stops authenticating at the next
+ * request, and the durable delete commits before this returns: the browser
+ * must open the URL printed by `dsh web` again to return, and it returns as a
+ * new device. A delete that fails restores the record and rejects, so a
+ * revocation this call reports as failed is one a restart cannot readmit.
+ * @param id - device to revoke.
+ * @throws RemoteError with `devices/unknown` when the id is malformed or this
+ * deployment never recorded it; a failed durable delete rejects as well.
+ */
+@Remote async revoke(id: string): Promise<void>
+```
+
+Source: [`packages/api/device-controller/src/index.ts`](../../packages/api/device-controller/src/index.ts)
 
 <a id="ctxwebserver--webserver"></a>
 

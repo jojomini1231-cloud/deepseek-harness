@@ -74,6 +74,7 @@ kind: "package-group"
 | [`ui-agent-preset/`](ui-agent-preset/README.zh.md) | 选择会话的 agent 预设并编写预设组合 | — |
 | [`ui-settings/`](ui-settings/README.zh.md) | 承载设置界面及其扩展区域 | — |
 | [`ui-settings-general/`](ui-settings-general/README.zh.md) | 提供常规设置分区 | — |
+| [`ui-settings-devices/`](ui-settings-devices/README.zh.md) | 列出登录过本部署的浏览器，支持重命名与吊销 | — |
 | [`ui-settings-models/`](ui-settings-models/README.zh.md) | 提供模型提供方配置与 DeepSeek 引导 | — |
 | [`ui-settings-shell/`](ui-settings-shell/README.zh.md) | 在插件页提供终端设置页 | — |
 | [`ui-settings-agent-loop/`](ui-settings-agent-loop/README.zh.md) | 在插件页提供 Agent 循环设置页 | — |

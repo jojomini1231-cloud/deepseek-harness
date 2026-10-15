@@ -150,6 +150,13 @@
     - id: settings-controller
       name: '@deepseek-ai/dsh-api-settings-controller'
 
+    # The browser-device roster: records every launch-token exchange through the
+    # Connection authentication seam and serves the Settings device page over
+    # Typert Remote. Its row lives here because only this bundle composes the
+    # Connection carrier it records through.
+    - id: device-controller
+      name: '@deepseek-ai/dsh-api-device-controller'
+
     # Workspace commands and reconnect-safe projection over Typert Remote.
     - id: workspace-controller
       name: '@deepseek-ai/dsh-api-workspace-controller'
@@ -306,6 +313,12 @@
 
     - id: ui-settings-models
       name: '@deepseek-ai/dsh-client-ui-settings-models'
+
+    # Device management: the browsers that signed in to this deployment, over
+    # the Host device-controller row mounted above. Absent that row the page
+    # never registers, so a deployment without a roster shows no trace of it.
+    - id: ui-settings-devices
+      name: '@deepseek-ai/dsh-client-ui-settings-devices'
 
     # Plugin management: the sidebar Plugins page installs, enables, disables,
     # and removes the profile's bundles through the `pluginManager` Remote.

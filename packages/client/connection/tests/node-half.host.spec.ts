@@ -20,32 +20,7 @@ import {
 } from '../src/index.ts'
 import { DEFAULT_MAX_REQUEST_BODY_BYTES } from '../src/http-bridge.ts'
 import { provideBrowserCredentials } from './browser-credentials.ts'
-
-/** Structural webServer fake recording both route registries. */
-function fakeHttpServer(
-  routes: WebRoute[],
-  upgrades: WebUpgradeRoute[],
-  host = '127.0.0.1',
-  protocol: WebServer['protocol'] = 'http:',
-): Pick<WebServer, 'register' | 'registerUpgrade' | 'tapIndex' | 'port' | 'host' | 'protocol'> {
-  return {
-    host,
-    protocol,
-    register(route) {
-      if (routes.some(candidate => candidate.kind === route.kind && candidate.path === route.path)) {
-        throw new Error(`duplicate route ${route.path}`)
-      }
-      routes.push(route)
-      return () => { routes.splice(routes.indexOf(route), 1) }
-    },
-    registerUpgrade(route) {
-      upgrades.push(route)
-      return () => { upgrades.splice(upgrades.indexOf(route), 1) }
-    },
-    tapIndex: () => () => {},
-    port: 0,
-  }
-}
+import { fakeHttpServer } from './fake-http-server.ts'
 
 /** Bodyless GET carrying the given headers (enough for the trust fence + bridge). */
 function fakeRequest(headers: Record<string, string>, url = `${API_PATH}/session.list`): IncomingMessage {

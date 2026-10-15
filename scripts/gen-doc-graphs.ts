@@ -159,7 +159,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'client-connection',
     title: 'Authenticated browser transport',
     mode: 'core',
-    consumers: ['api-gateway', 'host-frontend-static'],
+    consumers: ['api-device-controller', 'api-gateway', 'host-frontend-static'],
     note: 'Owns browser authentication and shared HTTP request dispatch; API adapters register endpoints and streams.',
   },
   {
@@ -321,6 +321,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Projects the user-settings seam onto the generated Remote namespace: the read is always redacted and every refusal is classified here, not on the seam Definition.',
   },
   {
+    key: 'deviceController',
+    pkg: 'api-device-controller',
+    title: 'Host browser-device roster controller',
+    mode: 'core',
+    note: 'Implements the connection browser-device registry: it records launch-token exchanges durably and answers revocation on the request path from an in-memory index.',
+  },
+  {
     key: 'workspaceFiles',
     pkg: 'api-workspace-files',
     title: 'Host workspace file Remote service',
@@ -476,7 +483,7 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'storage-domain',
     title: 'Domain data facility',
     mode: 'core',
-    consumers: ['workspace'],
+    consumers: ['api-device-controller', 'workspace'],
     note: 'Waits for every configured backend, then publishes the domain form as one lifecycle-bound service for typed durable state.',
   },
   {

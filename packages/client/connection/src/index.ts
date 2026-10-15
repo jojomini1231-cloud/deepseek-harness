@@ -15,6 +15,9 @@ import { ConnectionRecoveryConfigSchema, resolveConnectionConfig, type Connectio
 
 export type {
   PeerAdmission,
+  BrowserDeviceId,
+  BrowserDeviceSession,
+  BrowserDeviceStore,
   ConnectionFetchMethod,
   ConnectionFetchHandler,
   ConnectionFetchRoute,

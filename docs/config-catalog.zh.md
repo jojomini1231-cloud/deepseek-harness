@@ -178,6 +178,35 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-agent-tool-presentation -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-api-device-controller -->
+<a id="deepseek-aidsh-api-device-controller"></a>
+
+## `@deepseek-ai/dsh-api-device-controller`
+
+- `inject`: `storageDomain` · `connection`
+- `source`: [`packages/api/device-controller/src/index.ts:46`](../packages/api/device-controller/src/index.ts)
+
+```ts config-catalog
+/** Deployment-varying roster limits, changeable from `cordis.yml`. */
+export interface Config {
+  /**
+   * How long an unread roster may keep admitting unknown devices after the store
+   * attaches. Bounds the fail-open window a Host restart opens; a load still
+   * unread past it refuses, so a stalled open cannot readmit a revoked browser
+   * for the process lifetime. Tighten it to shrink the window at the cost of
+   * refusing browsers for longer after a restart. @default 10000
+   */
+  rosterLoadGraceMs?: number
+  /**
+   * Most devices the roster keeps. Enrolling beyond it retires the device whose
+   * last authenticated request is oldest, so a deployment that keeps minting
+   * identities cannot grow the durable table without bound. @default 100
+   */
+  maxDevices?: number
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-api-device-controller -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-api-gateway -->
 <a id="deepseek-aidsh-api-gateway"></a>
 
@@ -444,7 +473,7 @@ export type Config = LocalConfig
 ## `@deepseek-ai/dsh-client-connection`
 
 - `inject`: `credentials`
-- `source`: [`packages/client/connection/src/index.ts:92`](../packages/client/connection/src/index.ts)
+- `source`: [`packages/client/connection/src/index.ts:95`](../packages/client/connection/src/index.ts)
 
 ```ts config-catalog
 /** Browser authentication, request limits, and connection recovery configuration. */
@@ -4542,6 +4571,7 @@ export interface Config {
 | `@deepseek-ai/dsh-client-ui-session` | — | [`packages/client/ui-session/src/index.ts`](../packages/client/ui-session/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-settings` | — | [`packages/client/ui-settings/src/index.ts`](../packages/client/ui-settings/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-settings-agent-loop` | — | [`packages/client/ui-settings-agent-loop/src/index.ts`](../packages/client/ui-settings-agent-loop/src/index.ts) |
+| `@deepseek-ai/dsh-client-ui-settings-devices` | — | [`packages/client/ui-settings-devices/src/index.ts`](../packages/client/ui-settings-devices/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-settings-general` | — | [`packages/client/ui-settings-general/src/index.ts`](../packages/client/ui-settings-general/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-settings-plugin-inventory` | — | [`packages/client/ui-settings-plugin-inventory/src/index.ts`](../packages/client/ui-settings-plugin-inventory/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-settings-plugins` | — | [`packages/client/ui-settings-plugins/src/index.ts`](../packages/client/ui-settings-plugins/src/index.ts) |

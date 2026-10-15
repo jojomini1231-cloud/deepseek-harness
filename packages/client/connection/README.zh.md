@@ -40,11 +40,15 @@ kind: "package-reference"
 
 cookie 签名密钥是 `ctx.credentials` 中由 `client-connection/browser-session` 拥有的 grant 记录。本地提供方把它持久化到 `$DSH_HOME/.credentials.yaml`；`BrowserAuth` 在 Connection 激活期间加载或创建该记录，并把密钥留在内存中，因此请求认证同步执行。删除或替换该记录会在下一次 Connection 激活时生效。cookie 携带绝对签发与过期区间，`cookieMaxAgeDays` 默认设为 30 天，并在确定性名称与签名 payload 中同时绑定规范化 hostname 和 port。它是 host-only、`Path=/`、`HttpOnly`、`SameSite=Strict`；收到该 index 请求的监听器提供 TLS 时才带上 `Secure`，且只由该监听器自身的协议决定，`publicUrl` 声明与转发头都不参与判断。
 
+挂载了设备注册表时，签名 payload 还会携带该次交换登记的设备 id，于是浏览器身份属于认证器本身，而不是另一枚同源上任何脚本都能伪造的可读 cookie。没有该字段的 payload 仍按原有方式通过认证，且不属于任何一行，因此无法按设备吊销；而该字段存在但不是非空字符串时，整枚 cookie 判定失败，而不是降级成那种旧格式——接纳它等于把权限交给一个注册表看不见的会话。两条规则都由 Connection 自己执行，因此 `admits` 只会被问到真实的设备 id。
+
 HTTPS cookie 名称与签名 audience 包含 `https:` scheme，因此即使 hostname 和 port 相同，HTTP cookie 也无法通过 TLS 监听器的认证。默认端口按监听器的 scheme 归一化。既有 HTTP cookie audience 保持不变。
 
 认证之前，每个请求都经过 `src/api-request-trust.ts`。其 `Host` 必须是 loopback、等于监听器的绑定 IP 字面量（端口不限），或与 `trustedHosts` 条目匹配：带端口的 `host:port` 精确匹配，不带端口的条目匹配任意端口。Host 与配置条目按监听器的 scheme 做 WHATWG 默认端口归一化，不采信转发 header 或 `Origin`。附带的 HTTP(S) `Origin` 必须指向同一 authority；此时按 Origin 的 scheme 解析 Host，以支持 HTTPS 代理转发到 HTTP 上游；`sec-fetch-site: cross-site` 一律拒绝。畸形配置 authority 会让插件加载失败。`allowsRemoteAuthorities` 报告 `trustedHosts` 是否允许非 loopback authority；接受绑定 IP 不会改变该列表。这些检查防御 DNS rebinding 与跨站浏览器请求，绝不建立身份。Host/Origin 校验失败返回 403；Host 可信但未认证的请求返回 401。`dsh web --host 0.0.0.0` 不受支持。决策记录：[浏览器请求信任](../../../.agents/notes/implemented/architecture/2026-07-28-api-browser-trust-boundary.zh.md)与[浏览器令牌认证](../../../.agents/notes/implemented/architecture/2026-08-24-browser-token-authentication.zh.md)。
 
 每个被接纳的请求都代表同一个 Peer——操作者。`ctx.connection.operator` 就是这个 `PeerScope`：其 `ctx` 是拥有连接期注册的 Cordis scope，随 Connection 一起释放。`ctx.connection.admit(request)` 执行信任与认证检查，以拒绝状态或操作者作答；`/api` 路由与 Gateway 的 WebSocket 升级都经它接纳，每个 RPC 处理器都收到本次调用的 Peer。`OperatorPeer` 对外导出，供没有 Connection 的组合（例如 Gateway 的进程内载体）以同一约定拥有一个操作者 scope。
+
+接纳同时也是查询已挂载设备注册表、并上报活跃的地方。`ctx.connection.attachBrowserDevices(store)` 为该调用方上下文的存续期绑定一个注册表，并拒绝第二次仍然存活的挂载；store 实现 `open`、`admits` 与 `touch`，三者都同步，因为它们跑在请求路径上。每次启动令牌交换都会在令牌匹配之后、写出第一个响应字节之前调用 `open`，因此被拒绝的交换什么都不会签发；它还会带上该请求已验证 cookie 已经指明的设备，供注册表复用那一行。被吊销的设备无法通过 `admits`，此后每个已认证入口——包括 index 请求——都返回 401。`touch` 只从 `admit` 上报，所以投递 index.html 从不计作活跃；注册表 `touch` 失败只会记日志，接纳照旧成立，因为决定早已作出。
 
 通过认证的共享 HTTP 请求在传输请求体之前经过 `connection/request` waterfall。监听器可以拒绝新请求，或等待 `next()` 直到响应完成；释放所属 fiber 会移除准入行为。Desktop 使用此扩展点，在已批准的安装期间锁住新的 API 工作，而不取消已接纳的工作。客户端断开会中止处理函数的信号；桥接器停止写入 socket，并排空剩余响应块。WebSocket 流仍由 API Gateway 负责。
 
@@ -75,7 +79,7 @@ API Gateway Client 把内部 `$events` 逻辑流注册为唯一 generation sourc
 
 - **缓冲型 `/api` 路由会把每个请求体保留在内存里**：`maxRequestBodyBytes`（默认 300 MiB，按默认 200 MiB 图片总量上限经 base64 膨胀加信封余量得出）限制普通图片与 RPC 信封。显式启用的流式路由接收带背压的分块并绕过总量上限；路由实现负责持久化、取消与存储配额。
 - **明文 HTTP 监听器会在传输中暴露 bearer cookie**：此类部署无法给浏览器 cookie 加 `Secure`；若把同一 authority 暴露到网络上，会话 cookie 可能泄露；在 Web 载体（[`dsh-host-webserver`](../../host/webserver/README.zh.md)）上配置 TLS 即可让 cookie 带上 `Secure` 并只经 TLS 发送。
-- **没有 logout 操作**：清除浏览器 cookie 会结束单个浏览器会话；删除 owner 凭据记录并重启 `dsh` 会撤销全部会话。
+- **没有 logout 操作**：清除浏览器 cookie 会结束单个浏览器会话；删除 owner 凭据记录并重启 `dsh` 会撤销全部会话。按设备吊销属于已挂载注册表的职责，不属于 Connection：它只覆盖 cookie 指明确切设备的浏览器，而带着打印 URL 回来的浏览器会作为一个新设备入册。被吊销的设备已经打开的 WebSocket 流会保留到该传输重连或页面刷新为止，因为准入发生在 upgrade 时刻。
 
 
 <a id="dev-note"></a>

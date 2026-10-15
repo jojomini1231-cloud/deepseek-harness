@@ -15,6 +15,54 @@ export function RpcId(id: string): RpcId {
   return id as RpcId
 }
 
+/** Stable identity of one browser that completed the launch-token exchange. */
+export type BrowserDeviceId = Branded<'browser-device-id'>
+
+/** Facts browser authentication observed about the browser that exchanged the launch token. */
+export interface BrowserDeviceSession {
+  /** `User-Agent` exactly as sent; the empty string when the request carried none. */
+  readonly userAgent: string
+  /** Peer address the receiving listener observed, when the carrier exposes one. */
+  readonly address?: string | undefined
+  /**
+   * Device the same request's verified signed cookie already names, when one
+   * was presented: a store reuses that record instead of adding a duplicate
+   * row for a browser that repeats the launch-token exchange.
+   */
+  readonly previous?: BrowserDeviceId | undefined
+}
+
+/**
+ * Device registry consulted by browser authentication: the extension point
+ * between the persistent signed cookie and the Host surface that lists,
+ * renames, and revokes the browsers that reached this deployment. With no store attached,
+ * cookies carry no device identity and authentication behaves exactly as it
+ * did before. Every method runs synchronously on the request path, so `admits`
+ * and `touch` perform no durable I/O.
+ */
+export interface BrowserDeviceStore {
+  /**
+   * Record the browser that just exchanged the launch token.
+   * @param session - facts observed during the exchange.
+   * @returns the device id the minted cookie is bound to.
+   */
+  open(session: BrowserDeviceSession): BrowserDeviceId
+
+  /**
+   * Whether one device may still authenticate.
+   * @param id - device bound to the presented cookie.
+   * @returns true while the device has not been revoked.
+   */
+  admits(id: BrowserDeviceId): boolean
+
+  /**
+   * Record activity for one admitted device, at most once per admitted request.
+   * An implementation coalesces in memory and persists out of band.
+   * @param id - device bound to the presented cookie.
+   */
+  touch(id: BrowserDeviceId): void
+}
+
 /** Carrier-neutral failure returned by one logical RPC endpoint. */
 export interface ConnectionRpcFailure {
   readonly code: string
@@ -107,6 +155,8 @@ export type ConnectionRequestRejection = 401 | 403 | undefined
 export interface ConnectionIndexRequest extends ConnectionTrustRequest {
   readonly method?: string | undefined
   readonly url?: string | undefined
+  /** Peer socket the receiving listener observed; absent on carriers that expose none. */
+  readonly socket?: { readonly remoteAddress?: string | undefined } | undefined
 }
 
 /** Root/index response operations owned by the browser-token exchange. */
@@ -243,6 +293,17 @@ export interface HostConnectionHandle {
    * @returns tokenized URL for initial login; a mount proxy strips its prefix before {@link authorizeIndex}.
    */
   authenticatedUrl(baseUrl: string): string
+
+  /**
+   * Bind browser authentication to the device registry that records and may
+   * revoke the browsers reaching this deployment. Every launch-token exchange
+   * is recorded there, and a cookie bound to a revoked device stops
+   * authenticating. The attachment belongs to the calling context, so its
+   * unload detaches the registry; a second live attachment is refused.
+   * @param store - registry owned by the Host surface that manages devices.
+   * @returns asynchronous disposer detaching this registry.
+   */
+  attachBrowserDevices(store: BrowserDeviceStore): () => Promise<void>
 }
 
 /** Transport-independent Fetch handler used by HTTP and worker carriers. */

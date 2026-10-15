@@ -16,6 +16,8 @@ import type { BrowserAuth } from './browser-auth.ts'
 import { OperatorPeer } from './operator-peer.ts'
 import type {
   PeerAdmission,
+  BrowserDeviceId,
+  BrowserDeviceStore,
   ConnectionIndexRequest,
   ConnectionIndexResponse,
   ConnectionFetchRoute,
@@ -105,15 +107,59 @@ export class HostConnectionService extends Service implements HostConnectionHand
 
   /** Apply the Host/Origin fence, then browser authentication. */
   requestRejection(request: ConnectionTrustRequest): ConnectionRequestRejection {
-    const carrier = this.ctx.get('webServer')
-    if (!isTrustedApiRequest(request, this.trustedHosts, carrier?.host, carrier?.protocol ?? 'http:')) return 403
-    return this.browserAuth.isAuthenticated(request, carrier?.protocol === 'https:') ? undefined : 401
+    const fenced = this.fence(request)
+    if ('rejection' in fenced) return fenced.rejection
+    return this.browserAuth.isAuthenticated(request, fenced.secure) ? undefined : 401
   }
 
   /** A request that passes the fence and authentication speaks for the operator. */
   admit(request: ConnectionTrustRequest): PeerAdmission {
-    const rejection = this.requestRejection(request)
-    return rejection === undefined ? { peer: this.operator } : { rejection }
+    const fenced = this.fence(request)
+    if ('rejection' in fenced) return { rejection: fenced.rejection }
+    const session = this.browserAuth.session(request, fenced.secure)
+    if (session === undefined) return { rejection: 401 }
+    this.recordActivity(session.device)
+    return { peer: this.operator }
+  }
+
+  /**
+   * Bind browser authentication to the device registry that records and may
+   * revoke the browsers reaching this deployment. The attachment belongs to the
+   * reading context, so its unload detaches the registry.
+   */
+  attachBrowserDevices(store: BrowserDeviceStore): () => Promise<void> {
+    return this.ctx.effect(
+      () => this.browserAuth.attachBrowserDevices(store),
+      'client-connection: browser device registry',
+    )
+  }
+
+  /**
+   * Apply the Host/Origin fence alone, so an admission verifies one cookie once.
+   * @param request - request headers from the HTTP or upgrade request.
+   * @returns the listener's own protocol, or the status refusing the request.
+   */
+  private fence(request: ConnectionTrustRequest): { readonly secure: boolean } | { readonly rejection: 403 } {
+    const carrier = this.ctx.get('webServer')
+    if (!isTrustedApiRequest(request, this.trustedHosts, carrier?.host, carrier?.protocol ?? 'http:')) {
+      return { rejection: 403 }
+    }
+    return { secure: carrier?.protocol === 'https:' }
+  }
+
+  /**
+   * Report one admitted request to the attached registry. A registry failure is
+   * contained here: the device's admission was already decided, so the request
+   * continues and the failure is logged for the registry's owner.
+   * @param device - device bound to the presented cookie, when the cookie names one.
+   */
+  private recordActivity(device: BrowserDeviceId | undefined): void {
+    if (device === undefined) return
+    try {
+      this.browserAuth.touchDevice(device)
+    } catch (error: unknown) {
+      this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
+    }
   }
 
   /**

@@ -1,0 +1,131 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.description {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.empty,
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Device rows carry the settings card material — R20 over the shared hairline
+   and card fill — as every other settings list does. */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
+  border-radius: var(--dsw-radius-xl);
+  background: var(--dsw-alias-settings-card-fill);
+}
+
+/* Loading placeholder sized as a row, its one bar standing in for the identity
+   block the first read has not answered with yet. */
+.skeletonRow {
+  display: flex;
+  align-items: center;
+  padding: 12px 14px;
+  border: 0.5px solid var(--dsw-alias-settings-card-stroke);
+  border-radius: var(--dsw-radius-xl);
+  background: var(--dsw-alias-settings-card-fill);
+}
+
+.skeletonRow::before {
+  content: '';
+  flex: 1;
+  height: 14px;
+  border-radius: var(--dsw-radius-xs);
+  background: var(--dsw-alias-bg-skeleton);
+}
+
+.identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.name {
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.agent {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 8px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.facts dt,
+.facts dd {
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Revoking is destructive, so its controls carry the error tint: the outlined
+   row action through its label, the confirming dialog button through the
+   primary fill family it inherits. */
+.dangerAction {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.dangerConfirm {
+  --dsw-alias-button-primary-fill: var(--dsw-alias-state-error-primary);
+  --dsw-alias-button-primary-hover: var(--dsw-alias-state-error-primary);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

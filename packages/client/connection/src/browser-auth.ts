@@ -4,6 +4,9 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import type { CredentialProvider, CredentialRecord } from '@deepseek-ai/dsh-credentials'
 import type {
+  BrowserDeviceId,
+  BrowserDeviceSession,
+  BrowserDeviceStore,
   ConnectionIndexRequest,
   ConnectionIndexResponse,
   ConnectionTrustRequest,
@@ -29,6 +32,18 @@ interface BrowserCookiePayload {
   readonly authority: string
   readonly issuedAt: number
   readonly expiresAt: number
+  /**
+   * Device this session is bound to. Absent on a cookie minted before device
+   * tracking, or while no registry is attached; such a cookie keeps the
+   * authentication it always had and cannot be revoked by device.
+   */
+  readonly device?: BrowserDeviceId | undefined
+}
+
+/** One request's verified browser session, which the attached registry may still refuse. */
+interface BrowserSession {
+  /** Device the presented cookie is bound to; undefined for one minted before device tracking. */
+  readonly device: BrowserDeviceId | undefined
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -163,6 +178,11 @@ function decodeCookie(value: string, secret: Buffer): BrowserCookiePayload | und
     || typeof decoded.authority !== 'string'
     || !Number.isSafeInteger(decoded.issuedAt)
     || !Number.isSafeInteger(decoded.expiresAt)) return undefined
+  // A signed payload either omits the device or names one. A malformed id is a
+  // writer defect, so the whole cookie is refused rather than downgraded to the
+  // legacy no-device form, which would admit a session no registry can revoke.
+  if (decoded.device !== undefined
+    && (typeof decoded.device !== 'string' || decoded.device === '')) return undefined
   return decoded as unknown as BrowserCookiePayload
 }
 
@@ -193,6 +213,8 @@ async function initializeSecret(credentials: CredentialProvider): Promise<Buffer
 export class BrowserAuth {
   private readonly launchToken: string
   private readonly maxAgeMilliseconds: number
+  /** Registry this authentication consults; absent until one is attached. */
+  private devices: BrowserDeviceStore | undefined
 
   private constructor(
     processOwner: object,
@@ -221,6 +243,29 @@ export class BrowserAuth {
     maxAgeDays: number,
   ): Promise<BrowserAuth> {
     return new BrowserAuth(processOwner, await initializeSecret(credentials), maxAgeDays)
+  }
+
+  /**
+   * Bind this authentication to the device registry that records exchanges and
+   * may revoke them. One store per activation: a second attachment is a
+   * composition error, not a replacement.
+   * @param store - registry owned by the Host surface that manages devices.
+   * @returns disposer detaching this store.
+   */
+  attachBrowserDevices(store: BrowserDeviceStore): () => void {
+    if (this.devices !== undefined) {
+      throw new Error('client-connection: a browser-device store is already attached')
+    }
+    this.devices = store
+    return () => { this.devices = undefined }
+  }
+
+  /**
+   * Report one admitted request to the attached registry. No-op without one.
+   * @param device - device bound to the presented cookie.
+   */
+  touchDevice(device: BrowserDeviceId): void {
+    this.devices?.touch(device)
   }
 
   /**
@@ -257,11 +302,22 @@ export class BrowserAuth {
         && authority !== undefined && tokenMatches(tokens.join(''), this.launchToken)) {
         const issuedAt = Date.now()
         const expiresAt = issuedAt + this.maxAgeMilliseconds
+        // Enrollment is an authenticated act, and its answer is the cookie's
+        // binding, so it runs strictly after the token matched and strictly
+        // before the first byte is written: a refused exchange mints nothing.
+        const previous = this.presented(req, secure)?.device
+        const observed: BrowserDeviceSession = {
+          userAgent: header(req.headers, 'user-agent') ?? '',
+          ...(req.socket?.remoteAddress === undefined ? {} : { address: req.socket.remoteAddress }),
+          ...(previous === undefined ? {} : { previous }),
+        }
+        const device = this.devices?.open(observed)
         const value = encodeCookie({
           version: COOKIE_PAYLOAD_VERSION,
           authority,
           issuedAt,
           expiresAt,
+          ...(device === undefined ? {} : { device }),
         }, this.secret)
         res.writeHead(303, {
           'cache-control': 'no-store',
@@ -274,7 +330,7 @@ export class BrowserAuth {
         res.end()
         return false
       }
-      if (req.method === 'GET' && url.pathname === '/' && this.isAuthenticated(req, secure)) {
+      if (req.method === 'GET' && url.pathname === '/' && this.session(req, secure) !== undefined) {
         res.writeHead(303, {
           'cache-control': 'no-store',
           'location': './',
@@ -286,30 +342,61 @@ export class BrowserAuth {
       this.writeUnauthorized(req, res)
       return false
     }
-    if (this.isAuthenticated(req, secure)) return true
+    if (this.session(req, secure) !== undefined) return true
     this.writeUnauthorized(req, res)
     return false
   }
 
   /**
-   * Verify the authority-bound browser cookie on a Host request.
+   * Verify the authority-bound browser cookie and consult the attached
+   * registry, without reporting activity.
    * @param request - request headers carrying Host and Cookie.
    * @param secure - whether the receiving listener uses TLS, including its default port.
-   * @returns true only for an unexpired cookie signed by this activation's loaded secret.
+   * @returns the session's device, or undefined when the request is unauthenticated
+   * or its device has been revoked.
+   */
+  session(request: ConnectionTrustRequest, secure = false): BrowserSession | undefined {
+    const payload = this.presented(request, secure)
+    if (payload === undefined) return undefined
+    const device = payload.device
+    // A cookie minted before device tracking carries no id and has no row to revoke.
+    if (device !== undefined && this.devices !== undefined && !this.devices.admits(device)) {
+      return undefined
+    }
+    return { device }
+  }
+
+  /**
+   * Verify the authority-bound browser cookie on a Host request, including the
+   * attached registry's revocation of its device.
+   * @param request - request headers carrying Host and Cookie.
+   * @param secure - whether the receiving listener uses TLS, including its default port.
+   * @returns true only for an unexpired, admitted cookie signed by this activation's loaded secret.
    */
   isAuthenticated(request: ConnectionTrustRequest, secure = false): boolean {
+    return this.session(request, secure) !== undefined
+  }
+
+  /**
+   * Cookie facts one request presents, verified but not yet admitted: signature,
+   * authority, and interval only. A caller reading the device from this result
+   * supplies the fact to a registry; it does not decide admission, so a revoked
+   * browser repeating the launch-token exchange can enroll again.
+   */
+  private presented(request: ConnectionTrustRequest, secure: boolean): BrowserCookiePayload | undefined {
     const authority = requestAudience(request.headers, secure)
     const rawCookie = header(request.headers, 'cookie')
-    if (authority === undefined || rawCookie === undefined) return false
+    if (authority === undefined || rawCookie === undefined) return undefined
     const value = cookieValue(rawCookie, cookieName(authority))
-    if (value === undefined) return false
+    if (value === undefined) return undefined
     const payload = decodeCookie(value, this.secret)
-    if (payload === undefined || payload.authority !== authority) return false
+    if (payload === undefined || payload.authority !== authority) return undefined
     const now = Date.now()
-    return payload.issuedAt <= now
+    const valid = payload.issuedAt <= now
       && payload.expiresAt > now
       && payload.expiresAt > payload.issuedAt
       && payload.expiresAt - payload.issuedAt <= this.maxAgeMilliseconds
+    return valid ? payload : undefined
   }
 
   private writeUnauthorized(req: ConnectionIndexRequest, res: ConnectionIndexResponse): void {

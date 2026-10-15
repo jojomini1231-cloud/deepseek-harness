@@ -793,6 +793,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'baseUrl', description: 'clean application URL whose authority and mount are preserved.' }],
         returns: 'tokenized URL for initial login; a mount proxy strips its prefix before {@link authorizeIndex}.',
       },
+      {
+        signature: 'attachBrowserDevices(store: BrowserDeviceStore): () => Promise<void>',
+        description: 'Bind browser authentication to the device registry that records and may revoke the browsers reaching this deployment. Every launch-token exchange is recorded there, and a cookie bound to a revoked device stops authenticating. The attachment belongs to the calling context, so its unload detaches the registry; a second live attachment is refused.',
+        parameters: [{ name: 'store', description: 'registry owned by the Host surface that manages devices.' }],
+        returns: 'asynchronous disposer detaching this registry.',
+      },
     ],
   },
   {
@@ -999,6 +1005,49 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Prepare every currently registered field from one immutable base request. A provider whose preparation throws, or whose value cannot be cloned, is omitted from this request; the first such failure per field is logged. Only cancellation rejects. Field values are cloned and frozen; providers retain no mutable alias to the outgoing request.',
         parameters: [{ name: 'request', description: 'exact serialized request facts before extension fields.' }],
         returns: 'detached fields and their idempotent joint acceptance transaction.',
+      },
+    ],
+  },
+  {
+    key: 'deviceController',
+    summary: 'Browser-device registry and its Remote face.',
+    description: 'Browser-device registry and its Remote face. The class is both the BrowserDeviceStore Connection consults and the owner of the `devices` namespace the Settings page calls.',
+    methods: [
+      {
+        signature: 'open(session: BrowserDeviceSession): BrowserDeviceId',
+        description: 'Record the browser that just exchanged the launch token, reusing the record its verified cookie already names when this deployment still knows it.',
+        parameters: [{ name: 'session', description: 'facts the exchange observed.' }],
+        returns: 'the device id the minted cookie is bound to.',
+      },
+      {
+        signature: 'admits(id: BrowserDeviceId): boolean',
+        description: 'Whether one device may still authenticate. Once the durable roster has been read, only a recorded device is admitted. Before that, the answer is true only inside the configured grace: an open that rejected, or one still unread past the grace, admits nothing, because an unanswerable revocation question must not become an admission.',
+        parameters: [{ name: 'id', description: 'device bound to the presented cookie.' }],
+        returns: 'true while the device has not been revoked.',
+      },
+      {
+        signature: 'touch(id: BrowserDeviceId): void',
+        description: 'Record one authenticated request. Memory always moves so the list shows a live `lastSeenAt`; the durable record follows at most once a minute.',
+        parameters: [{ name: 'id', description: 'device bound to the presented cookie.' }],
+      },
+      {
+        signature: '@Remote async list(): Promise<BrowserDeviceView[]>',
+        description: 'List every device that reached this deployment, most recently active first. Waits for queued writes so the list is what the roster has recorded, not what it is still writing.',
+        parameters: [],
+        returns: 'one view per recorded device.',
+      },
+      {
+        signature: '@Remote async rename(id: string, name: string): Promise<BrowserDeviceView>',
+        description: 'Set or clear one device\'s label.',
+        parameters: [{ name: 'id', description: 'device to relabel.' }, { name: 'name', description: 'new label; an empty or whitespace-only value clears it.' }],
+        returns: 'the device as the list now reads it.',
+        throws: ['RemoteError with `devices/unknown` when the id is malformed or this deployment never recorded it, or `devices/rejected` when the label is too long.'],
+      },
+      {
+        signature: '@Remote async revoke(id: string): Promise<void>',
+        description: 'Revoke one device. Its signed cookie stops authenticating at the next request, and the durable delete commits before this returns: the browser must open the URL printed by `dsh web` again to return, and it returns as a new device. A delete that fails restores the record and rejects, so a revocation this call reports as failed is one a restart cannot readmit.',
+        parameters: [{ name: 'id', description: 'device to revoke.' }],
+        throws: ['RemoteError with `devices/unknown` when the id is malformed or this deployment never recorded it; a failed durable delete rejects as well.'],
       },
     ],
   },
@@ -4880,6 +4929,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type BrandedNumber<B extends string> = number & {\n    readonly [BRAND]: B;\n};',
   },
   {
+    name: 'BrowserDeviceId',
+    declaration: 'export type BrowserDeviceId = Branded<\'browser-device-id\'>;',
+  },
+  {
+    name: 'BrowserDeviceSession',
+    declaration: 'export interface BrowserDeviceSession {\n    readonly userAgent: string;\n    readonly address?: string | undefined;\n    readonly previous?: BrowserDeviceId | undefined;\n}',
+  },
+  {
+    name: 'BrowserDeviceStore',
+    declaration: 'export interface BrowserDeviceStore {\n    open(session: BrowserDeviceSession): BrowserDeviceId;\n    admits(id: BrowserDeviceId): boolean;\n    touch(id: BrowserDeviceId): void;\n}',
+  },
+  {
+    name: 'BrowserDeviceView',
+    declaration: 'export interface BrowserDeviceView {\n    readonly id: string;\n    readonly name?: string | undefined;\n    readonly userAgent: string;\n    readonly address?: string | undefined;\n    readonly firstSeenAt: number;\n    readonly lastSeenAt: number;\n}',
+  },
+  {
     name: 'BrowserUseProviderName',
     declaration: 'export type BrowserUseProviderName = Branded<\'BrowserUseProviderName\'>;',
   },
@@ -5013,7 +5078,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ConnectionIndexRequest',
-    declaration: 'export interface ConnectionIndexRequest extends ConnectionTrustRequest {\n    readonly method?: string | undefined;\n    readonly url?: string | undefined;\n}',
+    declaration: 'export interface ConnectionIndexRequest extends ConnectionTrustRequest {\n    readonly method?: string | undefined;\n    readonly url?: string | undefined;\n    readonly socket?: {\n        readonly remoteAddress?: string | undefined;\n    } | undefined;\n}',
   },
   {
     name: 'ConnectionIndexResponse',
