@@ -137,7 +137,8 @@ function requireReadableFile(environment, name) {
 export function validateDesktopPackageEnvironment(environment, target, options = {}) {
   resolveDesktopAppId(environment)
   resolveNpmRegistry(environment)
-  if (target.platform !== 'darwin' || !options.unsigned) resolveDesktopPolicyEnvironment(environment)
+  // Only the local unsigned builds skip the policy service; Windows packages ship it whatever their signing mode.
+  if (target.platform === 'win32' || !options.unsigned) resolveDesktopPolicyEnvironment(environment)
   if (target.platform === 'darwin') resolveMacOSPackageSettings(environment)
   else if (target.platform === 'win32') resolveWindowsPackageSettings(environment)
   if (options.unsigned) return
