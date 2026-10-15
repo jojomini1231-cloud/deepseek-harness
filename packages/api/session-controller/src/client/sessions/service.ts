@@ -448,13 +448,17 @@ export class ClientSessions implements ISessions {
   /**
    * Create a Host Session and publish its catalog row before resolving.
    * Callers retain the returned identity before borrowing its binding.
-   * @param opts - target workspace, directory, or temporary flag and an optional preallocated id.
-   * @returns the new session id.
+   * @param opts - target workspace or directory, an optional blank Session to reuse or temporary flag, and an optional Agent preset.
+   * @returns the created or reused session id.
    * @throws {SessionCreateError} with the requested id.
    */
-  async create(
-    opts: { workspaceId?: WorkspaceId; cwd?: string; sessionId?: SessionId; temporary?: true } = {},
-  ): Promise<SessionId> {
+  async create(opts: {
+    workspaceId?: WorkspaceId
+    cwd?: string
+    sessionId?: SessionId
+    temporary?: true
+    agentPreset?: string
+  } = {}): Promise<SessionId> {
     const result = await this.manager.create(opts)
     if (!result.ok) throw new SessionCreateError(result.error, opts.sessionId)
     this.projectList()

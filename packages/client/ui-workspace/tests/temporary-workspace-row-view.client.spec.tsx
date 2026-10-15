@@ -9,7 +9,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { GlobalStandardProps, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { allowAllAccess, bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { TEMPORARY_DIRECTORY_FIELD } from '../src/client/settings/temporary-workspace-controller.ts'
@@ -31,6 +31,7 @@ const unusedHook = (() => { throw new Error('unused by the temporary workspace r
 const kit = {
   useSessions: unusedHook, useSessionStatus: unusedHook,
   usePanelInfo, useSessionRetainInfo: () => undefined, useResource, useWorkspaces: unusedHook,
+  ...allowAllAccess,
 }
 
 function renderRow(state: Partial<TemporaryWorkspaceRowState> = {}) {

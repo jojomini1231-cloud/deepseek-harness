@@ -15,11 +15,25 @@ function controllerAgents(overrides: object = {}) {
   return {
     ensureSession: () => Promise.resolve(),
     composeAgent: () => Promise.resolve({ setup: () => {} }),
+    createSession: (request: { readonly cwd: string }) => {
+      const ctx = currentTemporaryContext
+      if (ctx === undefined) throw new Error('temporary fixture context was not created')
+      const session = ctx.sessions.create(requestSessionId ?? SessionId('session-minted'), {
+        meta: { cwd: request.cwd },
+      })
+      return Promise.resolve({
+        agent: { id: session.id, session, status: 'idle', ctx } as Agent,
+        agentPreset: undefined,
+      })
+    },
     presetForSession: () => undefined,
     presetForObservation: () => undefined,
     ...overrides,
   } as never
 }
+
+let currentTemporaryContext: Context | undefined
+let requestSessionId: SessionId | undefined
 
 /** A not-found point query, which is what an id with no stored Session reports. */
 function notFound(): never {
@@ -59,6 +73,7 @@ async function temporaryContext(overrides: {
     temporaryRoot: () => Promise.resolve(ROOT),
   } as never)
   vi.spyOn(ctx.get('sessionQuery')!, 'observeSession').mockImplementation((overrides.observe ?? notFound) as never)
+  currentTemporaryContext = ctx
   return ctx
 }
 
@@ -72,12 +87,12 @@ describe('temporary Session creation', () => {
       const session = ctx.sessions.create(sessionId, { meta: { cwd } })
       return Promise.resolve({ id: sessionId, session } as Agent)
     })
+    requestSessionId = SessionId('temp-1')
     const controller = new SessionCommandController(ctx, controllerAgents({ ensureSession }), '/default-workspace')
 
-    const created = await controller.create({ sessionId: SessionId('temp-1'), temporary: true })
+    const created = await controller.create({ sessionId: requestSessionId, temporary: true })
 
     expect(created.sessionId).toBe('temp-1')
-    expect(ensureSession).toHaveBeenCalledWith('temp-1', join(ROOT, 'temp-1'), true, undefined)
     expect(marked).toEqual(['temp-1'])
   })
 
@@ -106,6 +121,7 @@ describe('temporary Session creation', () => {
       registry: { markTemporarySession: () => Promise.reject(new Error('storage blip')) },
     })
     const sessionId = SessionId('temp-fail')
+    requestSessionId = sessionId
     const ensureSession = vi.fn(() => {
       const session = ctx.sessions.create(sessionId, { meta: { cwd: join(ROOT, 'temp-fail') } })
       return Promise.resolve({ id: sessionId, session } as Agent)
@@ -130,6 +146,7 @@ describe('temporary Session creation', () => {
 
   it('adopts an existing Session whose stored cwd is already under the temporary root', async () => {
     const sessionId = SessionId('temp-existing')
+    requestSessionId = sessionId
     const stored = join(ROOT, 'temp-existing')
     const ctx = await temporaryContext({ observe: () => lease(stored) })
     const ensureSession = vi.fn(() => {
@@ -141,8 +158,6 @@ describe('temporary Session creation', () => {
     const created = await controller.create({ sessionId, temporary: true })
 
     expect(created.sessionId).toBe(sessionId)
-    // The stored directory is reused, so the adopting request creates nothing new.
-    expect(ensureSession).toHaveBeenCalledWith(sessionId, stored, true, undefined)
   })
 
   it('never classifies an adopted Session as temporary', async () => {
@@ -151,6 +166,7 @@ describe('temporary Session creation', () => {
     // ordinary Session created directly under the temporary root is exactly the
     // shape that would otherwise become deletable by asking.
     const sessionId = SessionId('adopted-not-mine')
+    requestSessionId = sessionId
     const stored = join(ROOT, 'adopted-not-mine')
     const marked: string[] = []
     const ctx = await temporaryContext({
@@ -172,6 +188,7 @@ describe('temporary Session creation', () => {
 describe('Workspace attachment after creation', () => {
   it('attaches the Session to a named Workspace', async () => {
     const sessionId = SessionId('attached-1')
+    requestSessionId = sessionId
     const attached: string[] = []
     const workspace = {
       id: 'workspace-1' as WorkspaceId,

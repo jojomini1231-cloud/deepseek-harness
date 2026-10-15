@@ -19,7 +19,7 @@
 - button "临时工作区视图选项"
 - button "新建临时会话"
 - tree "临时工作区"
-- button "设置"
+- button "账号菜单": 更多
 - banner:
   - button "打开右侧边栏"
 - text: 探索未至之境 预览版

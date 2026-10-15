@@ -19,7 +19,7 @@
 - button "Temporary section view options"
 - button "New temporary session"
 - tree "Temporary workspaces"
-- button "Settings"
+- button "Account menu": More
 - banner:
   - button "Open right sidebar"
 - text: Into the Unknown Preview

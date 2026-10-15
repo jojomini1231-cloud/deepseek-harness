@@ -45,4 +45,4 @@ The earlier decision to skip sharp's decode half in the payload smoke is withdra
 ## Related
 
 - [Archived: Use Electron as the Desktop Node runtime](../../archived/architecture/2026-09-11-desktop-electron-node-runtime.md)
-- [Desktop reference: local Linux builds](../../../../apps/desktop/README.md#local-linux-appimage-without-release-signing)
+- [Desktop reference: local Linux builds](../../../../apps/desktop/packaging/README.md#local-linux-appimage-without-release-signing)

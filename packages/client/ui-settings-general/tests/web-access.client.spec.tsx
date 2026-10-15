@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useSyncExternalStore } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { GlobalStandardProps, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import { allowAllAccess } from '@deepseek-ai/dsh-client-test-runtime'
 import type { DesktopWebAccessBridge, DesktopWebAccessChoice, DesktopWebAccessStatus } from '../src/types.ts'
 import { DesktopWebAccessSource } from '../src/client/web-access-source.ts'
 import { WebAccessRow } from '../src/client/WebAccessRow.tsx'
@@ -24,6 +25,7 @@ const kit = {
   useSessionRetainInfo: () => undefined,
   useResource,
   useWorkspaces: unusedHook,
+  ...allowAllAccess,
 }
 
 type SettingsTranslate = PropsLocale<'settings'>['t']

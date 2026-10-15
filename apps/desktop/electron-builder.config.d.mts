@@ -9,10 +9,7 @@ export interface DesktopElectronBuilderConfig {
     readonly output: string
   }
   readonly files: readonly [
-    string,
-    string,
-    string,
-    string,
+    ...string[],
     { readonly from: string, readonly to: 'dsh', readonly filter: readonly ['**/*'] },
     { readonly from: string, readonly to: 'dsh/node_modules', readonly filter: readonly ['**/*'] },
   ]
@@ -34,6 +31,7 @@ export interface DesktopElectronBuilderConfig {
     readonly signIgnore: readonly string[]
   }
   readonly dmg: {
+    readonly format: 'ULMO'
     readonly sign: boolean
     readonly writeUpdateInfo: boolean
   }

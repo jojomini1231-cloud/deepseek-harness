@@ -45,4 +45,4 @@ Host 的运行时是构建输入而非固定选择，因此打包与开发必须
 ## Related
 
 - [已归档：使用 Electron 作为 Desktop 的 Node 运行时](../../archived/architecture/2026-09-11-desktop-electron-node-runtime.md)
-- [Desktop 参考：本地 Linux 构建](../../../../apps/desktop/README.zh.md#local-linux-appimage-without-release-signing)
+- [Desktop 参考：本地 Linux 构建](../../../../apps/desktop/packaging/README.zh.md#local-linux-appimage-without-release-signing)

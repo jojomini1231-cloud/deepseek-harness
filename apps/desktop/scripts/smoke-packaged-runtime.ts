@@ -1,7 +1,7 @@
 /** Validate the assembled application, including native Office conversion outside ASAR. */
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
-import { desktopTargetPlatform, resolveDesktopBuildTarget, resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
+import { desktopArtifactOutput, desktopTargetPlatform, resolveDesktopBuildTarget, resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
 import { preparedHostRuntime } from '../src/host-runtime.ts'
 import { readDesktopRuntime, verifyDesktopRuntime } from '../src/runtime-tree.ts'
 import { verifyWindowsCode } from './windows-runtime-signature.mjs'
@@ -9,11 +9,11 @@ import { smokePreparedRuntime } from './smoke-prepared-runtime.ts'
 import { resolveDesktopPackageTarget } from './package-target.ts'
 
 const paths = resolveDesktopTargetBuildPaths()
-const { values } = parseArgs({ options: { unsigned: { type: 'boolean', default: false } }, allowPositionals: false })
+const { values } = parseArgs({ options: { unsigned: { type: 'boolean', default: false }, 'skip-notarization': { type: 'boolean', default: false } }, allowPositionals: false })
 const target = resolveDesktopBuildTarget()
 const windows = target === 'win-x64'
 const linux = target === 'linux-x64'
-const artifacts = values.unsigned ? paths.unsignedArtifacts : paths.artifacts
+const artifacts = desktopArtifactOutput(paths, { unsigned: values.unsigned, skipNotarization: values['skip-notarization'] }).directory
 // Linux ships without ASAR, so the dsh tree is a plain app directory inside resources.
 const application = windows ? join(artifacts, 'win-unpacked')
   : linux ? join(artifacts, 'linux-unpacked')
