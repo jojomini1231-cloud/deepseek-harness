@@ -191,12 +191,35 @@ describe('SidebarRightController — opening', () => {
     expect(findTabPane(layout(), tabOf('a.txt')).id).toBe(left)
   })
 
-  it('opens new content alone in a preferred pane and falls back to the current pane at the limit', () => {
+  it('lands content beside the target on the requested side and keeps the target tab visible', () => {
+    const { controller, publish, layout, tabOf, expand } = harness()
+    expand()
+    publish()
+    controller.openResource('dsh-resource://file/session/s-test/tree.txt')
+    const tree = tabOf('tree.txt')
+    const treePane = findTabPane(layout(), tree)
+    controller.openResource('dsh-resource://file/session/s-test/a.txt', { paneId: treePane.id, beside: 'before' })
+    const preview = findTabPane(layout(), tabOf('a.txt'))
+    // Two panes: the preview leads alone in its own, and the tree keeps its pane.
+    expect(dockPaneIds(layout())).toHaveLength(2)
+    expect(dockPaneIds(layout())[0]).toBe(preview.id)
+    expect(preview.tabs).toEqual([tabOf('a.txt')])
+    expect(findTabPane(layout(), tree).id).toBe(treePane.id)
+
+    // The next file reuses the pane already on that side instead of adding one.
+    publish()
+    controller.openResource('dsh-resource://file/session/s-test/b.txt', { paneId: treePane.id, beside: 'before' })
+    expect(dockPaneIds(layout())).toHaveLength(2)
+    expect(findTabPane(layout(), tabOf('b.txt')).id).toBe(preview.id)
+    expect(findTabPane(layout(), tree).id).toBe(treePane.id)
+  })
+
+  it('opens new content alone beside the target and falls back to the target pane at the limit', () => {
     const { controller, publish, layout, tabOf, entries, expand } = harness()
     expand()
     publish()
     const before = entries()
-    controller.openResource('dsh-resource://file/session/s-test/a.txt', { preferNewPane: true })
+    controller.openResource('dsh-resource://file/session/s-test/a.txt', { beside: 'after' })
     const a = tabOf('a.txt')
     const pane = findTabPane(layout(), a)
     expect(dockPaneIds(layout())).toHaveLength(2)
@@ -204,7 +227,7 @@ describe('SidebarRightController — opening', () => {
     expect(entries()).toBe(before + 1)
 
     publish()
-    controller.openResource('dsh-resource://file/session/s-test/b.txt', { preferNewPane: true })
+    controller.openResource('dsh-resource://file/session/s-test/b.txt', { beside: 'after' })
     expect(dockPaneIds(layout())).toHaveLength(2)
     expect(findTabPane(layout(), tabOf('b.txt')).id).toBe(pane.id)
   })
@@ -214,12 +237,12 @@ describe('SidebarRightController — opening', () => {
     expand()
     publish()
     room.allowed = false
-    controller.openResource('dsh-resource://file/session/s-test/a.txt', { preferNewPane: true })
+    controller.openResource('dsh-resource://file/session/s-test/a.txt', { beside: 'after' })
     expect(dockPaneIds(layout())).toHaveLength(1)
     publish()
 
     room.allowed = true
-    controller.openResource('dsh-resource://file/session/s-test/a.txt', { preferNewPane: true })
+    controller.openResource('dsh-resource://file/session/s-test/a.txt', { beside: 'after' })
     expect(dockPaneIds(layout())).toHaveLength(1)
     expect(getPane(layout(), layout().activePaneId).activeTabId).toBe(tabOf('a.txt'))
   })

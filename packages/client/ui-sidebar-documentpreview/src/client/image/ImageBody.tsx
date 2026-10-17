@@ -55,17 +55,17 @@ export function imageMediaType(path: string): ImageMediaType | undefined {
  */
 export function ImageBody(props: ImageBodyProps): ReactNode {
   const { content, resourceAddress, t } = props
-  const { tab } = props.useTabInfo()
-  const preference = props.useStore(state => state.byTab[tab.id] ?? DEFAULT_ZOOM)
+  const view = props.useDocumentView()
+  const preference = props.useStore(state => state.byView[view.viewKey] ?? DEFAULT_ZOOM)
   const path = useMemo(() => hostFileOf(resourceAddress).path, [resourceAddress])
   const mediaType = imageMediaType(path)
   const data = content.kind === 'bytes' ? content.data : undefined
   const [source, setSource] = useState<ImageSource>()
   const setPreference = useCallback((value: ZoomPreference): void => {
-    props.actions.zoom(tab.id, value)
-  }, [props.actions, tab.id])
+    props.actions.zoom(view.viewKey, value)
+  }, [props.actions, view.viewKey])
 
-  useEffect(() => { props.retainTab(tab.id, tab.signal) }, [props.retainTab, tab.id, tab.signal])
+  useEffect(() => { props.retainView(view.viewKey, view.signal) }, [props.retainView, view.viewKey, view.signal])
 
   useEffect(() => {
     if (data === undefined || mediaType === undefined) return
@@ -94,7 +94,7 @@ export function ImageBody(props: ImageBodyProps): ReactNode {
     fitWidth: t('zoomFitWidth'), value: percent => t('zoomValue', { percent }),
   }
   return <LoadedImage key={source.url} url={source.url} name={name} preference={preference}
-    onPreference={setPreference} labels={labels} signal={tab.signal}
+    onPreference={setPreference} labels={labels} signal={view.signal}
     scrollportRef={props.scrollportRef} t={t} />
 }
 

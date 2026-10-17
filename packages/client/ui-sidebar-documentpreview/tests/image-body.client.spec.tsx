@@ -4,7 +4,6 @@ import { useSyncExternalStore } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import { ImageBody, imageMediaType, type ImageBodyProps } from '../src/client/image/ImageBody.tsx'
 import { en } from '../src/client/image/locales.ts'
 import { createZoomStore, type ZoomState } from '../src/client/zoom/store.ts'
@@ -47,11 +46,11 @@ function props(path = 'asset.png', data: Uint8Array<ArrayBuffer> = new Uint8Arra
     content: { kind: 'bytes', data },
     wrap: false,
     sessionId: 'image' as SessionId,
-    useTabInfo: () => ({ tab: { id: 'image-tab' as TabId, signal: controller.signal } }),
+    useDocumentView: () => ({ viewKey: 'image-tab', navigation: { address: '', params: undefined, revision: 1 }, signal: controller.signal }),
     useResource: () => ({ value: undefined }),
     useStore,
     actions: instance.actions,
-    retainTab: vi.fn(),
+    retainView: vi.fn(),
     scrollportRef: vi.fn(),
     t: (key, params) => {
       const value = translations.get(key) ?? key
@@ -140,7 +139,7 @@ describe('ImageBody', () => {
     expect(screen.getByRole('button', { name: 'Choose zoom' }).textContent).toContain('38%')
     fireEvent.click(screen.getByRole('button', { name: 'Choose zoom' }))
     fireEvent.click(screen.getByRole('menuitem', { name: '150%' }))
-    expect(instance.getSnapshot().byTab['image-tab' as TabId]).toEqual({ kind: 'fixed', scale: 1.5 })
+    expect(instance.getSnapshot().byView['image-tab']).toEqual({ kind: 'fixed', scale: 1.5 })
     expect(screen.getByRole('img')).toBe(image)
     expect(create).toHaveBeenCalledOnce()
     view.rerender(<ImageBody {...props('diagram.svg', initial.content.kind === 'bytes' ? initial.content.data : new Uint8Array(), instance)} />)
@@ -148,6 +147,6 @@ describe('ImageBody', () => {
     expect(screen.getByRole('button', { name: 'Choose zoom' }).textContent).toContain('150%')
     fireEvent.click(screen.getByRole('button', { name: 'Choose zoom' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Fit width' }))
-    expect(instance.getSnapshot().byTab['image-tab' as TabId]).toEqual({ kind: 'fit-width' })
+    expect(instance.getSnapshot().byView['image-tab']).toEqual({ kind: 'fit-width' })
   })
 })

@@ -170,7 +170,7 @@ export class TabDomain {
         ? { replaceTab: tabId }
         : held.paneId === undefined ? {} : { paneId: held.paneId },
       ...placement.paneId === undefined ? {} : { paneId: placement.paneId },
-      ...placement.preferNewPane === undefined ? {} : { preferNewPane: placement.preferNewPane },
+      ...placement.beside === undefined ? {} : { beside: placement.beside },
       ...placement.revealIfOpened === undefined ? {} : { revealIfOpened: placement.revealIfOpened },
     })
     const held: Held = {

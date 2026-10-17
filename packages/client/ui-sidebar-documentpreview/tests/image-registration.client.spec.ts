@@ -2,7 +2,6 @@
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import { DocumentPreviewRegistry } from '../src/client/document/registry.ts'
 import { ImageBody } from '../src/client/image/ImageBody.tsx'
 import { apply, BINARY_IMAGE_EXTENSIONS, IMAGE_BODY_ID, IMAGE_EXTENSIONS, imageBodyDefinition } from '../src/client/image/index.ts'
@@ -72,10 +71,10 @@ describe('image registration', () => {
     const instance = entries[0]!.store.create()
     const face = entries[0]!.inject('image-session' as SessionId, instance.actions)
     const controller = new AbortController()
-    face.retainTab('image-tab' as TabId, controller.signal)
-    instance.actions.zoom('image-tab' as TabId, { kind: 'fixed', scale: 1.5 })
+    face.retainView('image-tab', controller.signal)
+    instance.actions.zoom('image-tab', { kind: 'fixed', scale: 1.5 })
     controller.abort()
-    expect(instance.getSnapshot().byTab).toEqual({})
+    expect(instance.getSnapshot().byView).toEqual({})
     await dispose()
     expect(registry.getSnapshot()).toEqual([])
     expect(bodies.size).toBe(0)

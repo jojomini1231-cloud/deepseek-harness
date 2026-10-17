@@ -24,7 +24,7 @@ import { en, zh } from './locales.ts'
 import { createFilesStore } from './store.ts'
 
 export type { SidebarFilesKey } from './locales.ts'
-export type { DirLevel, FilesState, FilesTabState, LevelState } from './store.ts'
+export type { DirLevel, FilesState, FilesTabState, LevelState, OpenFile } from './store.ts'
 export type { FilesInjected, ListWorkspaceDirectory, WorkspaceFilesListRemote } from './face.ts'
 export type { FilesBodyProps } from './FilesBody.tsx'
 

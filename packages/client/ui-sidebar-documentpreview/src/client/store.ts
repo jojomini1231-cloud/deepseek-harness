@@ -5,19 +5,19 @@
  * and keep — page by page, keyed by the 1-based line each page starts at. The
  * view state (scroll offset, wrap, the navigation already answered) must outlive
  * the body: a tab switched away from unmounts its body and must come back where
- * it was rather than re-read or jump to its opening line again. Bucketed by tab
- * id because two tabs of one file scroll independently.
+ * it was rather than re-read or jump to its opening line again. Bucketed by the
+ * host's view key because two views of one file scroll independently.
  *
- * A bucket lives as long as its tab record: the face's first read of a tab arms
- * one listener on the owner's `signal` that forgets the bucket when the record
- * ends, and a tab that never read has no bucket to forget.
+ * A bucket lives as long as its view's lifetime: the face's first read of a
+ * view arms one listener on the owner's `signal` that forgets the bucket when
+ * that lifetime ends, and a view that never read has no bucket to forget.
  */
 import type { RemoteFailure } from '@deepseek-ai/dsh-api-remotes/client'
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-store'
-import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { WorkspaceFileText } from '@deepseek-ai/dsh-api-workspace-files/types'
 import type { DocumentFileBytes } from './rpc.ts'
 import type { DocumentLoadMode } from './document/registry.ts'
+import { blankRecord } from './document/blank-record.ts'
 
 /**
  * One page as the store keeps it: its text and the Host's line count, which
@@ -63,9 +63,9 @@ export interface TextTabState {
   revision: number | undefined
 }
 
-/** Every tab's state, keyed by tab id. */
+/** Every view's state, keyed by the host's identity for the view. */
 export interface TextState {
-  byTab: Record<TabId, TextTabState>
+  byView: Record<string, TextTabState>
 }
 
 /**
@@ -89,27 +89,27 @@ export function fresh(): TextTabState {
   }
 }
 
-/** The bucket for one tab, created on first write. */
-function bucket(state: TextState, tabId: TabId): TextTabState {
-  return state.byTab[tabId] ??= fresh()
+/** The bucket for one view, created on first write. */
+function bucket(state: TextState, viewKey: string): TextTabState {
+  return state.byView[viewKey] ??= fresh()
 }
 
 /** The preview store's write set; every action names the tab it writes. */
 type TextActions = {
-  toggledAutoRefresh: (draft: TextState, tabId: TabId) => void
-  resourceChanged: (draft: TextState, tabId: TabId) => void
-  selected: (draft: TextState, tabId: TabId, rendererId: string | undefined) => void
-  loading: (draft: TextState, tabId: TabId, mode?: DocumentLoadMode, observedVersion?: string, contentRendererId?: string) => void
-  rendered: (draft: TextState, tabId: TabId, revision: number, version: string) => void
-  rendererFailed: (draft: TextState, tabId: TabId, revision: number) => void
-  complete: (draft: TextState, tabId: TabId, file: DocumentFileBytes) => void
-  page: (draft: TextState, tabId: TabId, page: WorkspaceFileText) => void
-  failed: (draft: TextState, tabId: TabId, failure: RemoteFailure) => void
-  reset: (draft: TextState, tabId: TabId) => void
-  scrolled: (draft: TextState, tabId: TabId, scrollTop: number) => void
-  toggledWrap: (draft: TextState, tabId: TabId) => void
-  navigated: (draft: TextState, tabId: TabId, revision: number) => void
-  forget: (draft: TextState, tabId: TabId) => void
+  toggledAutoRefresh: (draft: TextState, viewKey: string) => void
+  resourceChanged: (draft: TextState, viewKey: string) => void
+  selected: (draft: TextState, viewKey: string, rendererId: string | undefined) => void
+  loading: (draft: TextState, viewKey: string, mode?: DocumentLoadMode, observedVersion?: string, contentRendererId?: string) => void
+  rendered: (draft: TextState, viewKey: string, revision: number, version: string) => void
+  rendererFailed: (draft: TextState, viewKey: string, revision: number) => void
+  complete: (draft: TextState, viewKey: string, file: DocumentFileBytes) => void
+  page: (draft: TextState, viewKey: string, page: WorkspaceFileText) => void
+  failed: (draft: TextState, viewKey: string, failure: RemoteFailure) => void
+  reset: (draft: TextState, viewKey: string) => void
+  scrolled: (draft: TextState, viewKey: string, scrollTop: number) => void
+  toggledWrap: (draft: TextState, viewKey: string) => void
+  navigated: (draft: TextState, viewKey: string, revision: number) => void
+  forget: (draft: TextState, viewKey: string) => void
 }
 
 /**
@@ -121,28 +121,28 @@ type TextActions = {
  */
 export function createTextStore(): EngineStoreHandle<TextState, TextActions> {
   return defineStore({
-    init: (): TextState => ({ byTab: {} }),
+    init: (): TextState => ({ byView: blankRecord() }),
     actions: {
-      toggledAutoRefresh: (d, tabId: TabId) => {
-        const state = bucket(d, tabId)
+      toggledAutoRefresh: (d, viewKey: string) => {
+        const state = bucket(d, viewKey)
         state.autoRefresh = !state.autoRefresh
       },
-      resourceChanged: (d, tabId: TabId) => { bucket(d, tabId).resourcesDirty = true },
-      /** @param d - draft. @param tabId - owning tab. @param rendererId - manual choice, or automatic selection. */
-      selected: (d, tabId: TabId, rendererId: string | undefined) => {
-        if (rendererId === undefined) delete bucket(d, tabId).rendererId
-        else bucket(d, tabId).rendererId = rendererId
+      resourceChanged: (d, viewKey: string) => { bucket(d, viewKey).resourcesDirty = true },
+      /** @param d - draft. @param viewKey - owning tab. @param rendererId - manual choice, or automatic selection. */
+      selected: (d, viewKey: string, rendererId: string | undefined) => {
+        if (rendererId === undefined) delete bucket(d, viewKey).rendererId
+        else bucket(d, viewKey).rendererId = rendererId
       },
       /**
        * Mark a page read as in flight.
        * @param d - draft state.
-       * @param tabId - the tab being drawn.
+       * @param viewKey - the tab being drawn.
        * @param mode - selected renderer's loading mode.
        * @param observedVersion - metadata version at read start; later pages retain the initial observation.
        * @param contentRendererId - implementation owning source loading.
        */
-      loading: (d, tabId: TabId, mode?: DocumentLoadMode, observedVersion?: string, contentRendererId?: string) => {
-        const state = bucket(d, tabId)
+      loading: (d, viewKey: string, mode?: DocumentLoadMode, observedVersion?: string, contentRendererId?: string) => {
+        const state = bucket(d, viewKey)
         if (state.version === undefined && !state.loading) state.observedVersion = observedVersion
         if (contentRendererId === undefined) delete state.contentRendererId
         else state.contentRendererId = contentRendererId
@@ -151,24 +151,24 @@ export function createTextStore(): EngineStoreHandle<TextState, TextActions> {
         if (mode !== undefined) state.mode = mode
       },
       /**
-       * @param d - draft. @param tabId - owning tab.
+       * @param d - draft. @param viewKey - owning tab.
        * @param revision - active content revision. @param version - displayed source version.
        */
-      rendered: (d, tabId: TabId, revision: number, version: string) => {
-        const state = d.byTab[tabId]
+      rendered: (d, viewKey: string, revision: number, version: string) => {
+        const state = d.byView[viewKey]
         if (state?.mode !== 'renderer' || state.loadRevision !== revision) return
         state.version = version
         state.loading = false
       },
-      /** @param d - draft. @param tabId - owning tab. @param revision - failed content revision. */
-      rendererFailed: (d, tabId: TabId, revision: number) => {
-        const state = d.byTab[tabId]
+      /** @param d - draft. @param viewKey - owning tab. @param revision - failed content revision. */
+      rendererFailed: (d, viewKey: string, revision: number) => {
+        const state = d.byView[viewKey]
         if (state?.mode !== 'renderer' || state.loadRevision !== revision) return
         state.loading = false
       },
-      /** @param d - draft. @param tabId - owning tab. @param file - complete byte result for this view. */
-      complete: (d, tabId: TabId, file: DocumentFileBytes) => {
-        const state = bucket(d, tabId)
+      /** @param d - draft. @param viewKey - owning tab. @param file - complete byte result for this view. */
+      complete: (d, viewKey: string, file: DocumentFileBytes) => {
+        const state = bucket(d, viewKey)
         state.complete = file
         state.version = file.version
         state.eof = true
@@ -179,11 +179,11 @@ export function createTextStore(): EngineStoreHandle<TextState, TextActions> {
        * Keep one page. A page from a newer file version invalidates the pages
        * of the older one, so the body never shows two versions at once.
        * @param d - draft state.
-       * @param tabId - the tab being drawn.
+       * @param viewKey - the tab being drawn.
        * @param page - the page the Host returned.
        */
-      page: (d, tabId: TabId, page: WorkspaceFileText) => {
-        const state = bucket(d, tabId)
+      page: (d, viewKey: string, page: WorkspaceFileText) => {
+        const state = bucket(d, viewKey)
         if (state.version !== undefined && state.version !== page.version) state.pages = {}
         state.version = page.version
         state.pages[page.offset] = { text: page.text, lines: page.lines }
@@ -194,21 +194,21 @@ export function createTextStore(): EngineStoreHandle<TextState, TextActions> {
       /**
        * Record why a page read failed; the pages already held stay.
        * @param d - draft state.
-       * @param tabId - the tab being drawn.
+       * @param viewKey - the tab being drawn.
        * @param failure - the settled Remote failure.
        */
-      failed: (d, tabId: TabId, failure: RemoteFailure) => {
-        const state = bucket(d, tabId)
+      failed: (d, viewKey: string, failure: RemoteFailure) => {
+        const state = bucket(d, viewKey)
         state.loading = false
         state.failure = failure
       },
       /**
        * Drop every page, keeping the view, for a re-read from the first line.
        * @param d - draft state.
-       * @param tabId - the tab being drawn.
+       * @param viewKey - the tab being drawn.
        */
-      reset: (d, tabId: TabId) => {
-        const state = bucket(d, tabId)
+      reset: (d, viewKey: string) => {
+        const state = bucket(d, viewKey)
         state.resourcesDirty = false
         state.loadRevision++
         state.pages = {}
@@ -222,43 +222,42 @@ export function createTextStore(): EngineStoreHandle<TextState, TextActions> {
       /**
        * Record where one tab's body is scrolled to.
        * @param d - draft state.
-       * @param tabId - the tab being drawn.
+       * @param viewKey - the tab being drawn.
        * @param scrollTop - the body's scroll offset, in px.
        */
-      scrolled: (d, tabId: TabId, scrollTop: number) => {
-        bucket(d, tabId).scrollTop = scrollTop
+      scrolled: (d, viewKey: string, scrollTop: number) => {
+        bucket(d, viewKey).scrollTop = scrollTop
       },
       /**
        * Switch one tab between wrapped and unwrapped lines.
        * @param d - draft state.
-       * @param tabId - the tab being drawn.
+       * @param viewKey - the tab being drawn.
        */
-      toggledWrap: (d, tabId: TabId) => {
-        const state = bucket(d, tabId)
+      toggledWrap: (d, viewKey: string) => {
+        const state = bucket(d, viewKey)
         state.wrap = !state.wrap
       },
       /**
        * Record that the body answered one navigation, so a remount restores the
        * reader's position instead of jumping again.
        * @param d - draft state.
-       * @param tabId - the tab being drawn.
+       * @param viewKey - the tab being drawn.
        * @param revision - the `navigation.revision` answered.
        */
-      navigated: (d, tabId: TabId, revision: number) => {
-        bucket(d, tabId).revision = revision
+      navigated: (d, viewKey: string, revision: number) => {
+        bucket(d, viewKey).revision = revision
       },
       /**
-       * Drop one tab's state, for a tab record that is gone.
+       * Drop one view's state, for a view lifetime that ended.
        * @param d - draft state.
-       * @param tabId - the tab that went away.
+       * @param viewKey - the view that went away.
        */
-      forget: (d, tabId: TabId) => {
-        const byTab: TextState['byTab'] = {}
-        // Keys were written from tab ids; reading them back as ids is exact.
-        for (const [id, state] of Object.entries(d.byTab) as [TabId, TextTabState][]) {
-          if (id !== tabId) byTab[id] = state
+      forget: (d, viewKey: string) => {
+        const byView = blankRecord<TextTabState>()
+        for (const [key, state] of Object.entries(d.byView)) {
+          if (key !== viewKey) byView[key] = state
         }
-        d.byTab = byTab
+        d.byView = byView
       },
     },
   })

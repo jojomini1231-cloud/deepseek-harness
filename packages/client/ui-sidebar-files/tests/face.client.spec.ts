@@ -7,6 +7,7 @@ import { childPath, createList, filesFace } from '../src/client/face.ts'
 import type { WorkspaceFilesListRemote } from '../src/client/face.ts'
 import { createFilesStore } from '../src/client/store.ts'
 import type { DirLevel } from '../src/client/store.ts'
+import { DEFAULT_RATIO } from '../src/client/store.ts'
 import { DirectoryNode } from '../src/client/directory-node.ts'
 import { scriptedList } from './scripted-list.client.ts'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
@@ -50,12 +51,49 @@ describe('filesFace', () => {
     expect(stream.sessionId).toBe(SESSION)
     expect(stream.signal.aborted).toBe(false)
     expect(list).not.toHaveBeenCalled()
-    expect(snapshot()).toEqual({ root: ROOT, expanded: [ROOT], levels: {}, scrollTop: 0, autoRefresh: true })
+    expect(snapshot()).toEqual({
+      root: ROOT, levels: {}, expanded: [ROOT], scrollTop: 0, autoRefresh: true,
+      open: [], active: undefined, revealed: undefined, ratio: DEFAULT_RATIO,
+    })
     await stream.deliver('ready')
     expect(list).toHaveBeenCalledWith(SESSION, ROOT, stream.signal)
     expect(snapshot()!.levels[ROOT]).toEqual({ kind: 'loading' })
     await settle({ ok: true, value: LEVEL })
     expect(snapshot()!.levels[ROOT]).toEqual({ kind: 'ready', level: LEVEL })
+  })
+
+  it('reveals a file by opening its ancestor chain, one listing per level', async () => {
+    const h = mount()
+    h.face.start(TAB, ROOT, h.controller.signal)
+    await h.watches.ready(ROOT)
+    await h.settle({ ok: true, value: LEVEL })
+    h.face.reveal(TAB, ROOT, `${ROOT}/src/deep/notes.md`, [ROOT], h.controller.signal)
+    expect(h.snapshot()?.revealed).toEqual({ path: `${ROOT}/src/deep/notes.md`, token: 1 })
+    expect(h.snapshot()?.expanded).toEqual([ROOT, `${ROOT}/src`, `${ROOT}/src/deep`])
+    const src = await h.watches.ready(`${ROOT}/src`)
+    expect(h.list).toHaveBeenLastCalledWith(SESSION, `${ROOT}/src`, src.signal)
+    await h.settle({ ok: true, value: { entries: [{ name: 'deep', type: 'directory' }], truncated: false } })
+    const deep = await h.watches.ready(`${ROOT}/src/deep`)
+    expect(h.list).toHaveBeenLastCalledWith(SESSION, `${ROOT}/src/deep`, deep.signal)
+    await h.settle({ ok: true, value: { entries: [{ name: 'notes.md', type: 'file' }], truncated: false } })
+    expect(h.snapshot()?.levels[`${ROOT}/src/deep`]).toMatchObject({ kind: 'ready' })
+  })
+
+  it('reveals a file in the root without opening anything, and nothing after the record ends', async () => {
+    const h = mount()
+    h.face.start(TAB, ROOT, h.controller.signal)
+    await h.watches.ready(ROOT)
+    await h.settle({ ok: true, value: LEVEL })
+    h.face.reveal(TAB, ROOT, `${ROOT}/src/a.ts`, [ROOT], h.controller.signal)
+    // The ancestor is already expanded, so only the mark changes.
+    expect(h.snapshot()?.expanded).toEqual([ROOT, `${ROOT}/src`])
+    expect(h.snapshot()?.revealed).toEqual({ path: `${ROOT}/src/a.ts`, token: 1 })
+    // A file directly in the root has no ancestor, so only the mark changes.
+    h.face.reveal(TAB, ROOT, `${ROOT}/a.md`, [ROOT, `${ROOT}/src`], h.controller.signal)
+    expect(h.snapshot()?.expanded).toEqual([ROOT, `${ROOT}/src`])
+    h.controller.abort()
+    h.face.reveal(TAB, ROOT, `${ROOT}/src/b.ts`, [ROOT], h.controller.signal)
+    expect(h.snapshot()).toBeUndefined()
   })
 
   it('records a failed listing under its level', async () => {
@@ -278,6 +316,33 @@ describe('filesFace', () => {
     expect(snapshot()).toMatchObject({ expanded: [ROOT, child], scrollTop: 120, autoRefresh: false })
     expect(watches.opened.map(stream => stream.path)).toEqual([ROOT, child])
     expect(watches.opened.every(stream => !stream.signal.aborted)).toBe(true)
+  })
+
+  it('mints one stable chip lifetime per open file, ended only by its own close', () => {
+    const { face, controller } = mount()
+    face.start(TAB, ROOT, controller.signal)
+    const first = face.chipSignal(TAB, '/work/a.md', controller.signal)
+    expect(face.chipSignal(TAB, '/work/a.md', controller.signal)).toBe(first)
+    const second = face.chipSignal(TAB, '/work/b.md', controller.signal)
+    expect(second).not.toBe(first)
+    // Closing one chip ends only its lifetime; the sibling's stays live.
+    face.chipsClosed(TAB, ['/work/a.md'])
+    expect(first.aborted).toBe(true)
+    expect(second.aborted).toBe(false)
+    // Reopening the closed file mints a fresh lifetime.
+    expect(face.chipSignal(TAB, '/work/a.md', controller.signal).aborted).toBe(false)
+  })
+
+  it('ends every chip lifetime with the tab, and ignores closes of unknown chips', () => {
+    const { face, controller } = mount()
+    face.start(TAB, ROOT, controller.signal)
+    const first = face.chipSignal(TAB, '/work/a.md', controller.signal)
+    const second = face.chipSignal(TAB, '/work/b.md', controller.signal)
+    face.chipsClosed(TAB, ['/work/never-opened.md'])
+    expect(first.aborted).toBe(false)
+    controller.abort()
+    expect(first.aborted).toBe(true)
+    expect(second.aborted).toBe(true)
   })
 })
 

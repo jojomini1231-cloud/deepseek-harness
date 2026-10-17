@@ -30,7 +30,7 @@ export {
 } from './engine/sequence.ts'
 export type { History, HistoryEntry, HistoryStep } from './engine/sequence.ts'
 export {
-  dockPaneIds, findParent, findTabPane, getNode, getPane, getSplit, getTab, topRightPaneId,
+  adjacentPaneId, dockPaneIds, findParent, findTabPane, getNode, getPane, getSplit, getTab, topRightPaneId,
 } from './engine/tree.ts'
 
 // Interaction limits and geometry.

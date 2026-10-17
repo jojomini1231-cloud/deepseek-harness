@@ -75,14 +75,14 @@ async function boot() {
     const removeBody = rt.slots.inject('sidebar.right.tab.document', () => rt.slots.register(
       { name: 'sidebar.right.tab.document', key: id },
       (props: DocumentPreviewProps) => {
-        const { tab } = props.useTabInfo()
+        const view = props.useDocumentView()
         const resource = props.useResource<'file'>(props.resourceAddress)
         expect(resource).not.toHaveProperty('operations')
         expect('ctx' in props).toBe(false)
         expect('useDocumentPreview' in props).toBe(false)
         return (
           <div
-            data-renderer={id} data-renderer-tab={tab.id}
+            data-renderer={id} data-renderer-tab={view.viewKey}
             data-renderer-path={resource.value?.absolutePath} data-renderer-version={resource.value?.version}
           >
             {props.content.kind === 'text' ? props.content.text : props.content.kind === 'bytes' ? new TextDecoder().decode(props.content.data) : 'renderer'}

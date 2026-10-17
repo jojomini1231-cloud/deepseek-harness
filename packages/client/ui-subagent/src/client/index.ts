@@ -64,7 +64,7 @@ export function apply(ctx: ClientContext): void {
     openChildAside(address: SubagentAddress) {
       ctx.sidebarRight.openResource(subagentChatAddress(address), {
         kind: 'subagentchat',
-        preferNewPane: true,
+        beside: 'after',
       })
     },
     refreshProjection(parentSessionId: SessionId) {

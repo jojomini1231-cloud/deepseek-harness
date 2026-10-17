@@ -1,24 +1,34 @@
-/** Document view state belongs to tab records, including while their bodies are hidden. */
+/** Document view state belongs to view lifetimes, including while their bodies are hidden. */
 import type { Context } from '@deepseek-ai/cordis'
-import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 
 /**
- * Release retained view state on tab closure or plugin disposal.
+ * Release retained view state when its lifetime ends or the plugin is disposed.
  * @param ctx - owning preview plugin context.
- * @returns a callback accepting the tab, its lifetime signal, and its store's forget action; repeated holds share one listener.
+ * @returns a callback accepting the view, its lifetime signal, and its store's
+ * forget action; one listener per (signal, view), shared by repeated holds.
  */
-export function retainDocumentTabs(ctx: Context): (tabId: TabId, signal: AbortSignal, forget: (tabId: TabId) => void) => void {
-  const retained = new Map<AbortSignal, () => void>()
-  ctx.effect(() => () => { for (const forget of retained.values()) forget() })
-  return (tabId, signal, forgetTab) => {
-    if (signal.aborted) { forgetTab(tabId); return }
-    if (retained.has(signal)) return
-    const forget = (): void => {
-      signal.removeEventListener('abort', forget)
-      retained.delete(signal)
-      forgetTab(tabId)
+export function retainDocumentViews(ctx: Context): (viewKey: string, signal: AbortSignal, forget: (viewKey: string) => void) => void {
+  // One abort listener per signal, holding the forget calls of every view that
+  // signal owns: several views may share one signal — a workbench tab's chips —
+  // and each view forgets only its own bucket.
+  const retained = new Map<AbortSignal, Map<string, () => void>>()
+  ctx.effect(() => () => {
+    for (const views of retained.values()) for (const forget of views.values()) forget()
+  })
+  return (viewKey, signal, forgetView) => {
+    if (signal.aborted) { forgetView(viewKey); return }
+    const views = retained.get(signal) ?? new Map<string, () => void>()
+    retained.set(signal, views)
+    if (views.has(viewKey)) return
+    views.set(viewKey, () => { forgetView(viewKey) })
+    if (views.size === 1) {
+      // The listener reads the set at abort time, so views joined later are
+      // covered without arming another listener.
+      signal.addEventListener('abort', () => {
+        retained.delete(signal)
+        for (const forget of views.values()) forget()
+        views.clear()
+      }, { once: true })
     }
-    retained.set(signal, forget)
-    signal.addEventListener('abort', forget, { once: true })
   }
 }

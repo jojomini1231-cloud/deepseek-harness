@@ -26,7 +26,7 @@ import type { RightbarOwnerProps } from '@deepseek-ai/dsh-client-ui-layout/clien
 // The locale plugin's own merge carries the shared `common` vocabulary that the
 // lookup chain consults after this namespace misses.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-import type { PaneId, TabId, TabRecord } from '@deepseek-ai/dsh-client-ui-dockkit'
+import type { PaneId, SplitDirection, TabId, TabRecord } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { SlotHookFactory } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TabHookContext } from '../tab-info.ts'
 import type { SidebarRightKey } from '../locales.ts'
@@ -122,8 +122,13 @@ export interface SidebarRightTabNavigation {
 export interface SidebarRightTabPlacement {
   /** Land a new tab in this pane instead. */
   readonly paneId?: PaneId
-  /** Prefer a new pane for new content; use the target pane when splitting is unavailable. */
-  readonly preferNewPane?: boolean
+  /**
+   * Land beside this tab's pane on the requested side, so the tab stays
+   * visible: in the pane already there, or in a new pane split off this tab's
+   * pane when the pane budget and the room rule allow. This tab's pane is the
+   * fallback. Ignored with `replaceTab`.
+   */
+  readonly beside?: SplitDirection
   /** Resource tabs reveal existing content by default; `false` permits duplicates. Pages always deduplicate within the target pane. */
   readonly revealIfOpened?: boolean
   /** `true` opens in this tab's place — its pane and strip slot — and closes this tab in the same step. */

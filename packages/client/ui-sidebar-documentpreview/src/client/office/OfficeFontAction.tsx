@@ -13,9 +13,9 @@ export type OfficeFontActionProps = PropsRuntime<'sidebar.right.tab.document.act
  * @param props - toolbar revision, tab reader, Office store, and localized copy.
  * @returns the font warning, or nothing before conversion completes.
  */
-export function OfficeFontAction({ content, useTabInfo, useStore, t }: OfficeFontActionProps): ReactNode {
-  const { tab } = useTabInfo()
-  const held = useStore(state => state.byTab[tab.id])
+export function OfficeFontAction({ content, useDocumentView, useStore, t }: OfficeFontActionProps): ReactNode {
+  const view = useDocumentView()
+  const held = useStore(state => state.byView[view.viewKey])
   if (content.kind !== 'renderer' || held?.revision !== content.revision || held.file === undefined) return null
   return <FontNotice key={content.revision} fonts={held.file.missingFonts} t={t} />
 }

@@ -5,10 +5,10 @@ import { act, waitFor } from '@testing-library/react'
 import { apply as resourcesApply, inject as resourcesInject } from '@deepseek-ai/dsh-client-resources/src/client/index.ts'
 import { SlotTestRuntime } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
-import type { UseSidebarRightTabInfo } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
+import type { UseDocumentView } from '../src/client/document/contract.ts'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { DocumentPreviewRegistry } from '../src/client/document/registry.ts'
-import { documentTabInfoFactory } from '../src/client/document/contract.ts'
+import { documentViewFactory } from '../src/client/document/contract.ts'
 import { apply, MARKDOWN_BODY_ID, markdownDefinition } from '../src/client/markdown/index.ts'
 
 const runtimes: SlotTestRuntime[] = []
@@ -57,10 +57,10 @@ describe('Markdown implementation registration', () => {
     }))
     const feature = await runtime.mount({ inject: ['slots', 'locale', 'documentPreviews'], apply })
     expect(previews.getSnapshot().map(definition => definition.id)).toEqual([MARKDOWN_BODY_ID])
-    const useTabInfo = vi.fn<UseSidebarRightTabInfo>(() => { throw new Error('Markdown rendering does not need tab actions') })
+    const useDocumentView = vi.fn<UseDocumentView>(() => ({ viewKey: 'markdown-view', navigation: { address: 'dsh-resource://file/session/markdown-registration/notes.md', params: undefined, revision: 1 }, signal: new AbortController().signal }))
     await runtime.root.declare({
       'sidebar.right.tab.document': {
-        kind: 'keyed', scope: 'session', inject: { hooks: { tabInfo: documentTabInfoFactory } },
+        kind: 'keyed', scope: 'session', inject: { hooks: { documentView: documentViewFactory } },
       },
     }, ({ renderSlot, SessionProvider }) => (
       <SessionProvider session={reference}>
@@ -72,7 +72,7 @@ describe('Markdown implementation registration', () => {
           addResource: vi.fn(), setResources: vi.fn(),
         }, {
           entryKey: MARKDOWN_BODY_ID,
-          hookContext: useTabInfo,
+          hookContext: useDocumentView,
           fallback: <span data-missing-markdown />,
         })}
       </SessionProvider>
@@ -89,7 +89,7 @@ describe('Markdown implementation registration', () => {
     await act(async () => { locale.setLocale('zh') })
     expect(locale.bind('documentMarkdown')).toBe(t)
     expect(view.getByRole('button', { name: '复制' })).toBeDefined()
-    expect(useTabInfo).not.toHaveBeenCalled()
+    expect(useDocumentView).not.toHaveBeenCalled()
 
     await feature.dispose()
     expect(previews.getSnapshot()).toEqual([])

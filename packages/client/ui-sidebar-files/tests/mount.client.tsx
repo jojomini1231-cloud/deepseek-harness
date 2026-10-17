@@ -5,7 +5,7 @@
  * framework-injected and never touched here, so one documented cast keeps the
  * harness to what is actually exercised.
  */
-import { useSyncExternalStore } from 'react'
+import { createElement, useSyncExternalStore } from 'react'
 import { render } from '@testing-library/react'
 import type { RenderResult } from '@testing-library/react'
 import { onTestFinished, vi } from 'vitest'
@@ -56,6 +56,8 @@ export interface Mounted {
   readonly tabActions: MockedTabActions
   /** Render a fresh body over the same store and face, as a tab switch remounts it. */
   readonly remount: () => RenderResult
+  /** The reusable preview Factory's renderer, recording what the body asked for. */
+  readonly renderFactorySlot: Mock
 }
 
 /** One store instance, one face, one owner share. */
@@ -88,6 +90,9 @@ function harness(cwd: string | null, refreshShortcut?: ReturnType<FilesBodyProps
       },
     }),
     renderSlot: () => null,
+    renderFactorySlot: vi.fn((name: string, input: { address: string }) => name === 'sidebar.document.preview'
+      ? createElement('div', { 'data-preview-address': input.address })
+      : null),
     sessionId: SESSION,
     useSessions: <S,>(sel: (s: SessionListState) => S) => sel(sessions),
     useStore: hookOf(instance),
@@ -106,5 +111,8 @@ function harness(cwd: string | null, refreshShortcut?: ReturnType<FilesBodyProps
 export function mountBody(cwd: string | null = ROOT, refreshShortcut?: ReturnType<FilesBodyProps['useTabInfo']>['tab']['refreshShortcut']): Mounted {
   const { shared, ...hands } = harness(cwd, refreshShortcut)
   const view = render(<FilesBody {...shared as unknown as FilesBodyProps} />)
-  return { ...hands, view, remount: () => render(<FilesBody {...shared as unknown as FilesBodyProps} />) }
+  return {
+    ...hands, view, renderFactorySlot: shared.renderFactorySlot,
+    remount: () => render(<FilesBody {...shared as unknown as FilesBodyProps} />),
+  }
 }

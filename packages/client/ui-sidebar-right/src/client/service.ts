@@ -36,8 +36,8 @@
 import { sidebarTargetFromElement, type SidebarRightTarget } from './focus.ts'
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
 import { createSnapshotStore, type ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
-import type { FloatRect, PaneId, TabId, TabRecord } from '@deepseek-ai/dsh-client-ui-dockkit'
-import { activeDockPaneId, canSplit, findContentTab, findPaneContentTab, dockPaneIds, findTabPane, getPane } from '@deepseek-ai/dsh-client-ui-dockkit'
+import type { FloatRect, PaneId, SplitDirection, TabId, TabRecord } from '@deepseek-ai/dsh-client-ui-dockkit'
+import { activeDockPaneId, adjacentPaneId, canSplit, findContentTab, findPaneContentTab, dockPaneIds, findTabPane, getPane } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { BoundActions } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SidebarRightNavigationParams, SidebarRightResourceParams, SidebarRightTabParamsFor } from './contract/params.ts'
@@ -151,8 +151,13 @@ export interface SidebarRightHost {
 export interface SidebarRightPlacement {
   /** Land a new tab in this pane instead of the active docked one. */
   readonly paneId?: PaneId
-  /** Prefer a new pane for new content; use the target pane when splitting is unavailable. */
-  readonly preferNewPane?: boolean
+  /**
+   * Land beside the target pane on this side, leaving the target's own tab
+   * visible: in the pane already there, or in a new pane split off the target
+   * when the pane budget and the room rule allow. The target pane is the
+   * fallback. Ignored with `replaceTab`.
+   */
+  readonly beside?: SplitDirection
   /** Take this tab's place — its pane and its strip slot — and close it in the same step. */
   readonly replaceTab?: TabId
   /**
@@ -178,6 +183,14 @@ export interface SidebarRightOpenTabOptions<K extends string = string> extends S
 
 /** The scheme every resource address carries; anything else is not a resource this face opens. */
 const RESOURCE_SCHEME = 'dsh-resource://'
+
+/** Where one open lands, once its placement is resolved against the live surface. */
+interface Landing {
+  /** The pane the tab lands in; `undefined` leaves the choice to the store. */
+  readonly paneId: PaneId | undefined
+  /** Split that pane and seat the tab on this side of it. */
+  readonly newPane: SplitDirection | undefined
+}
 
 /** Synchronous close/replacement hook; resource owners retain any background cleanup. */
 export type SidebarRightCloseHandler = (sessionId: SessionId, tab: TabRecord) => void
@@ -417,24 +430,15 @@ export class SidebarRightController implements ISidebarRight {
     params: SidebarRightNavigationParams,
   ): void {
     const surface = this.adopted.get(sessionId)?.store.getSnapshot().bySession[sessionId]
-    const targetPane = surface === undefined ? undefined : placement.paneId ?? activeDockPaneId(surface.layout)
-    const target = targetPane === undefined ? undefined : surface?.layout.nodes[targetPane]
-    const preferNewPane = placement.preferNewPane === true
-      && placement.replaceTab === undefined
-      && surface !== undefined
-      && target?.kind === 'pane'
-      && target.host === 'dock'
-      && target.tabs.length > 0
-      && canSplit(surface.layout)
-      && dockPaneIds(surface.layout).length < 2
-      && this.mounted.getSnapshot() === sessionId
-      && this.canSplitPane(sessionId, target.id)
+    const landing = surface === undefined
+      ? { paneId: placement.paneId, newPane: undefined }
+      : this.besideLanding(sessionId, surface, placement)
     const commit = (): void => { actions.openContent(sessionId, {
       kind: claim.kind,
       contentId: claim.contentId,
       title: claim.title,
-      ...placement.paneId === undefined ? {} : { paneId: placement.paneId },
-      ...preferNewPane ? { preferNewPane: true } : {},
+      ...landing.paneId === undefined ? {} : { paneId: landing.paneId },
+      ...landing.newPane === undefined ? {} : { newPane: landing.newPane },
       ...placement.replaceTab === undefined ? {} : { replaceTab: placement.replaceTab },
       ...placement.revealIfOpened === undefined ? {} : { revealIfOpened: placement.revealIfOpened },
     }, (tabId) => { this.tabDomain.navigate(sessionId, tabId, { address, params }) }) }
@@ -447,6 +451,34 @@ export class SidebarRightController implements ISidebarRight {
         : placement.revealIfOpened === false ? undefined : findContentTab(layout, claim.contentId, claim.kind)
     if (replaced === undefined || replaced.id === revealed) { commit(); return }
     this.removeAfterCleanup(sessionId, replaced, commit)
+  }
+
+  /**
+   * Resolve a `beside` placement against the surface: the pane already beside
+   * the target on the requested side, or a split of the target when the pane
+   * budget and the room rule allow. Everything else — no request, `replaceTab`,
+   * a floating or empty target, a spent budget, a narrow pane — lands in the
+   * target pane, exactly as an open without the option does.
+   * @param sessionId - the Session whose surface is opening.
+   * @param surface - that Session's committed surface.
+   * @param placement - the caller's placement options.
+   * @returns where the open lands.
+   */
+  private besideLanding(sessionId: SessionId, surface: SurfaceState, placement: SidebarRightPlacement): Landing {
+    const { beside } = placement
+    const targetPane = placement.paneId ?? activeDockPaneId(surface.layout)
+    if (beside === undefined || placement.replaceTab !== undefined) return { paneId: targetPane, newPane: undefined }
+    const adjacent = adjacentPaneId(surface.layout, targetPane, beside)
+    if (adjacent !== undefined) return { paneId: adjacent, newPane: undefined }
+    const target = surface.layout.nodes[targetPane]
+    const splittable = target?.kind === 'pane'
+      && target.host === 'dock'
+      && target.tabs.length > 0
+      && canSplit(surface.layout)
+      && dockPaneIds(surface.layout).length < 2
+      && this.mounted.getSnapshot() === sessionId
+      && this.canSplitPane(sessionId, target.id)
+    return { paneId: targetPane, newPane: splittable ? beside : undefined }
   }
 
   /**

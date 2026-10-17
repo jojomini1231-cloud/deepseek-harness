@@ -1,12 +1,12 @@
 /** Office preview registration backed by authorized Host rendering and the existing PDF body. */
 import type { Context } from '@deepseek-ai/cordis'
-import { retainDocumentTabs } from '../document/tab-lifetime.ts'
+import { retainDocumentViews } from '../document/tab-lifetime.ts'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-office-to-pdf/remote'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-api-workspace-files/remote'
 import { failureLine } from '../failure-line.ts'
-import { documentTabInfoFactory } from '../document/contract.ts'
+import { documentViewFactory } from '../document/contract.ts'
 import { en, zh, type OfficePreviewKey } from './locales.ts'
 import { OfficePreviewCache, type ReadOfficeBytes, type ReadOfficeDocument } from './cache.ts'
 import { pdfBodyRegistration } from '../pdf/index.ts'
@@ -47,7 +47,7 @@ export function apply(ctx: Context, config: Config['office']): void {
   ctx.effect(() => ctx.slots.inject('sidebar.right.tab.document.action', () => ctx.slots.register({
     name: 'sidebar.right.tab.document.action', key: id, locale: 'sidebarOffice', store,
   }, OfficeFontAction)))
-  const retainTab = retainDocumentTabs(ctx)
+  const retainView = retainDocumentViews(ctx)
   const documentT = ctx.locale.bind('sidebarDocumentPreview')
   const face = officeFace(
     (file, signal) => read(file, signal),
@@ -56,11 +56,11 @@ export function apply(ctx: Context, config: Config['office']): void {
   ctx.effect(() => ctx.slots.inject('sidebar.right.tab.document', () => ctx.slots.register({
     name: 'sidebar.right.tab.document', key: id, locale: 'sidebarOffice', store,
     children: { 'sidebar.right.tab.document.office.pdf': {
-      kind: 'keyed', scope: 'session', inject: { hooks: { tabInfo: documentTabInfoFactory } },
+      kind: 'keyed', scope: 'session', inject: { hooks: { documentView: documentViewFactory } },
     } },
     inject: (sessionId, actions): OfficeBodyInjected => ({
       ...face(sessionId, actions),
-      retainTab: (tabId, signal) => { retainTab(tabId, signal, actions.forget) },
+      retainView: (viewKey, signal) => { retainView(viewKey, signal, actions.forget) },
     }),
   }, OfficeBody)))
   const pdfPresentation = pdfBodyRegistration(ctx)

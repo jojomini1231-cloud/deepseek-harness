@@ -4,7 +4,6 @@ import { useMemo, useSyncExternalStore } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { PdfDocument } from '../src/client/pdf/document.ts'
 import type { renderPdfPage } from '../src/client/pdf/document.ts'
 import type { openPdf } from '../src/client/pdf/runtime.ts'
@@ -76,7 +75,7 @@ class IntersectionObserverStub {
 function harness() {
   const instance = createPdfStore().create()
   const controller = new AbortController()
-  const tabId = 'pdf-tab' as TabId
+  const tabId = 'pdf-tab'
   const subscribe = (listener: () => void) => instance.subscribe(listener)
   const snapshot = () => instance.getSnapshot()
   function useStore<T>(selector: (state: PdfState) => T): T {
@@ -92,8 +91,8 @@ function harness() {
     const props = {
       resourceAddress: 'dsh-resource://file/session/s/report.pdf',
       content: kind === 'bytes' ? { kind, data: bytes } : { kind, text: '', pages: [], eof: true }, wrap: false,
-      useTabInfo: () => ({ tab: { id: tabId, signal: controller.signal } }),
-      useStore, actions: instance.actions, retainTab: vi.fn(), t: makeTranslate(en),
+      useDocumentView: () => ({ viewKey: tabId, navigation: { address: '', params: undefined, revision: 1 }, signal: controller.signal }),
+      useStore, actions: instance.actions, retainView: vi.fn(), t: makeTranslate(en),
     } as unknown as PdfBodyProps
     return <PdfBody {...props} loading={<LoadingIndicator label={en.loading} />} scrollportRef={scrollportRef}
       ZoomViewport={ZoomViewport} zoomSurfaceClass={zoomSurfaceClass} />
@@ -146,23 +145,23 @@ describe('PDF body', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: '100%' }))
     fireEvent.click(menu)
     fireEvent.click(screen.getByRole('menuitem', { name: '150%' }))
-    expect(h.instance.getSnapshot().byTab[h.tabId]).toEqual({ page: 1, zoom: { kind: 'fixed', scale: 1.5 } })
+    expect(h.instance.getSnapshot().byView[h.tabId]).toEqual({ page: 1, zoom: { kind: 'fixed', scale: 1.5 } })
     expect((view.container.querySelector('[data-document-zoom-frame]') as HTMLElement)
       .style.getPropertyValue('--document-zoom')).toBe('1.5')
     const out = screen.getByRole('button', { name: 'Zoom out' })
     expect(fireEvent.mouseDown(out)).toBe(false)
     fireEvent.click(out)
-    expect(h.instance.getSnapshot().byTab[h.tabId]?.zoom).toEqual({ kind: 'fixed', scale: 1.25 })
+    expect(h.instance.getSnapshot().byView[h.tabId]?.zoom).toEqual({ kind: 'fixed', scale: 1.25 })
     const into = screen.getByRole('button', { name: 'Zoom in' })
     expect(fireEvent.mouseDown(into)).toBe(false)
     fireEvent.click(into)
-    expect(h.instance.getSnapshot().byTab[h.tabId]?.zoom).toEqual({ kind: 'fixed', scale: 1.5 })
+    expect(h.instance.getSnapshot().byView[h.tabId]?.zoom).toEqual({ kind: 'fixed', scale: 1.5 })
     act(() => { h.instance.actions.zoom(h.tabId, { kind: 'fixed', scale: 1.657 }) })
     fireEvent.click(out)
-    expect(h.instance.getSnapshot().byTab[h.tabId]?.zoom).toEqual({ kind: 'fixed', scale: 1.5 })
+    expect(h.instance.getSnapshot().byView[h.tabId]?.zoom).toEqual({ kind: 'fixed', scale: 1.5 })
     act(() => { h.instance.actions.zoom(h.tabId, { kind: 'fixed', scale: 1.657 }) })
     fireEvent.click(into)
-    expect(h.instance.getSnapshot().byTab[h.tabId]?.zoom).toEqual({ kind: 'fixed', scale: 1.75 })
+    expect(h.instance.getSnapshot().byView[h.tabId]?.zoom).toEqual({ kind: 'fixed', scale: 1.75 })
     fireEvent.click(menu)
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
     expect(screen.queryByRole('menu')).toBeNull()
@@ -174,7 +173,7 @@ describe('PDF body', () => {
     expect(screen.getByRole('button', { name: 'Choose zoom' }).textContent).toContain('25%')
     fireEvent.click(menu)
     fireEvent.click(screen.getByRole('menuitem', { name: 'Fit width' }))
-    expect(h.instance.getSnapshot().byTab[h.tabId]?.zoom).toEqual({ kind: 'fit-width' })
+    expect(h.instance.getSnapshot().byView[h.tabId]?.zoom).toEqual({ kind: 'fit-width' })
   })
 
   it('zooms a trackpad gesture around its pointer and leaves ordinary scrolling alone', async () => {
@@ -191,7 +190,7 @@ describe('PDF body', () => {
     scrollport.scrollLeft = 40
     scrollport.scrollTop = 80
     fireEvent.wheel(scrollport, { deltaY: 20, clientX: 60, clientY: 70 })
-    expect(h.instance.getSnapshot().byTab[h.tabId]?.zoom).toBeUndefined()
+    expect(h.instance.getSnapshot().byView[h.tabId]?.zoom).toBeUndefined()
     vi.useFakeTimers()
     const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, ctrlKey: true,
       deltaY: -10, clientX: 60, clientY: 70 })
@@ -201,7 +200,7 @@ describe('PDF body', () => {
     expect(scrollport.dispatchEvent(event)).toBe(false)
     await act(async () => {})
     expect(controls.getAttribute('data-document-zoom-visible')).toBe('true')
-    expect(h.instance.getSnapshot().byTab[h.tabId]?.zoom).toBeUndefined()
+    expect(h.instance.getSnapshot().byView[h.tabId]?.zoom).toBeUndefined()
     expect(engine.render).toHaveBeenCalledTimes(rendersBeforeGesture)
     expect(screen.getByRole('button', { name: 'Choose zoom' }).textContent).toContain('111%')
     expect((view.container.querySelector('[data-document-zoom-frame]') as HTMLElement)
@@ -213,7 +212,7 @@ describe('PDF body', () => {
     expect((view.container.querySelector('[data-document-zoom-frame]') as HTMLElement)
       .style.getPropertyValue('--document-zoom')).toBe(String(Math.exp(0.1)))
     await act(async () => { await vi.advanceTimersByTimeAsync(120) })
-    const zoom = h.instance.getSnapshot().byTab[h.tabId]?.zoom
+    const zoom = h.instance.getSnapshot().byView[h.tabId]?.zoom
     expect(zoom?.kind).toBe('fixed')
     if (zoom?.kind !== 'fixed') throw new Error('pinch did not commit a fixed zoom')
     expect(zoom.scale).toBeCloseTo(Math.exp(0.1))
@@ -228,9 +227,9 @@ describe('PDF body', () => {
       deltaMode: WheelEvent.DOM_DELTA_LINE, deltaY: 1, clientX: 60, clientY: 70 }))
     await act(async () => {})
     expect(controls.getAttribute('data-document-zoom-visible')).toBe('true')
-    expect(h.instance.getSnapshot().byTab[h.tabId]?.zoom).toEqual({ kind: 'fixed', scale: committed })
+    expect(h.instance.getSnapshot().byView[h.tabId]?.zoom).toEqual({ kind: 'fixed', scale: committed })
     view.unmount()
-    expect(h.instance.getSnapshot().byTab[h.tabId]?.zoom).toEqual({ kind: 'fixed', scale: committed })
+    expect(h.instance.getSnapshot().byView[h.tabId]?.zoom).toEqual({ kind: 'fixed', scale: committed })
   })
 
   it('does not restore a pending gesture after its tab closes', async () => {
@@ -244,9 +243,9 @@ describe('PDF body', () => {
     act(() => { h.controller.abort() })
     scrollport.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -1 }))
     await act(async () => { await vi.advanceTimersByTimeAsync(120) })
-    expect(h.instance.getSnapshot().byTab[h.tabId]).toBeUndefined()
+    expect(h.instance.getSnapshot().byView[h.tabId]).toBeUndefined()
     view.unmount()
-    expect(h.instance.getSnapshot().byTab[h.tabId]).toBeUndefined()
+    expect(h.instance.getSnapshot().byView[h.tabId]).toBeUndefined()
   })
 
   it('redraws only nearby pages and refreshes a retained page when it returns at the new zoom', async () => {
@@ -373,7 +372,7 @@ describe('PDF body', () => {
     expect(engine.render.mock.calls.map(([, page]) => page)).toEqual([1])
     await act(async () => { observer.intersect(second, true) })
     expect(engine.render.mock.calls.map(([, page]) => page)).toEqual([1, 2])
-    expect(h.instance.getSnapshot().byTab[h.tabId]?.page).toBe(2)
+    expect(h.instance.getSnapshot().byView[h.tabId]?.page).toBe(2)
     expect(screen.getByRole('img', { name: 'PDF page 2' })).toBeTruthy()
     view.unmount()
     expect(IntersectionObserverStub.instances.every(instance => instance.disconnected)).toBe(true)

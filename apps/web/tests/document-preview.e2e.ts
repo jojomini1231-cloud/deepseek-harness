@@ -109,8 +109,11 @@ async function canvasColor(canvas: Locator): Promise<string> {
   })
 }
 
-/** Wait for device resolution, subject to the page bitmap allocation limit. */
+/** Wait for device resolution on a displayed page, subject to the page bitmap allocation limit. */
 async function expectPdfResolution(canvas: Locator): Promise<void> {
+  // A page the settled zoom has pushed out of the narrower preview pane keeps
+  // its previous bitmap until it is displayed again, so bring it back first.
+  await canvas.scrollIntoViewIfNeeded()
   await expect.poll(() => canvas.evaluate((node) => {
     const bitmap = node as HTMLCanvasElement
     const width = Number.parseFloat(bitmap.style.getPropertyValue('--pdf-page-width'))
@@ -119,6 +122,17 @@ async function expectPdfResolution(canvas: Locator): Promise<void> {
       Math.sqrt(16_777_216 * width / height))
     return Math.abs(bitmap.width - expected)
   })).toBeLessThanOrEqual(1)
+}
+
+/**
+ * Give the preview the workbench's whole width, as if the tree column were
+ * closed: the Files tab previews files inside itself now, beside that tree.
+ */
+const PREVIEW_PANE_ONLY = '[data-files-tree-column] { display: none !important; } [data-files-content-column] { flex: 1 1 auto !important; }'
+
+/** The panel's width override, keeping the preview pane the panel's only occupant. */
+function panelWidthCss(width: number): string {
+  return `[data-sidebar-right-panel] { width: ${width}px !important; } ${PREVIEW_PANE_ONLY}`
 }
 
 /** Select a workspace file through the Files tab and wait for its preview identity. */
@@ -225,14 +239,21 @@ it.skipIf(MODE === 'record').each(['en-US', 'zh-CN'])('fills the spreadsheet pan
     const panelBounds = await panel.boundingBox()
     if (panelBounds === null) throw new Error('sidebar panel is unavailable')
     const viewport = page.viewportSize()
-    const layout = await page.addStyleTag({ content: `[data-sidebar-right-panel] { width: ${panelBounds.width + 160}px !important; }` })
-    await expect.poll(async () => Math.round((await canvas.boundingBox())!.width - original.width)).toBe(160)
+    // The preview keeps the pane beside the file tree, so the preview pane is
+    // given the panel's whole width first: from there the resize below is the
+    // panel's own change, and this test tracks that pane's viewport.
+    const layout = await page.addStyleTag({ content: PREVIEW_PANE_ONLY })
+    await expect.poll(async () => Math.round((await canvas.boundingBox())!.width)).toBeGreaterThan(original.width)
+    const atPanelWidth = await canvas.boundingBox()
+    if (atPanelWidth === null) throw new Error('spreadsheet canvas is unavailable at the panel width')
+    await layout.evaluate((node, css) => { node.textContent = css }, panelWidthCss(panelBounds.width + 160))
+    await expect.poll(async () => Math.round((await canvas.boundingBox())!.width - atPanelWidth.width)).toBe(160)
     await expect.poll(() => formula.innerText()).toBe('46281')
     expect(await originalCanvas.evaluate(node => node.isConnected)).toBe(true)
     expect(page.viewportSize()).toEqual(viewport)
     await expectExcelLayout(excel)
     await successShot(page, `excel-resize-wide-${locale}`)
-    await layout.evaluate((node) => { node.textContent = '[data-sidebar-right-panel] { width: 360px !important; }' })
+    await layout.evaluate((node, css) => { node.textContent = css }, panelWidthCss(360))
     await expect.poll(async () => Math.round((await panel.boundingBox())!.width)).toBe(360)
     await expectExcelLayout(excel)
     expect(await excel.locator('.fortune-sheettab-container').evaluate((node) => {
@@ -283,7 +304,7 @@ it.skipIf(MODE === 'record').each(['en-US', 'zh-CN'])('fills the spreadsheet pan
     await expect.poll(() => selection.innerText()).toBe('A1')
     await expect.poll(() => formula.innerText()).toBe('会议纪要')
     for (const width of [1000, 360, 1000, 360]) {
-      await layout.evaluate((node, width) => { node.textContent = `[data-sidebar-right-panel] { width: ${width}px !important; }` }, width)
+      await layout.evaluate((node, css) => { node.textContent = css }, panelWidthCss(width))
       await expect.poll(async () => Math.round((await panel.boundingBox())!.width)).toBe(width)
       await expectExcelLayout(excel)
       expect(await meetingCanvas.evaluate(node => node.isConnected)).toBe(true)
@@ -345,7 +366,7 @@ it.skipIf(MODE === 'record').each(['en-US', 'zh-CN'])('fills the spreadsheet pan
         if (name === 'values.csv') {
           await excel.locator('.fortune-sheet-overlay').click({ position: { x: 70, y: 30 } })
           await expect.poll(() => formula.textContent()).toBe(longCellText)
-          await layout.evaluate((node) => { node.textContent = '[data-sidebar-right-panel] { width: 360px !important; }' })
+          await layout.evaluate((node, css) => { node.textContent = css }, panelWidthCss(360))
           await expectExcelLayout(excel)
           await expect.poll(() => formula.evaluate((node) => {
             const range = document.createRange()
@@ -777,10 +798,11 @@ else process.exit(1);
     }
     await scrollIntoView(preview.getByRole('heading', { name: heading, exact: true }))
     await successShot(page, 'markdown')
-    const markdownTab = column.locator('[data-dockkit-tab]').filter({ has: page.getByText('smoke.md', { exact: true }) })
-    const markdownTabId = await markdownTab.getAttribute('data-dockkit-tab')
+    // The preview lives in the workbench, so its identity is the file's chip.
+    const markdownTab = column.locator('[data-files-tab]').filter({ has: page.getByText('smoke.md', { exact: true }) })
+    const markdownTabId = await markdownTab.getAttribute('data-files-tab')
     expect(markdownTabId).not.toBeNull()
-    const tabCount = await column.locator('[data-dockkit-tab]').count()
+    const tabCount = await column.locator('[data-files-tab]').count()
     const markdownViewers = [await viewer.innerText()]
     const sourceFonts: Array<{ fontSize: string; lineHeight: string }> = []
     for (const label of ['Code', 'Plain text']) {
@@ -798,8 +820,8 @@ else process.exit(1);
         const style = getComputedStyle(node)
         return { fontSize: style.fontSize, lineHeight: style.lineHeight }
       }))
-      expect(await markdownTab.getAttribute('data-dockkit-tab')).toBe(markdownTabId)
-      expect(await column.locator('[data-dockkit-tab]').count()).toBe(tabCount)
+      expect(await markdownTab.getAttribute('data-files-tab')).toBe(markdownTabId)
+      expect(await column.locator('[data-files-tab]').count()).toBe(tabCount)
       markdownViewers.push(await viewer.innerText())
     }
     expect(sourceFonts[1]).toEqual(sourceFonts[0])
@@ -809,7 +831,7 @@ else process.exit(1);
       `- Tail loaded by scrolling: ${tailHeading}`,
       `- Loaded images: ${markdownImages.join(' | ')}`,
       `- Viewers: ${markdownViewers.join(' -> ')}`,
-      `- Same tab: ${String(await markdownTab.getAttribute('data-dockkit-tab') === markdownTabId)}`,
+      `- Same chip: ${String(await markdownTab.getAttribute('data-files-tab') === markdownTabId)}`,
     ].join('\n'))
 
     await openFile('hostile.html')
@@ -957,18 +979,18 @@ else process.exit(1);
       await successShot(page, `pdf-spacing-${colorScheme}`)
     }
     expect(await body.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true)
-    const pdfTab = column.locator('[data-dockkit-tab]').filter({ has: page.getByText('smoke.pdf', { exact: true }) })
-    const pdfTabId = await pdfTab.getAttribute('data-dockkit-tab')
+    const pdfTab = column.locator('[data-files-tab]').filter({ has: page.getByText('smoke.pdf', { exact: true }) })
+    const pdfTabId = await pdfTab.getAttribute('data-files-tab')
     expect(pdfTabId).not.toBeNull()
-    await filesTab.click()
-    await column.locator('[data-files-state="tree"]').waitFor({ state: 'visible' })
-    await pdfTab.click()
+    // Show another open file, then come back: the PDF's own pages and scroll survive.
+    await column.locator('[data-files-tab-open]').first().click()
+    await pdfTab.locator('[data-files-tab-open]').click()
     await scrollIntoView(preview.locator('[data-pdf-page="2"]'))
     await secondPage.waitFor({ state: 'visible', timeout: 30_000 })
     await expect.poll(() => canvasColor(secondPage), { timeout: 30_000 }).toBe('blue')
     const restoredColor = await canvasColor(secondPage)
     expect(restoredColor).toBe('blue')
-    expect(await pdfTab.getAttribute('data-dockkit-tab')).toBe(pdfTabId)
+    expect(await pdfTab.getAttribute('data-files-tab')).toBe(pdfTabId)
     await copyPdfText(page, preview, 'Selectable PDF text')
     await successShot(page, 'pdf')
     sections.push([
@@ -982,7 +1004,7 @@ else process.exit(1);
       '- Settled zoom redraws the page at device resolution',
       `- Horizontal overflow: ${String(await body.evaluate(node => node.scrollWidth > node.clientWidth))}`,
       `- Canvas fills: ${[firstColor, secondColor, restoredColor].join(' -> ')}`,
-      `- Same tab: ${String(await pdfTab.getAttribute('data-dockkit-tab') === pdfTabId)}`,
+      `- Same chip: ${String(await pdfTab.getAttribute('data-files-tab') === pdfTabId)}`,
       '- Selected and copied text: Selectable PDF text',
     ].join('\n'))
 
@@ -1275,6 +1297,10 @@ else process.exit(1);
       '- Plain-text option and viewer picker: hidden',
     ].join('\n'))
 
+    // The fixture's columns place cell D3 past the preview pane's half of the
+    // panel while the file tree keeps its own pane, so the panel is widened for
+    // the coordinate clicks below; the tree stays usable in the other half.
+    const widePanel = await page.addStyleTag({ content: '[data-sidebar-right-panel] { width: 1340px !important; }' })
     await openFile('budget.xlsx')
     const excel = preview.locator('[data-excel-preview]')
     const sheetTabs = excel.locator('.luckysheet-sheets-item-name')
@@ -1372,6 +1398,8 @@ else process.exit(1);
       `- Invalid XLS/XLSX: ${invalidExcel}`,
     ].join('\n'))
 
+    await widePanel.evaluate((node) => { (node as HTMLElement).remove() })
+
     for (const extension of ['csv', 'tsv']) {
       await openFile(`table.${extension}`)
       await expect.poll(() => viewer.innerText()).toBe('Spreadsheet')
@@ -1432,6 +1460,48 @@ else process.exit(1);
     const prominent = unsupported.locator('[data-open-target="file"][data-size="large"]')
     expect((await prominent.boundingBox())?.height).toBe(36)
     expect((await unsupported.locator('[data-open-path]').boundingBox())?.height).toBe(24)
+    // An overflowing chip row stays reachable: the chips keep a width floor, the
+    // strip overflows instead of shrinking them away, no scrollbar is drawn, and
+    // the wheel scrolls it.
+    const chips = column.locator('[data-files-tabs]')
+    await expect.poll(() => chips.evaluate(node => node.querySelectorAll('[data-files-tab]').length)).toBeGreaterThan(3)
+    const chipRow = await chips.evaluate(node => ({
+      overflowing: node.scrollWidth > node.clientWidth,
+      scrollbar: getComputedStyle(node).scrollbarWidth,
+      narrowest: Math.min(...[...node.querySelectorAll<HTMLElement>('[data-files-tab]')]
+        .map(tab => tab.getBoundingClientRect().width)),
+    }))
+    expect(chipRow.overflowing).toBe(true)
+    expect(chipRow.scrollbar).toBe('none')
+    expect(chipRow.narrowest).toBeGreaterThanOrEqual(99)
+    await chips.hover()
+    await page.mouse.wheel(0, 120)
+    await expect.poll(() => chips.evaluate(node => node.scrollLeft)).toBeGreaterThan(0)
+    // A secondary press opens the chip menu; its arms are the list the workbench
+    // promises, and the ones with nothing to remove are disabled.
+    const lastChip = chips.locator('[data-files-tab]').last()
+    await lastChip.click({ button: 'right' })
+    const menuItems = page.getByRole('menuitem')
+    await expect.poll(() => menuItems.count()).toBe(6)
+    expect(await menuItems.allTextContents()).toEqual([
+      'Close', 'Close Other Tabs', 'Close All Tabs', 'Close Tabs to the Left', 'Close Tabs to the Right', 'Open in Files',
+    ])
+    // The menu sits below the chip that opened it and inside the window: the
+    // strip clips its own overflow, so the menu has to escape it rather than be
+    // cut off with the chips.
+    const chipBox = await lastChip.boundingBox()
+    const menuBox = await page.locator('[role="menu"]').boundingBox()
+    expect(menuBox?.y).toBeGreaterThanOrEqual((chipBox?.y ?? 0) + (chipBox?.height ?? 0))
+    expect(menuBox?.x).toBeGreaterThanOrEqual(0)
+    expect((menuBox?.x ?? 0) + (menuBox?.width ?? 0)).toBeLessThanOrEqual(1680)
+    await page.keyboard.press('Escape')
+    await expect.poll(() => menuItems.count()).toBe(0)
+    // Open in Files is the arm that acts without closing anything: it marks the
+    // chip's row in the tree, so a reader can see where the file came from.
+    await lastChip.click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Open in Files' }).click()
+    const revealed = column.locator(`[data-files-path="${join(cwd, 'clip.mp4')}"] [data-files-revealed]`)
+    await expect.poll(() => revealed.count()).toBe(1)
     await successShot(page, 'unsupported')
     sections.push([
       '## Unviewable binary', '',

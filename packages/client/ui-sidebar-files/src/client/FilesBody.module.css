@@ -89,6 +89,18 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+/* The file the content column shows keeps the hover fill, so the tree answers
+   where the reader is. */
+.rowActive {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* The row a chip's "Open in Files" landed on takes the same touched fill, so the
+   reveal answers where the file came from without claiming it is the shown one. */
+.rowRevealed {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
 /* The folder glyph rides the tertiary ink, as the workspace tree's does (ui-workspace Rows `.slot`). */
 .icon {
   flex: 0 0 auto;
@@ -175,4 +187,217 @@
    on the text's line and spaces it. */
 .titleIcon {
   flex: none;
+}
+
+/* The workbench's two columns. The tree column is the body's one scroller and
+   the content column is a fixed grid of chips above the document, so a divider
+   drag resizes a box instead of reflowing a document. */
+.workbench {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+.contentColumn {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.treeColumn {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The divider owns no layout room: its hairline paints over the seam and its
+   pointer target reaches 3px into each neighbour. */
+.splitter {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  width: 0;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.splitter::before,
+.splitter::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.splitter::before {
+  left: -0.25px;
+  width: 0.5px;
+  background: var(--dsw-alias-border-l3);
+}
+
+.splitter::after {
+  left: -3px;
+  right: -3px;
+}
+
+.workbench[data-files-dragging] .splitter::before,
+.splitter:hover::before {
+  background: var(--dsw-alias-border-l4);
+}
+
+/* The open files' chips: one row above the document, scrolled on the wheel
+   like the Sidebar's strip, with the chips shrinking before they scroll. No
+   scrollbar is drawn on either engine: the wheel (FileTabs) is the way along
+   an overflowing row. */
+.tabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  align-items: center;
+  min-width: 0;
+  padding: 4px 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l3);
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* `data-files-tabs-scroll` names the hidden sides (`start`, `end`, or both);
+   each hidden side fades the chips out over 24px into the column's ground, so
+   the row reads as continuing. */
+.tabs[data-files-tabs-scroll='end'] {
+  mask-image: linear-gradient(to right, black calc(100% - 24px), transparent);
+}
+
+.tabs[data-files-tabs-scroll='start'] {
+  mask-image: linear-gradient(to right, transparent, black 24px);
+}
+
+.tabs[data-files-tabs-scroll='start end'] {
+  mask-image: linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent);
+}
+
+.tab {
+  display: flex;
+  flex: 0 1 auto;
+  gap: 2px;
+  align-items: center;
+  /* Shrinkable, but only to a floor: below it the chips stop giving way and the
+     strip overflows, which is what its wheel scrolling moves (the Sidebar
+     strip's 80px floor, sized here for an icon, a name, and a close control). */
+  min-width: 100px;
+  max-width: 200px;
+  border-radius: var(--dsw-radius-md);
+}
+
+.tab:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.tabActive {
+  background: var(--dsw-alias-interactive-bg-active, var(--dsw-alias-interactive-bg-hover));
+}
+
+/* The chip menu wraps its trigger: the wrapper takes the chip's free space so
+   the button inside keeps filling it. */
+.chipAnchor {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tabButton {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 5px;
+  align-items: center;
+  min-width: 0;
+  padding: 4px 2px 4px 8px;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.tabActive .tabButton {
+  color: var(--dsw-alias-label-primary);
+}
+
+.tabIcon {
+  flex: none;
+}
+
+.tabName {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The close control is always in the layout and focusable, and only fades out
+   of sight while its chip is not hovered, active, or focused: `display: none`
+   would take it out of the tab order, so a keyboard reader could never reach
+   the close control of a chip that is not the active one. */
+.tabClose {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 3px;
+  padding: 0;
+  color: var(--dsw-alias-label-tertiary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  cursor: pointer;
+  opacity: 0;
+  /* Hidden means untouchable too: without this a touch press on the chip's
+     trailing pixels would close the file instead of activating the chip. */
+  pointer-events: none;
+}
+
+.tabClose svg {
+  width: 12px;
+  height: 12px;
+}
+
+.tab:hover .tabClose,
+.tab:focus-within .tabClose,
+.tabActive .tabClose,
+.tabClose:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tabClose:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-active, var(--dsw-alias-interactive-bg-hover));
+}
+
+/* The document column: the Factory's own header and body fill it, and the
+   empty state speaks for the column before anything is open. */
+.preview {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.previewEmpty {
+  margin: 0;
+  padding: 16px;
+  color: var(--dsw-alias-label-tertiary);
 }

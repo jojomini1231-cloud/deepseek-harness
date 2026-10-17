@@ -17,11 +17,17 @@
  * `signal`: a request is not made for a record that already ended, and when the
  * record goes away the bucket and the tab's listing bookkeeping are forgotten,
  * so no later settlement writes to it.
+ *
+ * The face also owns each open chip's preview lifetime: a controller per chip,
+ * combined with the tab's signal, so closing a chip releases its preview while
+ * its siblings keep theirs, and a remounted body hands the preview the same
+ * signal its state is keyed to.
  */
 import type { ClientRemote, RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
 import type { BoundActions } from '@deepseek-ai/dsh-client-store'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { ancestorDirectories } from './store.ts'
 import type { DirLevel, createFilesStore } from './store.ts'
 import type { WorkspaceFileWatchFrame } from '@deepseek-ai/dsh-api-workspace-files/types'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
@@ -141,6 +147,35 @@ export interface FilesInjected {
    * @param signal - the tab record's lifetime.
    */
   readonly toggle: (tabId: TabId, parentPath: string, path: string, expanded: readonly string[], signal: AbortSignal) => void
+  /**
+   * Expand one file's ancestor directories and mark it as the path the tree
+   * should show, so its row is listed and the body can scroll it into view.
+   * @param tabId - the tab being drawn.
+   * @param root - the tree's absolute root.
+   * @param path - absolute path of the file to show.
+   * @param expanded - current expansion preferences, including descendants to restore.
+   * @param signal - the tab record's lifetime.
+   */
+  readonly reveal: (tabId: TabId, root: string, path: string, expanded: readonly string[], signal: AbortSignal) => void
+  /**
+   * The lifetime signal of one open chip's preview, minted on first use and
+   * stable for the chip until it closes: the tab record's signal combined with
+   * a controller the face holds, so a remounted body receives the same signal
+   * the preview's state is already keyed to.
+   * @param tabId - the tab being drawn.
+   * @param path - absolute path of the open file.
+   * @param signal - the tab record's lifetime.
+   * @returns the chip's preview lifetime.
+   */
+  readonly chipSignal: (tabId: TabId, path: string, signal: AbortSignal) => AbortSignal
+  /**
+   * End the preview lifetimes of chips their store actions just closed. The
+   * body computes the closed set from the open chips it drew; paths without a
+   * lifetime are ignored, so a close that changes nothing ends nothing.
+   * @param tabId - the tab being drawn.
+   * @param paths - absolute paths of the files whose chips closed.
+   */
+  readonly chipsClosed: (tabId: TabId, paths: readonly string[]) => void
 }
 
 /**
@@ -160,6 +195,10 @@ export function filesFace(
     /** Per tab, per absolute path: the listing generation a settlement must match; the latest request wins. */
     const generations = new Map<TabId, Map<string, number>>()
     const roots = new Map<TabId, DirectoryNode>()
+    // One controller per open chip, owned here because the body unmounts while
+    // the tab lives: the preview's first read arms its cleanup on this signal,
+    // so the signal must stay identical across body remounts.
+    const chipSignals = new Map<TabId, Map<string, { readonly controller: AbortController; readonly signal: AbortSignal }>>()
     const nextGeneration = (tabId: TabId, path: string): number => {
       const byPath = generations.get(tabId) ?? new Map<string, number>()
       generations.set(tabId, byPath)
@@ -192,6 +231,9 @@ export function filesFace(
           void roots.get(tabId)?.close()
           roots.delete(tabId)
           generations.delete(tabId)
+          const chips = chipSignals.get(tabId)
+          chipSignals.delete(tabId)
+          for (const { controller } of chips?.values() ?? []) controller.abort()
           actions.forget(tabId)
         }, { once: true })
         roots.set(tabId, new DirectoryNode(root,
@@ -203,6 +245,40 @@ export function filesFace(
         ).open())
       },
       load: (tabId, path, signal) => { void load(tabId, path, signal) },
+      chipSignal: (tabId, path, signal) => {
+        const chips = chipSignals.get(tabId) ?? new Map<string, { controller: AbortController; signal: AbortSignal }>()
+        chipSignals.set(tabId, chips)
+        const held = chips.get(path)
+        if (held !== undefined) return held.signal
+        const controller = new AbortController()
+        const chip = { controller, signal: AbortSignal.any([signal, controller.signal]) }
+        chips.set(path, chip)
+        return chip.signal
+      },
+      chipsClosed: (tabId, paths) => {
+        const chips = chipSignals.get(tabId)
+        if (chips === undefined) return
+        for (const path of paths) {
+          const chip = chips.get(path)
+          if (chip === undefined) continue
+          chips.delete(path)
+          chip.controller.abort()
+        }
+      },
+      reveal(tabId, root, path, expanded, signal) {
+        if (signal.aborted) return
+        const ancestors = ancestorDirectories(root, path)
+        const innermost = ancestors[0]
+        actions.revealed(tabId, path)
+        if (innermost === undefined) return
+        // The whole preference set travels with the first expansion: each level
+        // that loads next expands its own child from it, so a reveal deeper than
+        // one level opens the chain without a request per directory.
+        const next = [...new Set([...expanded, ...ancestors])]
+        const node = roots.get(tabId)
+        node?.setExpanded(next)
+        node?.expand(innermost, next)
+      },
       toggle(tabId, parentPath, path, expanded, signal) {
         if (signal.aborted) return
         const root = roots.get(tabId)

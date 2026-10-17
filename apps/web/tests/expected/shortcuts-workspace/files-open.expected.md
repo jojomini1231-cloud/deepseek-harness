@@ -2,5 +2,7 @@
 - button "Reload"
 - button "Open in Finder"
 - button "More ways to open"
+- paragraph: Choose a file from the tree on the right.
+- separator "Resize the file preview and file tree"
 - list:
   - listitem: Empty directory

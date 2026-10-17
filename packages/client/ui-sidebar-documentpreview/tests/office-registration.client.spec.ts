@@ -12,7 +12,6 @@ import { officeFace } from '../src/client/office/face.ts'
 import { Config } from '../src/config.ts'
 import { OfficeBody, type OfficeBodyInjected } from '../src/client/office/OfficeBody.tsx'
 import type { OfficeStore } from '../src/client/office/store.ts'
-import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import { en, zh } from '../src/client/office/locales.ts'
 import { en as documentEn } from '../src/client/locales.ts'
 
@@ -29,27 +28,27 @@ const converted = { ok: true as const, value: { ...source, generation, missingFo
 
 it('retains Office view state across remounts and releases it on tab close or plugin disposal', async () => {
   const h = await harness()
-  const first = 'first' as TabId
-  const second = 'second' as TabId
+  const first = 'first'
+  const second = 'second'
   const closed = new AbortController()
   const retained = new AbortController()
   try {
     h.instance.actions.loading(first, 1)
-    h.injected.retainTab(first, closed.signal)
-    h.injected.retainTab(first, closed.signal)
-    expect(h.instance.getSnapshot().byTab[first]).toBeDefined()
+    h.injected.retainView(first, closed.signal)
+    h.injected.retainView(first, closed.signal)
+    expect(h.instance.getSnapshot().byView[first]).toBeDefined()
     closed.abort()
-    expect(h.instance.getSnapshot().byTab[first]).toBeUndefined()
+    expect(h.instance.getSnapshot().byView[first]).toBeUndefined()
     h.instance.actions.loading(first, 2)
-    h.injected.retainTab(first, closed.signal)
-    expect(h.instance.getSnapshot().byTab[first]).toBeUndefined()
+    h.injected.retainView(first, closed.signal)
+    expect(h.instance.getSnapshot().byView[first]).toBeUndefined()
     h.instance.actions.loading(second, 1)
-    h.injected.retainTab(second, retained.signal)
+    h.injected.retainView(second, retained.signal)
     const message = documentEn['error.unavailable'].replace('{message}', 'conversion stopped')
     expect(h.describeFailure(new RemoteError('gateway/internal', 'conversion stopped', {}))).toBe(message)
     expect(h.describeFailure({ message: 'conversion stopped' })).toBe(message)
     await h.close()
-    expect(h.instance.getSnapshot().byTab[second]).toBeUndefined()
+    expect(h.instance.getSnapshot().byView[second]).toBeUndefined()
   } finally { closed.abort(); retained.abort(); await h.close() }
 })
 

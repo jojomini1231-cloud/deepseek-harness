@@ -8,7 +8,7 @@ import { CODE_HIGHLIGHT_EXTENSIONS } from '@deepseek-ai/dsh-client-ui-primitives
 import { apply } from '../src/client/code/index.ts'
 import { CodeBody } from '../src/client/code/CodeBody.tsx'
 import { DocumentPreviewRegistry } from '../src/client/document/registry.ts'
-import { documentTabInfoFactory } from '../src/client/document/contract.ts'
+import { documentViewFactory } from '../src/client/document/contract.ts'
 
 const ID = '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/code'
 const SLOT = 'sidebar.right.tab.document'
@@ -29,7 +29,7 @@ async function boot() {
   const previews = new DocumentPreviewRegistry()
   rt.ctx.provide('documentPreviews', previews)
   const declare = () => rt.declare({
-    [SLOT]: { kind: 'keyed', scope: 'session', inject: { hooks: { tabInfo: documentTabInfoFactory } } },
+    [SLOT]: { kind: 'keyed', scope: 'session', inject: { hooks: { documentView: documentViewFactory } } },
   })
   return { rt, locale, previews, declare }
 }

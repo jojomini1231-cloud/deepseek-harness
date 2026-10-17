@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import { createFilesStore } from '../src/client/store.ts'
 import type { DirLevel } from '../src/client/store.ts'
+import { ancestorDirectories, DEFAULT_RATIO, MAX_RATIO, MIN_RATIO } from '../src/client/store.ts'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 
 const ROOT = '/work/app'
@@ -26,7 +27,10 @@ describe('createFilesStore', () => {
     const { actions } = store
     const getSnapshot = (): ReturnType<typeof store.getSnapshot> => store.getSnapshot()
     actions.start(TAB, ROOT)
-    expect(getSnapshot().byTab[TAB]).toEqual({ root: ROOT, levels: {}, expanded: [ROOT], scrollTop: 0, autoRefresh: true })
+    expect(getSnapshot().byTab[TAB]).toEqual({
+      root: ROOT, levels: {}, expanded: [ROOT], scrollTop: 0, autoRefresh: true,
+      open: [], active: undefined, ratio: DEFAULT_RATIO,
+    })
   })
 
   it('shows a failed initial listing and replaces it with a successful retry', () => {
@@ -74,6 +78,137 @@ describe('createFilesStore', () => {
     expect(getSnapshot().byTab[TAB]!.levels[child]).toEqual({ kind: 'ready', level: LEVEL })
   })
 
+  it('opens, shows, and closes files by absolute path, keeping chip order and a neighbour', () => {
+    const store = createFilesStore().create()
+    const { actions } = store
+    const getSnapshot = (): ReturnType<typeof store.getSnapshot> => store.getSnapshot()
+    const a = { path: `${ROOT}/a.md`, address: `dsh-resource://file/session/s${ROOT}/a.md`, name: 'a.md' }
+    const b = { path: `${ROOT}/b.ts`, address: `dsh-resource://file/session/s${ROOT}/b.ts`, name: 'b.ts' }
+    actions.start(TAB, ROOT)
+    // Writes for a path that is not open change nothing.
+    actions.fileClosed(TAB, a.path)
+    actions.fileActivated(TAB, a.path)
+    expect(getSnapshot().byTab[TAB]?.open).toEqual([])
+    actions.fileOpened(TAB, a)
+    actions.fileOpened(TAB, b)
+    expect(getSnapshot().byTab[TAB]?.open).toEqual([a, b])
+    expect(getSnapshot().byTab[TAB]?.active).toBe(b.path)
+    // Showing an open file keeps the chip order; reopening it does the same.
+    actions.fileActivated(TAB, a.path)
+    expect(getSnapshot().byTab[TAB]?.open).toEqual([a, b])
+    expect(getSnapshot().byTab[TAB]?.active).toBe(a.path)
+    actions.fileOpened(TAB, a)
+    expect(getSnapshot().byTab[TAB]?.open).toEqual([a, b])
+    expect(getSnapshot().byTab[TAB]?.active).toBe(a.path)
+    // Closing the shown chip shows the next one, then the previous, then nothing.
+    actions.fileClosed(TAB, a.path)
+    expect(getSnapshot().byTab[TAB]?.open).toEqual([b])
+    expect(getSnapshot().byTab[TAB]?.active).toBe(b.path)
+    actions.fileOpened(TAB, a)
+    actions.fileClosed(TAB, b.path)
+    expect(getSnapshot().byTab[TAB]?.active).toBe(a.path)
+    actions.fileClosed(TAB, a.path)
+    expect(getSnapshot().byTab[TAB]?.open).toEqual([])
+    expect(getSnapshot().byTab[TAB]?.active).toBeUndefined()
+  })
+
+  it('closes chips in bulk, keeping the chip each arm leaves open', () => {
+    const store = createFilesStore().create()
+    const { actions } = store
+    const getSnapshot = (): ReturnType<typeof store.getSnapshot> => store.getSnapshot()
+    const open = (): readonly string[] | undefined => getSnapshot().byTab[TAB]?.open.map(entry => entry.path)
+    const active = (): string | undefined => getSnapshot().byTab[TAB]?.active
+    const file = (name: string) => ({ path: `${ROOT}/${name}`, address: `dsh-resource://file/session/s${ROOT}/${name}`, name })
+    const a = file('a.md'), b = file('b.ts'), c = file('c.yml')
+    const openAll = (): void => {
+      actions.filesClosedAll(TAB)
+      for (const entry of [a, b, c]) actions.fileOpened(TAB, entry)
+    }
+    actions.start(TAB, ROOT)
+    // Closing everything empties the column, and every arm on a chip that is not
+    // open leaves the column alone.
+    openAll()
+    actions.filesClosedAll(TAB)
+    expect(open()).toEqual([])
+    expect(active()).toBeUndefined()
+    actions.filesClosedExcept(TAB, a.path)
+    actions.filesClosedBefore(TAB, a.path)
+    actions.filesClosedAfter(TAB, a.path)
+    expect(open()).toEqual([])
+    // Others: the named chip survives and becomes the shown one.
+    openAll()
+    actions.filesClosedExcept(TAB, b.path)
+    expect(open()).toEqual([b.path])
+    expect(active()).toBe(b.path)
+    // Left: the named chip and the ones after it keep their order.
+    openAll()
+    actions.filesClosedBefore(TAB, b.path)
+    expect(open()).toEqual([b.path, c.path])
+    expect(active()).toBe(c.path)
+    // A shown file whose chip the arm closes falls back to that arm's chip.
+    openAll()
+    actions.filesClosedAfter(TAB, a.path)
+    expect(open()).toEqual([a.path])
+    expect(active()).toBe(a.path)
+    openAll()
+    actions.fileActivated(TAB, a.path)
+    actions.filesClosedBefore(TAB, c.path)
+    expect(open()).toEqual([c.path])
+    expect(active()).toBe(c.path)
+    // A shown file the arm leaves open stays shown.
+    openAll()
+    actions.fileActivated(TAB, a.path)
+    actions.filesClosedAfter(TAB, b.path)
+    expect(open()).toEqual([a.path, b.path])
+    expect(active()).toBe(a.path)
+    // An arm with nothing on its side leaves the open set as it was.
+    openAll()
+    actions.filesClosedAfter(TAB, c.path)
+    actions.filesClosedBefore(TAB, a.path)
+    expect(open()).toEqual([a.path, b.path, c.path])
+    expect(active()).toBe(c.path)
+  })
+
+  it('reveals a file by expanding its ancestors and remembering the row to show', () => {
+    const store = createFilesStore().create()
+    const { actions } = store
+    const getSnapshot = (): ReturnType<typeof store.getSnapshot> => store.getSnapshot()
+    actions.start(TAB, ROOT)
+    actions.revealed(TAB, `${ROOT}/src/deep/notes.md`)
+    expect(getSnapshot().byTab[TAB]?.expanded).toEqual([ROOT, `${ROOT}/src`, `${ROOT}/src/deep`])
+    expect(getSnapshot().byTab[TAB]?.revealed).toEqual({ path: `${ROOT}/src/deep/notes.md`, token: 1 })
+    // Revealing again keeps one entry per directory, and the token moves so a
+    // repeated request is still a new one for the body.
+    actions.revealed(TAB, `${ROOT}/src/other.md`)
+    expect(getSnapshot().byTab[TAB]?.expanded).toEqual([ROOT, `${ROOT}/src`, `${ROOT}/src/deep`])
+    expect(getSnapshot().byTab[TAB]?.revealed).toEqual({ path: `${ROOT}/src/other.md`, token: 2 })
+  })
+
+  it('names the directories between a root and a path the way the tree keys them', () => {
+    expect(ancestorDirectories('/work/app', '/work/app/src/lib/a.ts')).toEqual(['/work/app/src', '/work/app/src/lib'])
+    // A file directly in the root has no ancestor, and the root's own row has none either.
+    expect(ancestorDirectories('/work/app', '/work/app/a.ts')).toEqual([])
+    expect(ancestorDirectories('/work/app', '/work/app')).toEqual([])
+    expect(ancestorDirectories('/work/app/', '/work/app/src/a.ts')).toEqual(['/work/app/src'])
+    // A path outside the root, and a sibling whose name merely shares its prefix, reveal nothing.
+    expect(ancestorDirectories('/work/app', '/work/other/a.ts')).toEqual([])
+    expect(ancestorDirectories('/work/app', '/work/application/a.ts')).toEqual([])
+    // A Windows root keeps its backslash for the root and joins children with `/`, as listings do.
+    expect(ancestorDirectories('C:\\work\\app', 'C:\\work\\app\\src\\lib\\a.ts')).toEqual(['C:\\work\\app/src', 'C:\\work\\app/src/lib'])
+  })
+
+  it('keeps a divider drag inside its range', () => {
+    const store = createFilesStore().create()
+    const { actions } = store
+    actions.start(TAB, ROOT)
+    actions.ratioChanged(TAB, 0.05)
+    expect(store.getSnapshot().byTab[TAB]?.ratio).toBe(MIN_RATIO)
+    actions.ratioChanged(TAB, 0.95)
+    expect(store.getSnapshot().byTab[TAB]?.ratio).toBe(MAX_RATIO)
+    actions.ratioChanged(TAB, 0.33)
+    expect(store.getSnapshot().byTab[TAB]?.ratio).toBe(0.33)
+  })
+
   it('reset drops levels while keeping expansion, scroll, and the automatic setting', () => {
     const store = createFilesStore().create()
     const { actions } = store
@@ -86,7 +221,10 @@ describe('createFilesStore', () => {
     actions.scrolled(TAB, 120)
     actions.autoRefresh(TAB, false)
     actions.reset(TAB)
-    expect(getSnapshot().byTab[TAB]).toEqual({ root: ROOT, levels: {}, expanded: [ROOT, child], scrollTop: 120, autoRefresh: false })
+    expect(getSnapshot().byTab[TAB]).toEqual({
+      root: ROOT, levels: {}, expanded: [ROOT, child], scrollTop: 120, autoRefresh: false,
+      open: [], active: undefined, ratio: DEFAULT_RATIO,
+    })
   })
 
   it('keeps the automatic setting independent for each tab', () => {

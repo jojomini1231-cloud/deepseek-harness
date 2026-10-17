@@ -29,7 +29,7 @@
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-store'
 import { clearSidebarLayout, readSidebarLayout, writeSidebarLayout } from './persistence.ts'
 import type {
-  DockMode, DockZone, FloatRect, History, LayoutOp, LayoutState, Mint, PaneId, SplitId, TabId, TabRecord,
+  DockMode, DockZone, FloatRect, History, LayoutOp, LayoutState, Mint, PaneId, SplitDirection, SplitId, TabId, TabRecord,
 } from '@deepseek-ai/dsh-client-ui-dockkit'
 import {
   activeDockPaneId, createInitialState, dockPaneIds, EMPTY_HISTORY, findContentTab, findPaneContentTab, findTabPane, getPane,
@@ -87,8 +87,8 @@ export interface OpenContentIntent {
   readonly title: string
   /** Land a new tab in this pane. */
   readonly paneId?: PaneId
-  /** Split the target pane and put new content alone in the new pane. */
-  readonly preferNewPane?: boolean
+  /** Split this pane and put new content alone on the requested side of it. */
+  readonly newPane?: SplitDirection
   /** Take this tab's pane and slot, and close it in the same entry. */
   readonly replaceTab?: TabId
   /** Resource tabs reveal an existing identity by default; `false` permits duplicates. Pages always deduplicate within the target pane. */
@@ -325,11 +325,11 @@ export function createSidebarRightStore(
             ? held
             : intent.revealIfOpened === false ? undefined : findContentTab(state, contentId, kind)
           let openedInNewPane: TabId | undefined
-          const split = intent.preferNewPane === true && replace === undefined && revealed === undefined
+          const split = intent.newPane !== undefined && replace === undefined && revealed === undefined
             ? planSplitPane(state, mint, paneId, (id) => {
               openedInNewPane = id
               return { id, kind, contentId, title }
-            })
+            }, intent.newPane)
             : []
           const planned = revealed !== undefined
             ? { ops: [{ type: 'focusTab' as const, tabId: revealed }], tabId: revealed }

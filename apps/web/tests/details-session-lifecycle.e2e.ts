@@ -180,7 +180,11 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
     await blankColumn.getByText('Workspace preview is available.', { exact: true }).waitFor()
     await page.getByText('Into the Unknown', { exact: false }).waitFor()
     const blankPanes = await paneSnapshot(page)
-    expect(blankPanes.map(pane => pane.tabs.map(tab => tab.title))).toEqual([['Files', 'before-chat.md']])
+    // The workbench previews the file inside the Files tab itself: one pane, one
+    // tab, and a chip plus the document in the content column.
+    expect(blankPanes.map(pane => pane.tabs.map(tab => tab.title))).toEqual([['Files']])
+    await expect.poll(() => blankColumn.locator('[data-files-preview] [data-textpreview-url]').count()).toBe(1)
+    expect(await blankColumn.locator('[data-files-tab]').count()).toBe(1)
     await page.screenshot({ path: join(SHOT_DIR, `blank-preview-${MODE}-${process.pid}.png`), fullPage: true })
 
     const blankViewport = page.viewportSize()!
@@ -204,9 +208,13 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
     }
     await expect.poll(() => columns(page)).toEqual([280, blankViewport.width - 280, 0])
     await page.locator('[data-sidebar-right-expand]').click()
-    await blankColumn.locator('[data-dockkit-add-tab]').click()
+    // The blank Session now holds two panes, so the terminal opens in the
+    // preview's own pane rather than in whichever strip renders first.
+    await paneAt(blankColumn, 0).locator('[data-dockkit-add-tab]').click()
+    // Keyboard activation: the entry's shell-menu trigger covers the capsule's
+    // centre once the two panes halve the panel's width.
     await blankColumn.locator('[data-sidebar-right-guide-entry="terminal"]')
-      .getByRole('button', { name: /^New terminal/u }).click()
+      .getByRole('button', { name: /^New terminal/u }).press('Enter')
     const agent = scaffold.ctx.agents.list().find(agent => agent.session.header.cwd === workspace)
     if (agent === undefined) throw new Error('Blank Session has no workspace Agent')
     await expect.poll(() => scaffold.ctx.terminalController.list(agent.id).map(terminal => terminal.state)).toEqual(['running'])
@@ -216,20 +224,21 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
     await expect.poll(() => readFile(join(workspace, 'before-chat-terminal.txt'), 'utf8')).toBe('READY')
     expect(sessionEvents).not.toContain('turn/start')
     expect(sessionEvents).not.toContain('user/message')
-    await blankColumn.locator('[data-dockkit-tab][aria-selected="true"]').hover()
+    const terminalTab = paneAt(blankColumn, 0).locator('[data-dockkit-tab][aria-selected="true"]')
+    await terminalTab.hover()
     // The tab disappears before the Host finishes process cleanup; close responds after quiescence.
     const [closed] = await Promise.all([
       page.waitForResponse('**/api/terminal/close'),
-      blankColumn.locator('[data-dockkit-tab][aria-selected="true"] [data-dockkit-tab-close]').click(),
+      terminalTab.locator('[data-dockkit-tab-close]').click(),
     ])
     expect(await closed.json()).toMatchObject({ result: { ok: true } })
     expect(scaffold.ctx.terminalController.list(agent.id)).toEqual([])
-    await blankColumn.locator('[data-dockkit-tab]').filter({ hasText: 'before-chat.md' }).click()
+    await blankColumn.locator('[data-files-tab-open]').first().click()
     await compareOrRefreshGolden(BLANK_EXPECTED, [
       '# Blank Session workspace sidebar', '',
       '- No selected Session: expand control absent',
       '- Selected workspace before first message: expand control visible',
-      '- Files: before-chat.md opens as a Markdown preview',
+      '- Files: before-chat.md opens as a Markdown preview in the workbench beside the tree',
       '- Narrow viewport: reopened preview fills the viewport',
       '- Terminal: writes a file in the selected workspace before any user message or turn', '',
       `\`\`\`json\n${JSON.stringify(await paneSnapshot(page), null, 2)}\n\`\`\``,
@@ -243,11 +252,11 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
     await page.getByText('LIGHTHOUSE', { exact: true }).waitFor({ timeout: 15_000 })
     expect(await paneSnapshot(page)).toEqual(blankPanes)
     await blankColumn.getByText('Workspace preview is available.', { exact: true }).waitFor()
-    for (const title of ['before-chat.md', 'Files']) {
-      const tab = blankColumn.locator('[data-dockkit-tab]').filter({ hasText: title })
-      await tab.hover()
-      await tab.locator('[data-dockkit-tab-close]').click()
-    }
+    // Closing the workbench's only chip leaves the tab; closing the tab collapses the column.
+    await blankColumn.locator('[data-files-tab-close]').click()
+    const filesTab = blankColumn.locator('[data-dockkit-tab]').filter({ hasText: 'Files' })
+    await filesTab.hover()
+    await filesTab.locator('[data-dockkit-tab-close]').click()
 
     await expect.poll(() => detailsTrack(page), { timeout: 5_000 }).toBe(0)
     expect(await page.getByText('Details', { exact: true }).isVisible()).toBe(false)

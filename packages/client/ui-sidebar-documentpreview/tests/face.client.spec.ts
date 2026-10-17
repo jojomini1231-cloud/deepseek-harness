@@ -15,9 +15,8 @@ import type { DocumentFileBytes, ReadDocumentBytes, ReadWorkspaceFilePage } from
 import { hostFileOf } from '../src/client/rpc.ts'
 import { createTextStore } from '../src/client/store.ts'
 import { ABSOLUTE_PATH, FILE, PATH, SESSION, createResources, failure, page } from './fixtures.client.ts'
-import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 
-const TAB_1 = 'tab-1' as TabId
+const TAB_1 = 'tab-1'
 
 /** One read awaiting the spec's answer. */
 interface PendingRead {
@@ -109,7 +108,7 @@ function bench(sessionId = 'other-session' as SessionId) {
     settleAll: whole.settle,
     outstandingAll: whole.outstanding,
     outstanding: () => pending.map(call => call.offset),
-    tab: () => instance.getSnapshot().byTab[TAB_1],
+    tab: () => instance.getSnapshot().byView[TAB_1],
   }
 }
 
@@ -420,7 +419,7 @@ it.each([new Error('invalid bytes'), 'invalid bytes'])('reports an active comple
   try {
     textFace(vi.fn(), read, createResources())(SESSION, instance.actions).loadAll(TAB_1, FILE, controller.signal)
     await Promise.resolve()
-    expect(instance.getSnapshot().byTab[TAB_1]?.failure).toMatchObject({ code: 'gateway/internal', message: 'invalid bytes' })
+    expect(instance.getSnapshot().byView[TAB_1]?.failure).toMatchObject({ code: 'gateway/internal', message: 'invalid bytes' })
   } finally { controller.abort() }
 })
 
@@ -434,6 +433,6 @@ it('ignores a complete-read rejection after renderer-owned loading takes over', 
     face.prepareRenderer(TAB_1, controller.signal, 'office')
     pending.reject(new Error('retired'))
     await pending.promise.catch(() => {})
-    expect(instance.getSnapshot().byTab[TAB_1]?.failure).toBeUndefined()
+    expect(instance.getSnapshot().byView[TAB_1]?.failure).toBeUndefined()
   } finally { controller.abort() }
 })

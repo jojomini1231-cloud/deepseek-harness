@@ -23,6 +23,24 @@ export interface HtmlBodyInjected {
   readonly readRelated: ReadHtmlRelated
 }
 
+/**
+ * The opaque initial name of one view's iframe, for Desktop shortcut routing.
+ *
+ * The view's key is host-chosen and may carry an absolute path, so it is hashed
+ * rather than embedded: the name only correlates the focused frame with the
+ * event's target and never needs to be readable.
+ * @param viewKey - the host's identity for the view being drawn.
+ * @returns the iframe's initial name, stable for one view.
+ */
+export function frameNameOf(viewKey: string): string {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < viewKey.length; index++) {
+    hash ^= viewKey.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return `dsh-sidebar-html-${(hash >>> 0).toString(16)}`
+}
+
 type FrameInput = Pick<HtmlBodyProps, 'resourceAddress' | 'readRelated' | 'addResource' | 'setResources'> & {
   readonly data: Uint8Array<ArrayBuffer>
   readonly signal: AbortSignal
@@ -74,18 +92,18 @@ function HtmlFrame({ data, resourceAddress, readRelated, addResource, setResourc
  * @returns an isolated HTML document, or nothing for text delivery.
  */
 export function HtmlBody({
-  content, resourceAddress, readRelated, useTabInfo, useInteractivePreview, addResource, setResources, t,
+  content, resourceAddress, readRelated, useDocumentView, useInteractivePreview, addResource, setResources, t,
 }: HtmlBodyProps): ReactNode {
   const interactivePreview = useInteractivePreview(value => value)
-  const { tab } = useTabInfo()
+  const view = useDocumentView()
   useEffect(() => {
     if (!interactivePreview) setResources([])
   }, [interactivePreview, setResources])
   if (content.kind !== 'bytes') return null
-  const frameName = `dsh-sidebar-html-${tab.id}`
+  const frameName = frameNameOf(view.viewKey)
   if (!interactivePreview) return <BasicHtmlFrame data={content.data} frameName={frameName} t={t} />
   return <HtmlFrame key={resourceAddress} data={content.data} resourceAddress={resourceAddress}
-    readRelated={readRelated} signal={tab.signal} frameName={frameName} addResource={addResource} setResources={setResources} t={t} />
+    readRelated={readRelated} signal={view.signal} frameName={frameName} addResource={addResource} setResources={setResources} t={t} />
 }
 
 /** Static preview mounts a separate browsing context so a mode change retires running scripts. */

@@ -7,7 +7,7 @@ import { applyOp, replay } from '../src/engine/operations.ts'
 import { createIdMinter, createInitialState } from '../src/engine/initial.ts'
 import { asPane, asSplit, asTab, childAt, fileTab, firstTab, seedTab } from './fixtures.client.ts'
 import {
-  assertNever, dockPaneIds, findParent, findTabPane, firstDockPaneId, floatIndex, floatRect, getNode, getPane, getSplit,
+  adjacentPaneId, assertNever, dockPaneIds, findParent, findTabPane, firstDockPaneId, floatIndex, floatRect, getNode, getPane, getSplit,
   getTab, normalizeSizes, onlyTabId, replaceInParent, topRightPaneId,
 } from '../src/engine/tree.ts'
 import type { IdMinter } from '../src/engine/initial.ts'
@@ -474,6 +474,20 @@ describe('tree readers', () => {
     expect(topRightPaneId(below.state)).toBe(right.newPaneId)
     const above = split(below.state, minter, paneId, 'column', 'before')
     expect(firstDockPaneId(above.state)).toBe(above.newPaneId)
+  })
+
+  it('name the pane beside another on one side, and nothing at an end or across axes', () => {
+    const { state, minter, paneId } = fixture()
+    expect(adjacentPaneId(state, paneId, 'after')).toBeUndefined()
+    const right = split(state, minter, paneId)
+    expect(adjacentPaneId(right.state, paneId, 'after')).toBe(right.newPaneId)
+    expect(adjacentPaneId(right.state, right.newPaneId, 'before')).toBe(paneId)
+    expect(adjacentPaneId(right.state, paneId, 'before')).toBeUndefined()
+    expect(adjacentPaneId(right.state, right.newPaneId, 'after')).toBeUndefined()
+    // A sibling that is itself a split is not the pane beside this one.
+    const below = split(right.state, minter, right.newPaneId, 'column')
+    expect(adjacentPaneId(below.state, paneId, 'after')).toBeUndefined()
+    expect(adjacentPaneId(below.state, right.newPaneId, 'before')).toBeUndefined()
   })
 
   it('normalize sizes without drifting an exact sum, and refuse a zero total', () => {

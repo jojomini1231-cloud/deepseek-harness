@@ -4,7 +4,7 @@
  * writer returns a new state that keeps untouched nodes at their old identity.
  */
 import type {
-  FloatRect, LayoutNode, LayoutState, NodeId, PaneId, PaneNode, SplitNode, TabId, TabRecord,
+  FloatRect, LayoutNode, LayoutState, NodeId, PaneId, PaneNode, SplitDirection, SplitNode, TabId, TabRecord,
 } from '../contract/types.ts'
 
 /**
@@ -116,6 +116,23 @@ export function findParent(state: LayoutState, id: NodeId): SplitNode | undefine
     if (node.kind === 'split' && node.children.includes(id)) return node
   }
   return undefined
+}
+
+/**
+ * The pane on one side of this pane, sharing a row split with it.
+ * @param state - current layout.
+ * @param paneId - the pane to look beside.
+ * @param direction - which side of it to look on.
+ * @returns the sibling pane's id, or `undefined` when the parent split runs on
+ *   the other axis or this pane already sits at that end.
+ */
+export function adjacentPaneId(state: LayoutState, paneId: PaneId, direction: SplitDirection): PaneId | undefined {
+  const parent = findParent(state, paneId)
+  if (parent === undefined || parent.axis !== 'row') return undefined
+  const sibling = parent.children[parent.children.indexOf(paneId) + (direction === 'after' ? 1 : -1)]
+  if (sibling === undefined) return undefined
+  const node = state.nodes[sibling]
+  return node?.kind === 'pane' ? node.id : undefined
 }
 
 /**

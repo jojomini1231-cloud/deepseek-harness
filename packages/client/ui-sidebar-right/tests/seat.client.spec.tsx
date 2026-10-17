@@ -187,7 +187,7 @@ it('keeps duplicate Session Tabs independent and preserves a body through dockin
   fireEvent.click(body)
   expect(h.controller.active()?.id).toBe(tab.id)
   expect(otherPane).toBeDefined()
-  act(() => { h.controller.openTab('shared', { paneId: otherPane!, revealIfOpened: false, preferNewPane: true }) })
+  act(() => { h.controller.openTab('shared', { paneId: otherPane!, revealIfOpened: false, beside: 'after' }) })
   expect(h.controller.tabsIn(SESSION).filter(tab => tab.kind === 'shared')).toHaveLength(2)
   const duplicate = h.controller.active()!
   expect(duplicate.id).not.toBe(tab.id)

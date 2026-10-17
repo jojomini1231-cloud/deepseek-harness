@@ -1,6 +1,6 @@
 /** Builtin PDF registration through document metadata and the keyed body slot. */
 import type { Context } from '@deepseek-ai/cordis'
-import { retainDocumentTabs } from '../document/tab-lifetime.ts'
+import { retainDocumentViews } from '../document/tab-lifetime.ts'
 import type {} from '../index.ts'
 import type { DocumentPreviewDefinition } from '../document/registry.ts'
 import type { PdfBodyInjected } from './pdf.tsx'
@@ -44,11 +44,11 @@ export function pdfBodyRegistration(ctx: Context): {
   inject: (sessionId: SessionId, actions: BoundActions<PdfStore>) => PdfBodyInjected
 } {
   const store = createPdfStore()
-  const retainTab = retainDocumentTabs(ctx)
+  const retainView = retainDocumentViews(ctx)
   return {
     store,
     inject: (_sessionId, actions): PdfBodyInjected => ({
-      retainTab: (tabId, signal) => { retainTab(tabId, signal, actions.forget) },
+      retainView: (viewKey, signal) => { retainView(viewKey, signal, actions.forget) },
       ZoomViewport,
       zoomSurfaceClass,
     }),

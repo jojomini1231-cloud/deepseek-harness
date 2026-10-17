@@ -1,11 +1,12 @@
 /**
- * The file tree's view state: which directories are expanded, what each
- * loaded level contains, and where the body is scrolled to.
+ * The workbench's view state: which directories are expanded, what each loaded
+ * level contains, where the tree is scrolled to, which files are open in the
+ * content column, and how the two columns are divided.
  *
  * The tree is not one resource. A directory listing per level, expanded lazily,
  * is state the type owns — so it lives in a Slot-standard exclusive store
  * (one instance per session), bucketed by tab id because two tabs of this kind
- * in one session expand independently.
+ * in one session expand, open, and divide independently.
  *
  * Writers run between `start` and `forget`: the owner's `signal` is what ends a
  * bucket's life, and the face stops dispatching once it aborts.
@@ -34,8 +35,27 @@ export type LevelState =
   | { readonly kind: 'ready'; readonly level: DirLevel; readonly failure?: RemoteFailure }
   | { readonly kind: 'failed'; readonly failure: RemoteFailure }
 
+/** One file open in the workbench's content column. */
+export interface OpenFile {
+  /** Absolute path in the file's execution environment; the workbench's identity for the file. */
+  readonly path: string
+  /** The file's `dsh-resource://file/...` address, as the preview reads it. */
+  readonly address: string
+  /** The file's name, as its chip shows it. */
+  readonly name: string
+}
+
+/** How the workbench's two columns divide, as the content column's share. */
+export const DEFAULT_RATIO = 0.6
+
+/** The narrowest share a divider drag may leave the content column. */
+export const MIN_RATIO = 0.2
+
+/** The widest share a divider drag may leave the content column. */
+export const MAX_RATIO = 0.8
+
 /**
- * One tab's tree: its root, the levels it has asked for, and what is open.
+ * One tab's workbench: its root, the levels it has asked for, and what it shows.
  *
  * Every path here is absolute: the root is the session's working directory as
  * the Host reports it, and a child is the parent joined with the entry name.
@@ -50,6 +70,14 @@ export interface FilesTabState {
   expanded: string[]
   /** The body's scroll offset in px, so a remounted tree comes back where the reader was. */
   scrollTop: number
+  /** Files open in the content column, in the order their chips were opened. */
+  open: readonly OpenFile[]
+  /** Absolute path of the file the content column shows; `undefined` while nothing is open. */
+  active: string | undefined
+  /** The tree row a reveal asked for, with a token that changes on every request. */
+  revealed: { readonly path: string; readonly token: number } | undefined
+  /** The content column's share of the workbench, between `MIN_RATIO` and `MAX_RATIO`. */
+  ratio: number
 }
 
 /** Every tab's tree, keyed by tab id. */
@@ -70,6 +98,25 @@ function bucket(state: FilesState, tabId: TabId): FilesTabState {
   return tree
 }
 
+/**
+ * The directories between a tree's root and one path, outermost first.
+ *
+ * Levels are keyed the way the tree joins them (`childPath`: the root's own
+ * separators kept, every child appended with `/`), so a Windows root's reveal
+ * names the same keys its listing wrote. The root itself is never included: it
+ * is always expanded, and a path outside the root — or the root's own row — has
+ * no ancestor to reveal.
+ * @param root - the tree's absolute root.
+ * @param path - absolute path of a file or directory under it.
+ * @returns each ancestor directory, from the root's first child down to the path's parent.
+ */
+export function ancestorDirectories(root: string, path: string): string[] {
+  const trimmed = root.replace(/[/\\]+$/, '')
+  if (!path.startsWith(`${trimmed}/`) && !path.startsWith(`${trimmed}\\`)) return []
+  const segments = path.slice(trimmed.length + 1).split(/[/\\]+/).filter(segment => segment !== '')
+  return segments.slice(0, -1).map((_, index) => `${trimmed}/${segments.slice(0, index + 1).join('/')}`)
+}
+
 /** The tree store's write set; every action names the tab it writes. */
 type FilesActions = {
   autoRefresh: (draft: FilesState, tabId: TabId, enabled: boolean) => void
@@ -79,6 +126,15 @@ type FilesActions = {
   failed: (draft: FilesState, tabId: TabId, path: string, failure: RemoteFailure) => void
   toggled: (draft: FilesState, tabId: TabId, path: string) => void
   scrolled: (draft: FilesState, tabId: TabId, scrollTop: number) => void
+  fileOpened: (draft: FilesState, tabId: TabId, file: OpenFile) => void
+  fileClosed: (draft: FilesState, tabId: TabId, path: string) => void
+  fileActivated: (draft: FilesState, tabId: TabId, path: string) => void
+  filesClosedExcept: (draft: FilesState, tabId: TabId, path: string) => void
+  filesClosedAll: (draft: FilesState, tabId: TabId) => void
+  filesClosedBefore: (draft: FilesState, tabId: TabId, path: string) => void
+  filesClosedAfter: (draft: FilesState, tabId: TabId, path: string) => void
+  revealed: (draft: FilesState, tabId: TabId, path: string) => void
+  ratioChanged: (draft: FilesState, tabId: TabId, ratio: number) => void
   reset: (draft: FilesState, tabId: TabId) => void
   forget: (draft: FilesState, tabId: TabId) => void
 }
@@ -102,7 +158,10 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
        * @param root - absolute path of the workspace root.
        */
       start: (d, tabId: TabId, root: string) => {
-        d.byTab[tabId] = { root, levels: {}, expanded: [root], scrollTop: 0, autoRefresh: true }
+        d.byTab[tabId] = {
+          root, levels: {}, expanded: [root], scrollTop: 0, autoRefresh: true,
+          open: [], active: undefined, revealed: undefined, ratio: DEFAULT_RATIO,
+        }
       },
       /**
        * Mark one directory as being listed.
@@ -171,6 +230,121 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
        */
       scrolled: (d, tabId: TabId, scrollTop: number) => {
         bucket(d, tabId).scrollTop = scrollTop
+      },
+      /**
+       * Open one file in the content column, or show it when it is already
+       * open: a row click never opens a second chip for the same path.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param file - the file the tree's row names.
+       */
+      fileOpened: (d, tabId: TabId, file: OpenFile) => {
+        const state = bucket(d, tabId)
+        if (!state.open.some(open => open.path === file.path)) state.open = [...state.open, file]
+        state.active = file.path
+      },
+      /**
+       * Close one file's chip. Closing the shown file shows its neighbour — the
+       * next chip, or the previous one — and closing the last one empties the
+       * content column.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param path - absolute path of the file whose chip closed.
+       */
+      fileClosed: (d, tabId: TabId, path: string) => {
+        const state = bucket(d, tabId)
+        const at = state.open.findIndex(open => open.path === path)
+        if (at < 0) return
+        const remaining = state.open.filter(open => open.path !== path)
+        state.open = remaining
+        if (state.active !== path) return
+        state.active = remaining[Math.min(at, remaining.length - 1)]?.path
+      },
+      /**
+       * Show one open file without changing the chip order.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param path - absolute path of the file to show.
+       */
+      fileActivated: (d, tabId: TabId, path: string) => {
+        const state = bucket(d, tabId)
+        if (state.open.some(open => open.path === path)) state.active = path
+      },
+      /**
+       * Close every open file except one, which becomes the shown one.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param path - absolute path of the chip that stays open.
+       */
+      filesClosedExcept: (d, tabId: TabId, path: string) => {
+        const state = bucket(d, tabId)
+        const kept = state.open.find(open => open.path === path)
+        if (kept === undefined) return
+        state.open = [kept]
+        state.active = kept.path
+      },
+      /**
+       * Close every open file, emptying the content column.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       */
+      filesClosedAll: (d, tabId: TabId) => {
+        const state = bucket(d, tabId)
+        state.open = []
+        state.active = undefined
+      },
+      /**
+       * Close the files whose chips sit before one chip; that chip and the ones
+       * after it keep their order, and the shown file survives unless its own
+       * chip went.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param path - absolute path of the chip the close starts after.
+       */
+      filesClosedBefore: (d, tabId: TabId, path: string) => {
+        const state = bucket(d, tabId)
+        const at = state.open.findIndex(open => open.path === path)
+        if (at <= 0) return
+        state.open = state.open.slice(at)
+        if (!state.open.some(open => open.path === state.active)) state.active = state.open[0]?.path
+      },
+      /**
+       * Close the files whose chips sit after one chip.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param path - absolute path of the chip the close starts at.
+       */
+      filesClosedAfter: (d, tabId: TabId, path: string) => {
+        const state = bucket(d, tabId)
+        const at = state.open.findIndex(open => open.path === path)
+        if (at < 0 || at === state.open.length - 1) return
+        state.open = state.open.slice(0, at + 1)
+        if (!state.open.some(open => open.path === state.active)) state.active = state.open.at(-1)?.path
+      },
+      /**
+       * Expand one file's ancestor directories and remember it as the path the
+       * tree should show, so the body can scroll its row into view.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param path - absolute path of the file to show in the tree.
+       */
+      revealed: (d, tabId: TabId, path: string) => {
+        const state = bucket(d, tabId)
+        for (const directory of ancestorDirectories(state.root, path)) {
+          if (!state.expanded.includes(directory)) state.expanded.push(directory)
+        }
+        // The token moves even for a path revealed before, so a reader asking
+        // again gets the row shown again rather than an unchanged value.
+        state.revealed = { path, token: (state.revealed?.token ?? 0) + 1 }
+      },
+      /**
+       * Record where a divider drag left the two columns.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param ratio - the content column's share, clamped to the draggable range.
+       */
+      ratioChanged: (d, tabId: TabId, ratio: number) => {
+        bucket(d, tabId).ratio = Math.min(MAX_RATIO, Math.max(MIN_RATIO, ratio))
       },
       /**
        * Drop every loaded level, keeping what is expanded.

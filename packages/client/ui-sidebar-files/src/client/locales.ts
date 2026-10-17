@@ -3,7 +3,8 @@
  *
  * The failure lines name what the tree could not list, one code each, because a
  * directory that is gone, one outside the workspace, and a path that is not a
- * directory each suggest a different next step.
+ * directory each suggest a different next step. The workbench's own copy names
+ * its chips, its divider, and the content column before a file is chosen.
  *
  * The namespace merge lives with its key set so that any module naming
  * `TranslateNS<'sidebarFiles'>` or `PropsLocale<'sidebarFiles'>` needs only this
@@ -13,7 +14,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-slots'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    /** File-tree type name, guide entry, row states, and failure lines. */
+    /** Workbench type name, guide entry, row and chip states, divider, and failure lines. */
     sidebarFiles: SidebarFilesKey
   }
 }
@@ -33,6 +34,16 @@ export const zh = {
   'autoRefresh.enable': '开启自动刷新',
   'autoRefresh.disable': '关闭自动刷新',
   'entry.other': '这不是文件或目录，没法打开。',
+  'tabs.aria': '打开的文件',
+  'tabs.close': '关闭 {name}',
+  'tabs.menu.close': '关闭',
+  'tabs.menu.closeOthers': '关闭其他标签页',
+  'tabs.menu.closeAll': '关闭所有标签页',
+  'tabs.menu.closeLeft': '关闭左侧标签页',
+  'tabs.menu.closeRight': '关闭右侧标签页',
+  'tabs.menu.reveal': '打开所在文件夹',
+  'splitter.aria': '调整文件预览与文件树的宽度',
+  'preview.empty': '从右侧文件树中选择一个文件。',
   'error.notFound': '这个目录不在了。可能已被移动或删除。',
   'error.outsideWorkspace': '这个目录在工作区之外，侧栏不会读取它。',
   'error.notDirectory': '这不是一个目录。',
@@ -57,6 +68,16 @@ export const en = {
   'autoRefresh.enable': 'Enable auto refresh',
   'autoRefresh.disable': 'Disable auto refresh',
   'entry.other': 'Not a file or a directory, so it cannot be opened.',
+  'tabs.aria': 'Open files',
+  'tabs.close': 'Close {name}',
+  'tabs.menu.close': 'Close',
+  'tabs.menu.closeOthers': 'Close Other Tabs',
+  'tabs.menu.closeAll': 'Close All Tabs',
+  'tabs.menu.closeLeft': 'Close Tabs to the Left',
+  'tabs.menu.closeRight': 'Close Tabs to the Right',
+  'tabs.menu.reveal': 'Open in Files',
+  'splitter.aria': 'Resize the file preview and file tree',
+  'preview.empty': 'Choose a file from the tree on the right.',
   'error.notFound': 'That directory is gone. It may have been moved or deleted.',
   'error.outsideWorkspace': 'That directory is outside the workspace, so the sidebar will not read it.',
   'error.notDirectory': 'That is not a directory.',

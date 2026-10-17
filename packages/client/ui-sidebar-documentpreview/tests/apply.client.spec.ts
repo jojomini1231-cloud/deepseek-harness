@@ -17,6 +17,7 @@ import { TEXTPREVIEW_ID, TEXTPREVIEW_KIND } from '../src/client/definition.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { OfficeFontAction } from '../src/client/office/OfficeFontAction.tsx'
 import { OfficeBody } from '../src/client/office/OfficeBody.tsx'
+import { DocumentPreview } from '../src/client/DocumentPreview.tsx'
 import { TextPreview } from '../src/client/TextPreview.tsx'
 import { TextTitle } from '../src/client/TextTitle.tsx'
 import { TextBody } from '../src/client/text/TextBody.tsx'
@@ -51,8 +52,14 @@ async function boot() {
   ctx.provide('configForms', { developerTools: { enabled: createSnapshotStore(true) } } as never)
   const tabs = new SidebarRightTabRegistry(ctx)
   const registered: Recorded[] = []
+  const factories: Recorded[] = []
   const slots = {
     inject: vi.fn((_name: string, register: () => () => void) => register()),
+    registerFactory: vi.fn((options: Omit<Recorded, 'component'>, component: unknown) => {
+      const entry: Recorded = { ...options, component }
+      factories.push(entry)
+      return () => { factories.splice(factories.indexOf(entry), 1) }
+    }),
     register: vi.fn((options: Omit<Recorded, 'component'>, component: unknown) => {
       const entry: Recorded = { ...options, component }
       registered.push(entry)
@@ -77,19 +84,22 @@ async function boot() {
   const fiber = ctx.plugin({ inject: [...inject], apply })
   onTestFinished(async () => { await fiber.dispose() })
   await fiber.await()
-  return { ctx, tabs, registered, dictionaries, fiber, read, readBytes }
+  return { ctx, tabs, registered, factories, dictionaries, fiber, read, readBytes }
 }
 
 describe('ui-sidebar-documentpreview apply', () => {
   it('registers the type, its dictionaries, and the body and title seats under the type\'s id, the body with a store and a face', async () => {
-    const { tabs, registered, dictionaries } = await boot()
+    const { tabs, registered, factories, dictionaries } = await boot()
+    expect(factories.map(entry => [entry.name, entry.locale, entry.component])).toEqual([
+      ['sidebar.document.preview', 'sidebarDocumentPreview', DocumentPreview],
+    ])
     expect(tabs.get(TEXTPREVIEW_KIND)?.priority).toBe('fallback')
     expect(tabs.get(TEXTPREVIEW_KIND)?.id).toBe(TEXTPREVIEW_ID)
     expect(dictionaries.get('sidebarDocumentPreview')).toEqual({ zh, en })
     // The seat key is the implementation's id, not the kind: an extension may
     // take the kind over, and the seat must still find this body.
     expect(registered.map(entry => [entry.name, entry.key, entry.locale, entry.component])).toEqual([
-      ['sidebar.right.pane.tab', TEXTPREVIEW_ID, 'sidebarDocumentPreview', TextPreview],
+      ['sidebar.right.pane.tab', TEXTPREVIEW_ID, undefined, TextPreview],
       ['sidebar.right.pane.tab.title', TEXTPREVIEW_ID, undefined, TextTitle],
       ['sidebar.right.tab.document', PLAIN_BODY_ID, undefined, TextBody],
       ['sidebar.right.tab.document', MARKDOWN_BODY_ID, 'documentMarkdown', MarkdownBody],
@@ -102,15 +112,17 @@ describe('ui-sidebar-documentpreview apply', () => {
       ['sidebar.right.tab.document', '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/excel', 'sidebarExcel', LazyExcelBody],
       ['sidebar.right.tab.document', '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/code', 'sidebarCodePreview', CodeBody],
     ])
-    expect(registered[0]?.store).toBeDefined()
-    expect(typeof registered[0]?.inject).toBe('function')
+    // The reusable preview, not the thin tab body, owns the store and the face.
+    expect(factories[0]?.store).toBeDefined()
+    expect(typeof factories[0]?.inject).toBe('function')
   })
 
   it('takes every registration back when the plugin is disposed', async () => {
-    const { tabs, registered, dictionaries, fiber } = await boot()
+    const { tabs, registered, factories, dictionaries, fiber } = await boot()
     await fiber.dispose()
     expect(tabs.get(TEXTPREVIEW_KIND)).toBeUndefined()
     expect(registered).toEqual([])
+    expect(factories).toEqual([])
     expect(dictionaries.size).toBe(0)
   })
 
@@ -139,8 +151,8 @@ describe('ui-sidebar-documentpreview apply', () => {
   })
 
   it('injects paged and byte Remote reads independently of resource metadata', async () => {
-    const { registered, read, readBytes } = await boot()
-    const registration = registered.find(entry => entry.component === TextPreview)
+    const { factories, read, readBytes } = await boot()
+    const registration = factories.find(entry => entry.component === DocumentPreview)
     if (registration === undefined) throw new Error('missing preview registration')
     const instance = (registration.store as TextStore).create()
     const face = (registration.inject as ReturnType<typeof textFace>)(SESSION, instance.actions)
@@ -149,14 +161,14 @@ describe('ui-sidebar-documentpreview apply', () => {
     face.loadPage(TAB_ID, FILE, 1, controller.signal, 'v1')
     await read.mock.results[0]?.value
     expect(read).toHaveBeenCalledExactlyOnceWith(FILE.sessionId, FILE.path, { offset: 1 }, controller.signal)
-    expect(instance.getSnapshot().byTab[TAB_ID]?.pages[1]?.text).toBe('first')
+    expect(instance.getSnapshot().byView[TAB_ID]?.pages[1]?.text).toBe('first')
     face.loadAll(TAB_ID, FILE, controller.signal, 'v1')
-    await vi.waitFor(() => { expect(instance.getSnapshot().byTab[TAB_ID]?.complete).toBeDefined() })
+    await vi.waitFor(() => { expect(instance.getSnapshot().byView[TAB_ID]?.complete).toBeDefined() })
     expect(readBytes).toHaveBeenCalledExactlyOnceWith(FILE.sessionId, FILE.path, {}, expect.any(AbortSignal))
-    expect(instance.getSnapshot().byTab[TAB_ID]?.complete?.data).toEqual(new Uint8Array([0, 1, 255]))
+    expect(instance.getSnapshot().byView[TAB_ID]?.complete?.data).toEqual(new Uint8Array([0, 1, 255]))
     readBytes.mockResolvedValueOnce({ ok: false, error: new RemoteError('workspace-file/not-found', 'File missing', { path: FILE.path }) })
     face.reloadAll(TAB_ID, FILE, controller.signal, 'v2')
-    await expect.poll(() => instance.getSnapshot().byTab[TAB_ID]?.failure).toMatchObject({ code: 'workspace-file/not-found', message: 'File missing' })
-    expect(instance.getSnapshot().byTab[TAB_ID]?.complete).toBeUndefined()
+    await expect.poll(() => instance.getSnapshot().byView[TAB_ID]?.failure).toMatchObject({ code: 'workspace-file/not-found', message: 'File missing' })
+    expect(instance.getSnapshot().byView[TAB_ID]?.complete).toBeUndefined()
   })
 })

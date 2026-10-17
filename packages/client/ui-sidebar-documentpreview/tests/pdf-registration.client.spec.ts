@@ -5,7 +5,6 @@ import { Context } from '@deepseek-ai/cordis'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { DocumentPreviewRegistry } from '../src/client/document/registry.ts'
 import { createPdfStore } from '../src/client/pdf/store.ts'
@@ -63,25 +62,25 @@ describe('PDF registration', () => {
       const instance = entries[0]!.store.create()
       const face = entries[0]!.inject('s1' as SessionId, instance.actions)
       const controller = new AbortController()
-      face.retainTab('one' as TabId, controller.signal)
-      face.retainTab('one' as TabId, controller.signal)
-      instance.actions.page('one' as TabId, 2)
-      instance.actions.zoom('one' as TabId, { kind: 'fixed', scale: 1.5 })
-      expect(instance.getSnapshot().byTab['one' as TabId]).toEqual({ page: 2, zoom: { kind: 'fixed', scale: 1.5 } })
+      face.retainView('one', controller.signal)
+      face.retainView('one', controller.signal)
+      instance.actions.page('one', 2)
+      instance.actions.zoom('one', { kind: 'fixed', scale: 1.5 })
+      expect(instance.getSnapshot().byView['one']).toEqual({ page: 2, zoom: { kind: 'fixed', scale: 1.5 } })
       const kept = new AbortController()
-      face.retainTab('kept' as TabId, kept.signal)
-      instance.actions.page('kept' as TabId, 3)
+      face.retainView('kept', kept.signal)
+      instance.actions.page('kept', 3)
       controller.abort()
-      expect(instance.getSnapshot().byTab).toEqual({ kept: { page: 3 } })
+      expect(instance.getSnapshot().byView).toEqual({ kept: { page: 3 } })
       kept.abort()
-      instance.actions.page('ended' as TabId, 3)
-      face.retainTab('ended' as TabId, controller.signal)
-      expect(instance.getSnapshot().byTab).toEqual({})
+      instance.actions.page('ended', 3)
+      face.retainView('ended', controller.signal)
+      expect(instance.getSnapshot().byView).toEqual({})
       const other = new AbortController()
-      face.retainTab('two' as TabId, other.signal)
-      instance.actions.page('two' as TabId, 2)
+      face.retainView('two', other.signal)
+      instance.actions.page('two', 2)
       await fiber.dispose()
-      expect(instance.getSnapshot().byTab).toEqual({})
+      expect(instance.getSnapshot().byView).toEqual({})
       expect(previews.getSnapshot()).toEqual([])
       expect(entries).toEqual([])
       expect(dictionaries.size).toBe(0)

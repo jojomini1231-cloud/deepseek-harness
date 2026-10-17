@@ -1,7 +1,12 @@
-/** Document renderer slot: the owner supplies shared file state, renderers own their presentation. */
+/** Document renderer slot: the view supplies shared file state, renderers own their presentation. */
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { PropsRuntime, SlotHookFactory } from '@deepseek-ai/dsh-client-ui-slots'
-import type { UseSidebarRightTabInfo } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
+import type { SidebarRightTabNavigation } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
+import type { ShortcutCatalogEntry } from '@deepseek-ai/dsh-client-shortcuts/client'
 import type { RefCallback } from 'react'
+import type { TextInjected } from '../face.ts'
+import type { TextStore } from '../store.ts'
+import type { DocumentPreviewDefinition } from './registry.ts'
 
 /** One loaded text window, retaining source line positions. */
 export interface DocumentTextPage {
@@ -45,6 +50,56 @@ export interface DocumentBodyOwner {
   readonly scrollportRef: RefCallback<HTMLElement>
 }
 
+/**
+ * One rendered document view, independent of the host that renders it: a
+ * Sidebar tab, or a preview inside another body.
+ */
+export interface DocumentView {
+  /**
+   * Identity the renderer buckets its own view state by: one per shown
+   * document, so two hosts showing one file keep their scroll and zoom apart,
+   * and one host showing two files keeps them apart as well.
+   */
+  readonly viewKey: string
+  /** Navigation that opened or last re-aimed this view; its params drive source navigation. */
+  readonly navigation: SidebarRightTabNavigation
+  /** Aborted when this view ends: loads cancel and released buckets are forgotten with it. */
+  readonly signal: AbortSignal
+}
+
+/**
+ * Read the enclosing document view.
+ * @returns the view's identity, navigation, and lifetime.
+ */
+export type UseDocumentView = () => DocumentView
+
+/**
+ * What one reusable preview needs from its host.
+ *
+ * The host owns the address and the view's lifetime; the preview owns reading,
+ * renderer selection, the toolbar, and the renderer slots, so a host renders a
+ * document without knowing how any format is drawn.
+ */
+export interface DocumentPreviewInput {
+  /** Resource address of the file to show. */
+  readonly address: string
+  /** Bucket key for view state; see {@link DocumentView.viewKey}. */
+  readonly viewKey: string
+  /** Navigation that opened or last re-aimed this view. */
+  readonly navigation: SidebarRightTabNavigation
+  /** View lifetime; loads cancel and released buckets are forgotten with it. */
+  readonly signal: AbortSignal
+  /** Bind the host's refresh command to this preview; omitted when the host has none. */
+  readonly bindRefresh?: (commands: { readonly refresh?: () => void }) => () => void
+  /** Effective refresh binding the toolbar's reload control advertises; omitted shows no keys. */
+  readonly refreshShortcut?: ShortcutCatalogEntry | undefined
+}
+
+/** The reusable preview's inject face: the business reads plus the renderer registry source. */
+export interface DocumentPreviewInjected extends TextInjected {
+  readonly hooks: { readonly documentPreviews: ObservableSnapshot<readonly DocumentPreviewDefinition[]> }
+}
+
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
     /** Document body selected by a registered implementation id. */
@@ -52,10 +107,10 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       kind: 'keyed'
       scope: 'session'
       owner: DocumentBodyOwner
-      hookContext: UseSidebarRightTabInfo
+      hookContext: UseDocumentView
       inject: {
         hooks: {
-          tabInfo: SlotHookFactory<'sidebar.right.tab.document', UseSidebarRightTabInfo>
+          documentView: SlotHookFactory<'sidebar.right.tab.document', UseDocumentView>
         }
       }
     }
@@ -88,8 +143,36 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       kind: 'keyed'
       scope: 'session'
       owner: { readonly content: DocumentContent }
-      hookContext: UseSidebarRightTabInfo
-      inject: { hooks: { tabInfo: SlotHookFactory<'sidebar.right.tab.document', UseSidebarRightTabInfo> } }
+      hookContext: UseDocumentView
+      inject: { hooks: { documentView: SlotHookFactory<'sidebar.right.tab.document', UseDocumentView> } }
+    }
+  }
+
+  interface SlotFactoryMap {
+    /**
+     * Reusable file preview: one document view with the shared toolbar and the
+     * registered renderers, rendered by any host that can name an address.
+     */
+    'sidebar.document.preview': {
+      scope: 'session'
+      props: DocumentPreviewInput
+      store: TextStore
+      locale: 'sidebarDocumentPreview'
+      inject: DocumentPreviewInjected
+      children: {
+        'sidebar.right.tab.document': {
+          kind: 'keyed'
+          scope: 'session'
+          inject: { hooks: { documentView: SlotHookFactory<'sidebar.right.tab.document', UseDocumentView> } }
+        }
+        'sidebar.right.tab.document.action': {
+          kind: 'keyed'
+          scope: 'session'
+          inject: { hooks: { documentView: SlotHookFactory<'sidebar.right.tab.document', UseDocumentView> } }
+        }
+        'sidebar.right.tab.document.actions': { kind: 'list'; scope: 'session' }
+        'sidebar.right.tab.document.unpreviewable': { kind: 'list'; scope: 'session' }
+      }
     }
   }
 }
@@ -98,10 +181,10 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export type DocumentPreviewProps = PropsRuntime<'sidebar.right.tab.document'>
 
 /**
- * Forward the framework's tab reader to the selected document body.
+ * Forward the framework's document-view reader to the selected document body.
  * @param _standard - framework standard props.
- * @param useTabInfo - enclosing tab's bound reader.
+ * @param useDocumentView - enclosing view's bound reader.
  * @returns the same reader, without another subscription adapter.
  */
-export const documentTabInfoFactory: SlotHookFactory<'sidebar.right.tab.document', UseSidebarRightTabInfo> =
-  (_standard, useTabInfo) => useTabInfo
+export const documentViewFactory: SlotHookFactory<'sidebar.right.tab.document', UseDocumentView> =
+  (_standard, useDocumentView) => useDocumentView

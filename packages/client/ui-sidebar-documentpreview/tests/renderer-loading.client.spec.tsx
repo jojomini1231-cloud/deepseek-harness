@@ -8,7 +8,8 @@ import type { OwnerOf } from '@deepseek-ai/dsh-client-ui-slots'
 import type { OfficeToPdfGeneration } from '@deepseek-ai/dsh-office-to-pdf/types'
 import type { DocumentPreviewDefinition } from '../src/client/document/registry.ts'
 import type { DocumentContent } from '../src/client/document/contract.ts'
-import { TextPreview, type TextPreviewProps } from '../src/client/TextPreview.tsx'
+import { DocumentPreview } from '../src/client/DocumentPreview.tsx'
+import type { DocumentPreviewFactoryProps } from '../src/client/DocumentPreview.tsx'
 import { OfficeFontAction, type OfficeFontActionProps } from '../src/client/office/OfficeFontAction.tsx'
 import { OfficeBody, type OfficeBodyProps } from '../src/client/office/OfficeBody.tsx'
 import { officeFace } from '../src/client/office/face.ts'
@@ -47,29 +48,29 @@ it('lets a non-Office renderer load content, report its version, and reload thro
     useEffect(() => { if (displayed !== undefined) request?.loaded(displayed.version) }, [displayed, request?.loaded])
     return <p>{displayed?.text ?? 'Loading custom content'}</p>
   }
-  const renderSlot: TextPreviewProps['renderSlot'] = (name: string, input: unknown) => {
+  const renderSlot: DocumentPreviewFactoryProps['renderSlot'] = (name: string, input: unknown) => {
     if (name !== 'sidebar.right.tab.document') return null
     const owner = input as OwnerOf<'sidebar.right.tab.document'>
     return <CustomBody content={owner.content} />
   }
-  const useDocumentPreviews: TextPreviewProps['useDocumentPreviews'] = selector => selector([custom])
-  const view = render(<TextPreview {...h.props()} renderSlot={renderSlot} useDocumentPreviews={useDocumentPreviews} />)
+  const useDocumentPreviews: DocumentPreviewFactoryProps['useDocumentPreviews'] = selector => selector([custom])
+  const view = render(<DocumentPreview {...h.props()} renderSlot={renderSlot} useDocumentPreviews={useDocumentPreviews} />)
   expect(read).toHaveBeenCalledTimes(1)
   expect(await screen.findByText('Custom content v1')).toBeTruthy()
-  expect(h.instance.getSnapshot().byTab[TAB_ID]?.version).toBe('v1')
+  expect(h.instance.getSnapshot().byView[TAB_ID]?.version).toBe('v1')
   act(() => { h.instance.actions.toggledAutoRefresh(TAB_ID) })
   h.setVersion('v2')
-  view.rerender(<TextPreview {...h.props()} renderSlot={renderSlot} useDocumentPreviews={useDocumentPreviews} />)
+  view.rerender(<DocumentPreview {...h.props()} renderSlot={renderSlot} useDocumentPreviews={useDocumentPreviews} />)
   expect(screen.getByText('changed')).toBeTruthy()
   expect(read).toHaveBeenCalledTimes(1)
   fireEvent.click(screen.getByRole('button', { name: 'reloadNow' }))
   expect(await screen.findByText('Custom content v2')).toBeTruthy()
   expect(read).toHaveBeenCalledTimes(2)
-  expect(h.instance.getSnapshot().byTab[TAB_ID]?.version).toBe('v2')
+  expect(h.instance.getSnapshot().byView[TAB_ID]?.version).toBe('v2')
   expect(screen.queryByText('changed')).toBeNull()
   expect(h.read).not.toHaveBeenCalled()
   expect(h.bytes).not.toHaveBeenCalled()
-  expect(h.instance.getSnapshot().byTab[TAB_ID]?.complete).toBeUndefined()
+  expect(h.instance.getSnapshot().byView[TAB_ID]?.complete).toBeUndefined()
 })
 
 const definition: DocumentPreviewDefinition = {
@@ -91,7 +92,7 @@ function setup() {
     return deferred.promise
   })
   const retained = new Set<AbortSignal>()
-  const retainTab: OfficeBodyProps['retainTab'] = (tab, signal) => {
+  const retainView: OfficeBodyProps['retainView'] = (tab, signal) => {
     if (retained.has(signal)) return
     retained.add(signal)
     signal.addEventListener('abort', () => { office.actions.forget(tab) }, { once: true })
@@ -103,9 +104,9 @@ function setup() {
   }
   const injected = officeFace(read, error => error.message)(SESSION, office.actions)
   let request: Extract<DocumentContent, { kind: 'renderer' }> | undefined
-  const slots: TextPreviewProps['renderSlot'] = (key: string, input: unknown, options?: { hookContext?: unknown }) => {
+  const slots: DocumentPreviewFactoryProps['renderSlot'] = (key: string, input: unknown, options?: { hookContext?: unknown }) => {
     if (key === 'sidebar.right.tab.document.action') {
-      return <OfficeFontAction {...{ ...input as OwnerOf<'sidebar.right.tab.document.action'>, useTabInfo: options?.hookContext, useStore: useOffice,
+      return <OfficeFontAction {...{ ...input as OwnerOf<'sidebar.right.tab.document.action'>, useDocumentView: options?.hookContext, useStore: useOffice,
         actions: office.actions, t: makeTranslate(en) } as OfficeFontActionProps} />
     }
     if (key !== 'sidebar.right.tab.document') return null
@@ -113,8 +114,8 @@ function setup() {
     if (owner.content.kind !== 'renderer') return <p>Raw bytes</p>
     request = owner.content
     // The component fixture supplies the standard seats used by Office; the real slot binding is exercised by the browser scenario.
-    const props = { ...h.props(), ...owner, useTabInfo: options?.hookContext, useStore: useOffice,
-      actions: office.actions, ...injected, retainTab,
+    const props = { ...h.props(), ...owner, useDocumentView: options?.hookContext, useStore: useOffice,
+      actions: office.actions, ...injected, retainView,
       t: makeTranslate(en), renderSlot: (_name: string, child: { content: DocumentContent }) => (
         <p data-test-pdf>{child.content.kind === 'bytes' ? new TextDecoder().decode(child.content.data) : ''}</p>
       ),
@@ -122,7 +123,7 @@ function setup() {
     return <OfficeBody {...props} />
   }
   function View({ renderer = true, implementation = definition.id }: { renderer?: boolean; implementation?: string }) {
-    return <TextPreview {...h.props()} renderSlot={slots}
+    return <DocumentPreview {...h.props()} renderSlot={slots}
       useDocumentPreviews={selector => selector([renderer ? { ...definition, id: implementation } : { ...definition, id: 'raw', loading: 'bytes-complete' }])} />
   }
   onTestFinished(async () => {
@@ -140,8 +141,8 @@ it('retains renderer content across remounts and waits for reload when automatic
   expect(h.h.bytes).not.toHaveBeenCalled()
   await act(async () => { h.pending[0]!.deferred.resolve(result()) })
   expect(screen.getByText('PDF v1')).toBeTruthy()
-  expect(h.h.instance.getSnapshot().byTab[TAB_ID]?.version).toBe('v1')
-  expect(h.h.instance.getSnapshot().byTab[TAB_ID]?.complete).toBeUndefined()
+  expect(h.h.instance.getSnapshot().byView[TAB_ID]?.version).toBe('v1')
+  expect(h.h.instance.getSnapshot().byView[TAB_ID]?.complete).toBeUndefined()
   mounted.unmount()
   mounted = render(<h.View />)
   expect(screen.getByText('PDF v1')).toBeTruthy()
@@ -165,11 +166,11 @@ it('aborts a superseded load and rejects its late bytes and version report', asy
   fireEvent.click(screen.getByRole('button', { name: 'reload' }))
   expect(h.pending[0]!.signal.aborted).toBe(true)
   act(() => { previous.failed() })
-  expect(h.h.instance.getSnapshot().byTab[TAB_ID]?.loading).toBe(true)
+  expect(h.h.instance.getSnapshot().byView[TAB_ID]?.loading).toBe(true)
   await act(async () => { h.pending[1]!.deferred.resolve(result('v2')) })
   await act(async () => { h.pending[0]!.deferred.resolve(result('v1')); previous.loaded('v1') })
   expect(screen.getByText('PDF v2')).toBeTruthy()
-  expect(h.h.instance.getSnapshot().byTab[TAB_ID]?.version).toBe('v2')
+  expect(h.h.instance.getSnapshot().byView[TAB_ID]?.version).toBe('v2')
 })
 
 it.each(['declared', 'exception'] as const)('automatically retries a %s conversion failure only after another file change', async (kind) => {
@@ -182,7 +183,7 @@ it.each(['declared', 'exception'] as const)('automatically retries a %s conversi
     else h.pending[0]!.deferred.reject(new Error('Conversion failed'))
   })
   expect(screen.getByText('Conversion failed')).toBeTruthy()
-  expect(h.h.instance.getSnapshot().byTab[TAB_ID]?.loading).toBe(false)
+  expect(h.h.instance.getSnapshot().byView[TAB_ID]?.loading).toBe(false)
   expect(h.read).toHaveBeenCalledTimes(1)
   act(() => {
     h.h.setVersion('v2')
@@ -191,7 +192,7 @@ it.each(['declared', 'exception'] as const)('automatically retries a %s conversi
   expect(h.read).toHaveBeenCalledTimes(2)
   await act(async () => { h.pending[1]!.deferred.resolve(result('v2')) })
   expect(screen.getByText('PDF v2')).toBeTruthy()
-  expect(h.h.instance.getSnapshot().byTab[TAB_ID]?.loading).toBe(false)
+  expect(h.h.instance.getSnapshot().byView[TAB_ID]?.loading).toBe(false)
 })
 
 it.each(['replace', 'close', 'hide'] as const)('retires pending conversion on %s and ignores a late rejection', async (transition) => {
@@ -206,9 +207,9 @@ it.each(['replace', 'close', 'hide'] as const)('retires pending conversion on %s
   expect(h.pending[0]!.signal.aborted).toBe(true)
   await act(async () => { h.pending[0]!.deferred.reject(new Error('late error')) })
   if (transition === 'close') {
-    expect(h.office.getSnapshot().byTab[TAB_ID]).toBeUndefined()
-    expect(h.h.instance.getSnapshot().byTab[TAB_ID]).toBeUndefined()
-  } else expect(h.office.getSnapshot().byTab[TAB_ID]?.failure).toBeUndefined()
+    expect(h.office.getSnapshot().byView[TAB_ID]).toBeUndefined()
+    expect(h.h.instance.getSnapshot().byView[TAB_ID]).toBeUndefined()
+  } else expect(h.office.getSnapshot().byView[TAB_ID]?.failure).toBeUndefined()
   if (transition === 'replace') {
     await settle()
     expect(screen.getByText('Raw bytes')).toBeTruthy()
@@ -243,7 +244,8 @@ it('starts no conversion when a body receives ordinary shared content', () => {
   const props = { ...h.h.props(), content: { kind: 'bytes', data: new Uint8Array() },
     resourceAddress: ADDRESS, wrap: false, scrollportRef: vi.fn(),
     addResource: vi.fn(), setResources: vi.fn(),
-    useStore: () => undefined, actions: h.office.actions, load: vi.fn(), retainTab: vi.fn(), t: makeTranslate(en),
+    useStore: () => undefined, actions: h.office.actions, load: vi.fn(), retainView: vi.fn(), t: makeTranslate(en),
+    useDocumentView: () => ({ viewKey: TAB_ID, navigation: h.h.props().navigation, signal: h.h.props().signal }),
   } as OfficeBodyProps
   const view = render(<OfficeBody {...props} />)
   expect(view.container.childElementCount).toBe(0)
@@ -283,8 +285,8 @@ it('isolates a replacement implementation with the same renderer-owned loading m
   await act(async () => { h.pending[1]!.deferred.resolve(result('v2')) })
   await act(async () => { h.pending[0]!.deferred.resolve(result('v1')); previous.loaded('v1') })
   expect(screen.getByText('PDF v2')).toBeTruthy()
-  expect(h.h.instance.getSnapshot().byTab[TAB_ID]?.contentRendererId).toBe('alternative')
-  expect(h.h.instance.getSnapshot().byTab[TAB_ID]?.version).toBe('v2')
+  expect(h.h.instance.getSnapshot().byView[TAB_ID]?.contentRendererId).toBe('alternative')
+  expect(h.h.instance.getSnapshot().byView[TAB_ID]?.version).toBe('v2')
 })
 
 it('starts no conversion or store write for an already closed request', () => {
@@ -299,7 +301,7 @@ it('starts no conversion or store write for an already closed request', () => {
   expect(read).not.toHaveBeenCalled()
   expect(loaded).not.toHaveBeenCalled()
   expect(failed).not.toHaveBeenCalled()
-  expect(store.getSnapshot().byTab[TAB_ID]).toBeUndefined()
+  expect(store.getSnapshot().byView[TAB_ID]).toBeUndefined()
 })
 
 it('keeps a pending conversion when metadata changes while automatic refresh is paused', async () => {

@@ -13,7 +13,7 @@
 - Tail loaded by scrolling: Markdown tail
 - Loaded images: relative image | absolute image | reference image
 - Viewers: Markdown -> Code -> Plain text
-- Same tab: true
+- Same chip: true
 
 ## Basic HTML
 
@@ -45,7 +45,7 @@
 - Settled zoom redraws the page at device resolution
 - Horizontal overflow: false
 - Canvas fills: red -> blue -> blue
-- Same tab: true
+- Same chip: true
 - Selected and copied text: Selectable PDF text
 
 ## PDF page units

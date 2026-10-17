@@ -9,7 +9,7 @@ import type { DeveloperToolsSettings } from '@deepseek-ai/dsh-client-ui-settings
 import type { Resources, ResourceSnapshot } from '@deepseek-ai/dsh-client-resources/client'
 import type { WorkspaceFileStat } from '@deepseek-ai/dsh-api-workspace-files/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import { TextPreview } from '../src/client/TextPreview.tsx'
+import { DocumentPreview } from '../src/client/DocumentPreview.tsx'
 import type { DocumentBodyOwner } from '../src/client/document/contract.ts'
 import { textFace } from '../src/client/face.ts'
 import { HtmlBody } from '../src/client/html/HtmlBody.tsx'
@@ -17,6 +17,7 @@ import type { HtmlBodyProps } from '../src/client/html/HtmlBody.tsx'
 import { htmlBodyDefinition } from '../src/client/html/index.ts'
 import { en } from '../src/client/html/locales.ts'
 import { ADDRESS, ABSOLUTE_PATH, SESSION, TAB_ID, documentSlots, harness } from './fixtures.client.ts'
+import { frameNameOf } from '../src/client/html/HtmlBody.tsx'
 
 const translations: ReadonlyMap<string, string> = new Map(Object.entries(en))
 let createDescriptor: PropertyDescriptor | undefined
@@ -50,7 +51,7 @@ function props(text = '<p>hello</p>'): HtmlBodyProps {
     content: { kind: 'bytes', data: utf8(text) },
     wrap: false,
     sessionId: 'html' as SessionId,
-    useTabInfo: () => ({ tab: { id: TAB_ID, signal } }),
+    useDocumentView: () => ({ viewKey: TAB_ID, navigation: { address: '', params: undefined, revision: 1 }, signal }),
     readRelated: vi.fn(),
     addResource: vi.fn(),
     setResources: vi.fn(),
@@ -62,6 +63,16 @@ function props(text = '<p>hello</p>'): HtmlBodyProps {
 const utf8 = (text: string): Uint8Array<ArrayBuffer> => new TextEncoder().encode(text)
 
 describe('HtmlBody', () => {
+  it('names a view\'s frame from its key without carrying the key into the frame', () => {
+    const secret = '/home/reader/private/notes.html'
+    const name = frameNameOf(secret)
+    expect(name).toMatch(/^dsh-sidebar-html-[0-9a-f]+$/)
+    expect(name).not.toContain(secret)
+    // One name per view, and different views never collide on it.
+    expect(frameNameOf(secret)).toBe(name)
+    expect(frameNameOf('/home/reader/private/other.html')).not.toBe(name)
+  })
+
   it.each(['css', 'js'] as const)('reloads the HTML when only its %s resource changes', async (extension) => {
     const h = harness()
     const previewProps = h.props()
@@ -94,14 +105,16 @@ describe('HtmlBody', () => {
     } })
     const definition = { ...htmlBodyDefinition(() => 'HTML'), extensions: ['md'] }
     let interactive = true
-    const preview = () => <TextPreview {...previewProps} {...face}
+    const preview = () => <DocumentPreview {...previewProps} {...face}
       useDocumentPreviews={select => select([definition])}
       renderSlot={documentSlots((_key, owner) => <HtmlBody {...htmlProps} {...owner as unknown as DocumentBodyOwner}
-        useTabInfo={previewProps.useTabInfo} useInteractivePreview={select => select(interactive)} readRelated={readRelated} />)} />
+        useDocumentView={() => ({
+          viewKey: TAB_ID, navigation: previewProps.navigation, signal: previewProps.signal,
+        })} useInteractivePreview={select => select(interactive)} readRelated={readRelated} />)} />
     const view = render(preview())
     await waitFor(() => {
       expect(screen.getByTitle(en.frame)).toBeDefined()
-      expect(h.instance.getSnapshot().byTab[TAB_ID]).toMatchObject({ loading: false, resourcesDirty: false })
+      expect(h.instance.getSnapshot().byView[TAB_ID]).toMatchObject({ loading: false, resourcesDirty: false })
     })
     const previous = screen.getByTitle(en.frame)
     const reads = h.bytes.mock.calls.length
@@ -117,7 +130,7 @@ describe('HtmlBody', () => {
     await waitFor(() => { expect(screen.getByTitle(en.frame)).not.toBe(previous) })
     expect(h.bytes).toHaveBeenCalledTimes(reads + 1)
     expect(readRelated).toHaveBeenCalledTimes(relatedReads + 1)
-    expect(h.instance.getSnapshot().byTab[TAB_ID]?.version).toBe('root-v1')
+    expect(h.instance.getSnapshot().byView[TAB_ID]?.version).toBe('root-v1')
     expect(h.read).not.toHaveBeenCalled()
     interactive = false
     view.rerender(preview())
@@ -139,7 +152,7 @@ describe('HtmlBody', () => {
     const basic = { ...initial, useInteractivePreview: ((select: (enabled: boolean) => unknown) => select(false)) as HtmlBodyProps['useInteractivePreview'] }
     const view = render(<HtmlBody {...basic} />)
     const frame = screen.getByTitle(en.frame)
-    expect(frame.getAttribute('name')).toBe(`dsh-sidebar-html-${TAB_ID}`)
+    expect(frame.getAttribute('name')).toBe(frameNameOf(TAB_ID))
     expect(frame.getAttribute('sandbox')).toBe('')
     expect(frame.getAttribute('srcdoc')).toContain("default-src 'none'")
     expect(frame.getAttribute('srcdoc')).not.toContain('<script')
@@ -149,7 +162,7 @@ describe('HtmlBody', () => {
     view.rerender(<HtmlBody {...scripted} />)
     const advanced = await screen.findByTitle(en.frame)
     expect(advanced).not.toBe(frame)
-    expect(advanced.getAttribute('name')).toBe(`dsh-sidebar-html-${TAB_ID}`)
+    expect(advanced.getAttribute('name')).toBe(frameNameOf(TAB_ID))
     expect(advanced.getAttribute('sandbox')).toBe('allow-scripts')
     view.rerender(<HtmlBody {...basic} />)
     expect(advanced.isConnected).toBe(false)
@@ -237,7 +250,7 @@ describe('HtmlBody', () => {
     const signal = new AbortController().signal
     const initial = {
       ...props('<script src="./app.js"></script>'),
-      useTabInfo: () => ({ tab: { signal } }),
+      useDocumentView: () => ({ viewKey: 'html-view', navigation: { address: '', params: undefined, revision: 1 }, signal }),
       readRelated: bytes,
     } as unknown as HtmlBodyProps
     const view = render(<HtmlBody {...initial} />)
@@ -259,7 +272,7 @@ describe('HtmlBody', () => {
     const useResource = vi.fn().mockReturnValue({ value: undefined })
     const initial = {
       ...props('<script src="./app.js"></script>'),
-      useTabInfo: () => ({ tab: { signal } }),
+      useDocumentView: () => ({ viewKey: 'html-view', navigation: { address: '', params: undefined, revision: 1 }, signal }),
       useResource,
       readRelated: bytes,
     } as unknown as HtmlBodyProps
@@ -281,7 +294,7 @@ describe('HtmlBody', () => {
     })
     const useResource = vi.fn(() => ({ value: { version: 'v1' } }))
     const initial = {
-      ...props('<script src="./app.js"></script>'), useTabInfo: () => ({ tab: { signal } }),
+      ...props('<script src="./app.js"></script>'), useDocumentView: () => ({ viewKey: 'html-view', navigation: { address: '', params: undefined, revision: 1 }, signal }),
       useResource, readRelated: bytes,
     } as unknown as HtmlBodyProps
     const view = render(<HtmlBody {...initial} />)

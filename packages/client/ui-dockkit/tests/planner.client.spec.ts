@@ -207,6 +207,27 @@ describe('floating panes as planner arguments', () => {
   })
 })
 
+describe('planSplitPane', () => {
+  it('seeds a new pane on the requested side of the pane it splits', () => {
+    const { state, minter } = seededState()
+    const mint = minter.next
+    const paneId = getPane(state, state.rootId).id
+    const before = applyAll(state, planSplitPane(state, mint, paneId, seedTab, 'before'))
+    const [leading, trailing] = dockPaneIds(before)
+    if (leading === undefined || trailing === undefined) throw new Error('fixture: expected two panes')
+    // The leading pane is the new one holding the seeded tab alone; the pane
+    // that was split keeps its own tab on the trailing side.
+    expect(leading).not.toBe(paneId)
+    expect(trailing).toBe(paneId)
+    expect(getPane(before, leading).tabs).toHaveLength(1)
+    expect(getPane(before, trailing).tabs).toEqual(getPane(state, paneId).tabs)
+
+    const after = applyAll(state, planSplitPane(state, mint, paneId, seedTab))
+    expect(dockPaneIds(after)).toHaveLength(2)
+    expect(dockPaneIds(after)[0]).toBe(paneId)
+  })
+})
+
 describe('planSettle', () => {
   /** Two seeded docked panes side by side. */
   function twoPanes(): { state: LayoutState; mint: Mint; left: PaneId; right: PaneId } {

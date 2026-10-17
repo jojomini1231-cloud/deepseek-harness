@@ -4,7 +4,7 @@ import type { BoundActions } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '../index.ts'
 import type { DocumentPreviewDefinition } from '../document/registry.ts'
-import { retainDocumentTabs } from '../document/tab-lifetime.ts'
+import { retainDocumentViews } from '../document/tab-lifetime.ts'
 import { createZoomStore, type ZoomInjected, type ZoomStore } from '../zoom/store.ts'
 import { ImageBody } from './ImageBody.tsx'
 import { en, zh } from './locales.ts'
@@ -44,11 +44,11 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register('sidebarImage', { zh, en }), 'document-image: dictionaries')
   ctx.effect(() => ctx.documentPreviews.register(imageBodyDefinition(() => t('title'))), 'document-image: metadata')
   const store = createZoomStore()
-  const retainTab = retainDocumentTabs(ctx)
+  const retainView = retainDocumentViews(ctx)
   ctx.effect(() => ctx.slots.inject('sidebar.right.tab.document', () => ctx.slots.register({
     name: 'sidebar.right.tab.document', key: IMAGE_BODY_ID, locale: 'sidebarImage', store,
     inject: (_sessionId: SessionId, actions: BoundActions<ZoomStore>): ZoomInjected => ({
-      retainTab: (tabId, signal) => { retainTab(tabId, signal, actions.forget) },
+      retainView: (viewKey, signal) => { retainView(viewKey, signal, actions.forget) },
     }),
   }, ImageBody)), 'document-image: body')
 }

@@ -6,9 +6,9 @@ import { linesOf } from './lines.ts'
 import css from '../TextPreview.module.css'
 
 /** @param props - document contents and standard tab information. @returns source lines with navigation targets. */
-export function TextBody({ content, useTabInfo }: DocumentPreviewProps): ReactNode {
-  const { tab } = useTabInfo()
-  const params = tab.navigation.params
+export function TextBody({ content, useDocumentView }: DocumentPreviewProps): ReactNode {
+  const view = useDocumentView()
+  const params = view.navigation.params
   const target = params !== undefined && 'line' in params ? params.line : undefined
   if (content.kind !== 'text') return null
   return (

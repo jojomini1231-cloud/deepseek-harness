@@ -7,17 +7,16 @@
  * the read runs under comes from the file's address, not from the slot's
  * session: the address is the read's whole authority.
  *
- * A tab's pages are one file version walked from the first line. Dropping them
+ * A view's pages are one file version walked from the first line. Dropping them
  * — a reload, or a page of a newer version arriving past the first line, which
- * restarts the walk — retires every read still in flight for the tab: a
+ * restarts the walk — retires every read still in flight for the view: a
  * settlement from before the drop writes nothing. Cleanup rides the owner's
- * `signal`, armed once per tab by its first read: the abort forgets the tab's
- * bucket and this bookkeeping, a request is not made for a record that already
- * ended, and a settlement arriving after the record is gone has nothing left to
- * write to. A tab that never read has no bucket to forget.
+ * `signal`, armed once per view by its first read: the abort forgets the view's
+ * bucket and this bookkeeping, a request is not made for a lifetime that already
+ * ended, and a settlement arriving after it is gone has nothing left to
+ * write to. A view that never read has no bucket to forget.
  */
 import type { BoundActions } from '@deepseek-ai/dsh-client-store'
-import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ReadDocumentBytes, ReadWorkspaceFilePage, SessionFile } from './rpc.ts'
 import type { TextStore } from './store.ts'
@@ -27,69 +26,69 @@ import { ResourceGroup } from './document/resource-group.ts'
 
 /** The preview's injected business face, as the body receives it. */
 export interface TextInjected {
-  /** Observe one renderer dependency. @param tabId - owning tab. @param address - resource address. @param signal - tab lifetime. */
-  readonly addResource: (tabId: TabId, address: string, signal: AbortSignal) => void
-  /** Replace dependency membership. @param tabId - owning tab. @param addresses - resource addresses. @param signal - tab lifetime. */
-  readonly setResources: (tabId: TabId, addresses: readonly string[], signal: AbortSignal) => void
+  /** Observe one renderer dependency. @param viewKey - owning view. @param address - resource address. @param signal - view lifetime. */
+  readonly addResource: (viewKey: string, address: string, signal: AbortSignal) => void
+  /** Replace dependency membership. @param viewKey - owning view. @param addresses - resource addresses. @param signal - view lifetime. */
+  readonly setResources: (viewKey: string, addresses: readonly string[], signal: AbortSignal) => void
   /**
    * Read one page into the store. A page of a newer file version than the pages
-   * held, arriving past the first line, is not kept: the tab's pages are dropped
-   * and the first page read again. The tab's first read arms the abort listener
-   * that forgets its bucket when the record ends.
-   * @param tabId - the tab being drawn.
-   * @param file - the session and workspace path the tab's address names.
+   * held, arriving past the first line, is not kept: the view's pages are dropped
+   * and the first page read again. The view's first read arms the abort listener
+   * that forgets its bucket when its lifetime ends.
+   * @param viewKey - the view being drawn.
+   * @param file - the session and workspace path the view's address names.
    * @param offset - 1-based line the page starts at.
-   * @param signal - the tab record's lifetime.
+   * @param signal - the view's lifetime.
    * @param observedVersion - metadata version observed at read start.
    */
-  readonly loadPage: (tabId: TabId, file: SessionFile, offset: number, signal: AbortSignal, observedVersion?: string) => void
+  readonly loadPage: (viewKey: string, file: SessionFile, offset: number, signal: AbortSignal, observedVersion?: string) => void
   /**
    * Drop every page and read the first one again, for a file the Host reports
    * changed. The view is kept, so the reader stays where they were; a page read
    * still in flight writes nothing when it settles.
-   * @param tabId - the tab being drawn.
-   * @param file - the session and workspace path the tab's address names.
-   * @param signal - the tab record's lifetime.
+   * @param viewKey - the view being drawn.
+   * @param file - the session and workspace path the view's address names.
+   * @param signal - the view's lifetime.
    * @param observedVersion - metadata version observed at read start.
    */
-  readonly reloadPages: (tabId: TabId, file: SessionFile, signal: AbortSignal, observedVersion?: string) => void
+  readonly reloadPages: (viewKey: string, file: SessionFile, signal: AbortSignal, observedVersion?: string) => void
   /**
    * Read the complete file for a whole-file renderer.
-   * @param tabId - owning tab.
-   * @param file - the session and workspace path the tab's address names.
-   * @param signal - tab lifetime.
+   * @param viewKey - owning view.
+   * @param file - the session and workspace path the view's address names.
+   * @param signal - view lifetime.
    * @param observedVersion - metadata version observed at read start.
    */
   readonly loadAll: (
-    tabId: TabId, file: SessionFile, signal: AbortSignal, observedVersion?: string,
+    viewKey: string, file: SessionFile, signal: AbortSignal, observedVersion?: string,
   ) => void
   /**
    * Discard the old complete result and read again.
-   * @param tabId - owning tab.
-   * @param file - the session and workspace path the tab's address names.
-   * @param signal - tab lifetime.
+   * @param viewKey - owning view.
+   * @param file - the session and workspace path the view's address names.
+   * @param signal - view lifetime.
    * @param observedVersion - metadata version observed at read start.
    */
   readonly reloadAll: (
-    tabId: TabId, file: SessionFile, signal: AbortSignal, observedVersion?: string,
+    viewKey: string, file: SessionFile, signal: AbortSignal, observedVersion?: string,
   ) => void
   /**
    * Begin a renderer-owned load without reading source bytes.
-   * @param tabId - owning tab.
-   * @param signal - tab lifetime.
+   * @param viewKey - owning view.
+   * @param signal - view lifetime.
    * @param rendererId - selected implementation.
    * @param observedVersion - metadata version observed at request start.
    * @param reload - discard the previous content revision.
    */
-  readonly prepareRenderer: (tabId: TabId, signal: AbortSignal, rendererId: string, observedVersion?: string, reload?: boolean) => void
+  readonly prepareRenderer: (viewKey: string, signal: AbortSignal, rendererId: string, observedVersion?: string, reload?: boolean) => void
 }
 
 /**
- * What the face remembers of one tab: the read generation a settlement must
- * match, and the version of the pages held. Created by the tab's first read,
- * which also arms the one abort listener that forgets the tab.
+ * What the face remembers of one view: the read generation a settlement must
+ * match, and the version of the pages held. Created by the view's first read,
+ * which also arms the one abort listener that forgets the view.
  */
-interface TabReads {
+interface ViewReads {
   group: ResourceGroup
   generation: number
   version: string | undefined
@@ -111,27 +110,27 @@ export function textFace(
   resources: Resources,
 ): (sessionId: SessionId, actions: BoundActions<TextStore>) => TextInjected {
   return (_sessionId: SessionId, actions: BoundActions<TextStore>): TextInjected => {
-    const tabs = new Map<TabId, TabReads>()
-    // Reached with a live signal only: the record's end forgets the tab's
+    const views = new Map<string, ViewReads>()
+    // Reached with a live signal only: the lifetime's end forgets the view's
     // bucket and this bookkeeping in one listener, however often its body mounts.
-    const readsOf = (tabId: TabId, signal: AbortSignal): TabReads => {
-      const held = tabs.get(tabId)
+    const readsOf = (viewKey: string, signal: AbortSignal): ViewReads => {
+      const held = views.get(viewKey)
       if (held !== undefined) return held
-      const created: TabReads = {
+      const created: ViewReads = {
         generation: 0, version: undefined, mode: 'text-pages',
-        group: new ResourceGroup(resources, () => { actions.resourceChanged(tabId) }),
+        group: new ResourceGroup(resources, () => { actions.resourceChanged(viewKey) }),
       }
-      tabs.set(tabId, created)
+      views.set(viewKey, created)
       signal.addEventListener('abort', () => {
         created.controller?.abort()
         created.group.close()
-        tabs.delete(tabId)
-        actions.forget(tabId)
+        views.delete(viewKey)
+        actions.forget(viewKey)
       }, { once: true })
       return created
     }
-    const modeOf = (tabId: TabId, signal: AbortSignal, mode: DocumentLoadMode, rendererId?: string): TabReads => {
-      const reads = readsOf(tabId, signal)
+    const modeOf = (viewKey: string, signal: AbortSignal, mode: DocumentLoadMode, rendererId?: string): ViewReads => {
+      const reads = readsOf(viewKey, signal)
       if (reads.mode !== mode || reads.rendererId !== rendererId) {
         reads.controller?.abort()
         if (rendererId === undefined) delete reads.rendererId
@@ -139,85 +138,85 @@ export function textFace(
         reads.mode = mode
         reads.generation++
         reads.version = undefined
-        actions.reset(tabId)
+        actions.reset(viewKey)
       }
       return reads
     }
-    const loadPage = (tabId: TabId, file: SessionFile, offset: number, signal: AbortSignal, observedVersion?: string): void => {
+    const loadPage = (viewKey: string, file: SessionFile, offset: number, signal: AbortSignal, observedVersion?: string): void => {
       if (signal.aborted) return
-      const reads = modeOf(tabId, signal, 'text-pages')
+      const reads = modeOf(viewKey, signal, 'text-pages')
       const { generation } = reads
-      actions.loading(tabId, 'text-pages', observedVersion)
+      actions.loading(viewKey, 'text-pages', observedVersion)
       void read(file.sessionId, file.path, offset, signal).then((result) => {
         if (signal.aborted || reads.generation !== generation) return
         if (!result.ok) {
-          actions.failed(tabId, result.error)
+          actions.failed(viewKey, result.error)
           return
         }
         // Pages of two versions never meet: a newer file past the first line
         // restarts the walk from line 1, where the store adopts the new version.
         if (offset !== 1 && reads.version !== undefined && result.value.version !== reads.version) {
-          restart(tabId, file, signal, observedVersion)
+          restart(viewKey, file, signal, observedVersion)
           return
         }
         reads.version = result.value.version
-        actions.page(tabId, result.value)
+        actions.page(viewKey, result.value)
       })
     }
     const loadAll = (
-      tabId: TabId, file: SessionFile, signal: AbortSignal, observedVersion?: string,
+      viewKey: string, file: SessionFile, signal: AbortSignal, observedVersion?: string,
     ): void => {
       if (signal.aborted) return
-      const reads = modeOf(tabId, signal, 'bytes-complete')
+      const reads = modeOf(viewKey, signal, 'bytes-complete')
       reads.controller?.abort()
       const controller = new AbortController()
       reads.controller = controller
       const lifetime = AbortSignal.any([signal, controller.signal])
-      actions.loading(tabId, 'bytes-complete', observedVersion)
+      actions.loading(viewKey, 'bytes-complete', observedVersion)
       void readAll(file, lifetime).then((result) => {
         if (lifetime.aborted) return
         if (!result.ok) {
-          actions.failed(tabId, result.error)
+          actions.failed(viewKey, result.error)
           return
         }
         const file = result.value
         reads.version = file.version
-        actions.complete(tabId, file)
+        actions.complete(viewKey, file)
       }, (error: unknown) => {
         if (lifetime.aborted) return
-        actions.failed(tabId, Object.assign(
+        actions.failed(viewKey, Object.assign(
           new Error(error instanceof Error ? error.message : String(error), { cause: error }),
           { name: 'RemoteError', isDSHRemoteError: true as const, code: 'gateway/internal' as const, details: {} },
         ))
       })
     }
     const restart = (
-      tabId: TabId, file: SessionFile, signal: AbortSignal, observedVersion?: string, mode: DocumentLoadMode = 'text-pages',
+      viewKey: string, file: SessionFile, signal: AbortSignal, observedVersion?: string, mode: DocumentLoadMode = 'text-pages',
     ): void => {
       if (signal.aborted) return
-      const reads = readsOf(tabId, signal)
+      const reads = readsOf(viewKey, signal)
       reads.controller?.abort()
       reads.generation += 1
       reads.version = undefined
-      actions.reset(tabId)
-      if (mode === 'text-pages') loadPage(tabId, file, 1, signal, observedVersion)
-      else loadAll(tabId, file, signal, observedVersion)
+      actions.reset(viewKey)
+      if (mode === 'text-pages') loadPage(viewKey, file, 1, signal, observedVersion)
+      else loadAll(viewKey, file, signal, observedVersion)
     }
     return {
-      addResource: (tabId, address, signal) => {
-        if (!signal.aborted) readsOf(tabId, signal).group.add(address)
+      addResource: (viewKey, address, signal) => {
+        if (!signal.aborted) readsOf(viewKey, signal).group.add(address)
       },
-      setResources: (tabId, addresses, signal) => {
-        if (!signal.aborted) readsOf(tabId, signal).group.set(addresses)
+      setResources: (viewKey, addresses, signal) => {
+        if (!signal.aborted) readsOf(viewKey, signal).group.set(addresses)
       },
       loadPage, reloadPages: restart, loadAll,
-      prepareRenderer: (tabId, signal, rendererId, observedVersion, reload = false) => {
+      prepareRenderer: (viewKey, signal, rendererId, observedVersion, reload = false) => {
         if (signal.aborted) return
-        modeOf(tabId, signal, 'renderer', rendererId)
-        if (reload) actions.reset(tabId)
-        actions.loading(tabId, 'renderer', observedVersion, rendererId)
+        modeOf(viewKey, signal, 'renderer', rendererId)
+        if (reload) actions.reset(viewKey)
+        actions.loading(viewKey, 'renderer', observedVersion, rendererId)
       },
-      reloadAll: (tabId, file, signal, observedVersion) => { restart(tabId, file, signal, observedVersion, 'bytes-complete') },
+      reloadAll: (viewKey, file, signal, observedVersion) => { restart(viewKey, file, signal, observedVersion, 'bytes-complete') },
     }
   }
 }

@@ -18,7 +18,7 @@ import type { RemoteFailure, RemoteResult } from '@deepseek-ai/dsh-api-remotes/c
 import type { ResourceSnapshot } from '@deepseek-ai/dsh-client-resources/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceFileStat, WorkspaceFileText } from '@deepseek-ai/dsh-api-workspace-files/types'
-import type { TextPreviewProps } from '../src/client/TextPreview.tsx'
+import type { DocumentPreviewFactoryProps } from '../src/client/DocumentPreview.tsx'
 import { textFace } from '../src/client/face.ts'
 import type { TextInjected } from '../src/client/face.ts'
 import type { DocumentFileBytes, ReadDocumentBytes, ReadWorkspaceFilePage, SessionFile } from '../src/client/rpc.ts'
@@ -27,7 +27,6 @@ import type { TextStore } from '../src/client/store.ts'
 import type { DocumentPreviewProps } from '../src/client/document/contract.ts'
 import { TextBody } from '../src/client/text/TextBody.tsx'
 import { textBodyDefinition } from '../src/client/text/index.ts'
-import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 
 type BodySlot = PropsRenderSlots<'sidebar.right.tab.document'>['renderSlot']
 
@@ -38,13 +37,13 @@ export function createResources(): ResourceRegistry {
 }
 
 /** Preserve the body-slot callback used by component fixtures. */
-export function documentSlots(body: BodySlot): TextPreviewProps['renderSlot'] {
+export function documentSlots(body: BodySlot): DocumentPreviewFactoryProps['renderSlot'] {
   return (name: string, owner: unknown, options?: unknown) => name === 'sidebar.right.tab.document'
     ? body(name, owner as Parameters<BodySlot>[1], options as Parameters<BodySlot>[2])
     : null
 }
 
-export const TAB_ID = 'tab-1' as TabId
+export const TAB_ID = 'tab-1'
 export const SESSION = 's-1' as SessionId
 /** The path relative to the session's workspace root, as the Host receives it. */
 export const PATH = 'work/notes.md'
@@ -111,7 +110,7 @@ export interface Harness {
   /** The scripted `useResource`. */
   useResource: Mock<() => ResourceSnapshot<WorkspaceFileStat>>
   /** Composed props for one navigation state. */
-  props: (navigation?: { params?: unknown; revision: number }) => TextPreviewProps
+  props: (navigation?: { params?: unknown; revision: number }) => DocumentPreviewFactoryProps
   /** Script what one offset resolves to from now on. */
   script(offset: number, result: RemoteResult<WorkspaceFileText>): void
   /** Publish another metadata version without acknowledging any tab's content. */
@@ -142,26 +141,22 @@ export function harness(script: Record<number, RemoteResult<WorkspaceFileText>> 
   const definitions = [textBodyDefinition(() => t('viewer.text'))]
   // The document seat renders the plain body; the file-handoff seats render a
   // marker carrying what the owner handed them.
-  const renderSlot: TextPreviewProps['renderSlot'] = (key: string, owner: unknown, opts?: { hookContext?: unknown }) =>
+  const renderSlot: DocumentPreviewFactoryProps['renderSlot'] = (key: string, owner: unknown, opts?: { hookContext?: unknown }) =>
     key === 'sidebar.right.tab.document'
       ? createElement(TextBody, {
-        ...owner as object, useTabInfo: opts?.hookContext, sessionId: SESSION, useResource,
+        ...owner as object, useDocumentView: opts?.hookContext, sessionId: SESSION, useResource,
       } as unknown as DocumentPreviewProps)
       : key === 'sidebar.right.tab.document.action' ? null : createElement('div', {
         'data-slot': key,
         'data-slot-path': (owner as { absolutePath: string }).absolutePath,
       })
   const props = (navigation: { params?: unknown; revision: number } = { revision: 1 }) => ({
-    useTabInfo: () => ({
-      sidebar: { expanded: true, fullscreen: false },
-      panel: { id: 'pane-1' },
-      tab: {
-        id: tabId, kind: 'text', contentId: ADDRESS, title: 'notes.md', visible: true,
-        navigation: { address: ADDRESS, params: navigation.params, revision: navigation.revision },
-        signal: controller.signal,
-        actions: tabActions,
-      },
-    }),
+    address: ADDRESS,
+    viewKey: tabId,
+    navigation: { address: ADDRESS, params: navigation.params, revision: navigation.revision },
+    signal: controller.signal,
+    bindRefresh: tabActions.bindCommands,
+    refreshShortcut: undefined,
     sessionId: SESSION,
     useResource,
     useStore: hookOf(instance),
@@ -173,8 +168,10 @@ export function harness(script: Record<number, RemoteResult<WorkspaceFileText>> 
     addResource: face.addResource, setResources: face.setResources,
     useDocumentPreviews: () => definitions,
     renderSlot,
+    renderFactorySlot: () => null,
+    useFactorySlot: (_name: string, fallback: unknown) => fallback,
     t,
-  }) as unknown as TextPreviewProps
+  }) as unknown as DocumentPreviewFactoryProps
   return {
     instance,
     face,
