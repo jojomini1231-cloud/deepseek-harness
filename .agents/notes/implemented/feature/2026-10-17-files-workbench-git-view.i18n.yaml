@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-10-17-files-workbench-git-view.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-17-files-workbench-git-view.md
+/agent-note-the-working-tree-git-view-and-the-shared-comparison-renderer:
+  en: ec9d17f6e394ee4a
+  zh: 6ca76b11878b6600
+/agent-note-the-working-tree-git-view-and-the-shared-comparison-renderer/problem:
+  en: 12452dbebb76d1f6
+  zh: f81f791a2d0873a9
+/agent-note-the-working-tree-git-view-and-the-shared-comparison-renderer/decision:
+  en: 00b38a0ff58c4d2d
+  zh: bff2c807c6907ee0
+/agent-note-the-working-tree-git-view-and-the-shared-comparison-renderer/alternatives-considered:
+  en: c6f86ffd750385a3
+  zh: 541fc0a95ae758e2
+/agent-note-the-working-tree-git-view-and-the-shared-comparison-renderer/consequences:
+  en: 47dc052c9974c120
+  zh: ee3c055ec4303d04
+/agent-note-the-working-tree-git-view-and-the-shared-comparison-renderer/testing:
+  en: 97ebe6802462eb3a
+  zh: 561c31456118a0f8

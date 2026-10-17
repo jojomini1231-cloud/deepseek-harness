@@ -72,6 +72,7 @@
     "tests/lifecycle-chrome.e2e.ts",
     "tests/reasoning-preview.e2e.ts",
     "tests/details-session-lifecycle.e2e.ts",
+    "tests/git-view.e2e.ts",
     "tests/sessionless-header.e2e.ts",
     "tests/document-preview.e2e.ts",
     "tests/excel-opc.e2e.ts",
