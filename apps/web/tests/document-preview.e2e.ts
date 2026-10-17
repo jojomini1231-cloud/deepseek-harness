@@ -1482,9 +1482,10 @@ else process.exit(1);
     const lastChip = chips.locator('[data-files-tab]').last()
     await lastChip.click({ button: 'right' })
     const menuItems = page.getByRole('menuitem')
-    await expect.poll(() => menuItems.count()).toBe(6)
-    expect(await menuItems.allTextContents()).toEqual([
-      'Close', 'Close Other Tabs', 'Close All Tabs', 'Close Tabs to the Left', 'Close Tabs to the Right', 'Open in Files',
+    await expect.poll(() => menuItems.count()).toBeGreaterThanOrEqual(5)
+    const labels = await menuItems.allTextContents()
+    expect(labels.slice(0, 5)).toEqual([
+      'Close', 'Close Other Tabs', 'Close All Tabs', 'Close Tabs to the Left', 'Close Tabs to the Right',
     ])
     // The menu sits below the chip that opened it and inside the window: the
     // strip clips its own overflow, so the menu has to escape it rather than be
@@ -1496,12 +1497,7 @@ else process.exit(1);
     expect((menuBox?.x ?? 0) + (menuBox?.width ?? 0)).toBeLessThanOrEqual(1680)
     await page.keyboard.press('Escape')
     await expect.poll(() => menuItems.count()).toBe(0)
-    // Open in Files is the arm that acts without closing anything: it marks the
-    // chip's row in the tree, so a reader can see where the file came from.
-    await lastChip.click({ button: 'right' })
-    await page.getByRole('menuitem', { name: 'Open in Files' }).click()
-    const revealed = column.locator(`[data-files-path="${join(cwd, 'clip.mp4')}"] [data-files-revealed]`)
-    await expect.poll(() => revealed.count()).toBe(1)
+    if (STUB_OPENER) expect(labels[5]).toBe('Show file location')
     await successShot(page, 'unsupported')
     sections.push([
       '## Unviewable binary', '',
@@ -1571,6 +1567,20 @@ else process.exit(1);
         await expect.poll(async () => (await opened()).length).toBe(gesturesBefore + 2)
         expect((await opened()).at(-1)).toEqual({ path: clip, action: 'application' })
       }
+      // The row the desktop plugin contributes to the chip menu hands that
+      // chip's file to the same Host reveal gesture — the containing folder
+      // opens in the file manager — and dismisses the menu on acknowledgement.
+      const clipChip = column.locator('[data-files-tab$="/clip.mp4"]')
+      const beforeChip = (await opened()).length
+      await clipChip.click({ button: 'right' })
+      await page.getByRole('menuitem', { name: 'Show file location' }).click()
+      await expect.poll(async () => (await opened()).length).toBe(beforeChip + 1)
+      const gesture = (await opened()).at(-1)
+      // macOS and Windows select the file in its folder; Linux opens the folder,
+      // which is the same reveal expressed by the platform's file manager.
+      expect(gesture?.action).toBe('reveal')
+      expect([clip, cwd]).toContain(gesture?.path)
+      await expect.poll(() => page.getByRole('menuitem').count()).toBe(0)
       // Gesture facts stay out of the golden: the stub does not run on Windows.
       expect(await page.getByRole('alert').count()).toBe(0)
     }

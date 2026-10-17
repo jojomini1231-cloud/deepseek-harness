@@ -23,6 +23,7 @@ import { OpenInAppController } from './controller.ts'
 import { OpenInAppAction, type OpenInAppActionInjected, type OpenInAppActionProps } from './OpenInAppAction.tsx'
 import { OpenInAppPathController } from './open-path.ts'
 import { OpenPathAction, type OpenPathInjected } from './OpenPathAction.tsx'
+import { OpenPathMenuRow } from './OpenPathMenuRow.tsx'
 import { FileRouteAction } from './FileRouteAction.tsx'
 import { OpenPathEmptyAction } from './OpenPathEmptyAction.tsx'
 import { en, NS, zh, type OpenInAppKey } from './locales.ts'
@@ -114,6 +115,9 @@ export function apply(ctx: ClientContext): void {
     openPath: (path, action, application) => paths.openPath(path, action, application),
     applications,
   })
+  ctx.slots.inject('sidebar.right.tab.files.chip.actions', () => ctx.slots.register({
+    name: 'sidebar.right.tab.files.chip.actions', id: 'open-in-app', locale: NS, inject: pathInjected,
+  }, OpenPathMenuRow))
   ctx.slots.inject('sidebar.right.tab.document.actions', () => ctx.slots.register({
     name: 'sidebar.right.tab.document.actions',
     id: 'open-in-app',

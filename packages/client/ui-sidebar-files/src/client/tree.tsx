@@ -60,12 +60,6 @@ export interface TreeContext {
   readonly t: TranslateNS<'sidebarFiles'>
 }
 
-/** The row a reveal last landed on keeps the touched fill, apart from the shown file's. */
-function rowClasses(tree: TreeContext, path: string): string | undefined {
-  if (tree.state.active === path) return css.rowActive
-  return tree.state.revealed?.path === path ? css.rowRevealed : undefined
-}
-
 /** One entry's row, and its children when it is an expanded directory. */
 function Entry({ parent, entry, tree }: { parent: string; entry: WorkspaceDirectoryEntry; tree: TreeContext }): ReactNode {
   const path = childPath(parent, entry.name)
@@ -86,9 +80,8 @@ function Entry({ parent, entry, tree }: { parent: string; entry: WorkspaceDirect
       <li className={css.item} data-files-entry="file" data-files-path={path}>
         <button
           type="button"
-          className={clsx(css.row, rowClasses(tree, path))}
+          className={clsx(css.row, tree.state.active === path && css.rowActive)}
           aria-current={tree.state.active === path ? 'true' : undefined}
-          data-files-revealed={tree.state.revealed?.path === path ? '' : undefined}
           onClick={() => { tree.onOpen(path) }}
         >
           <FileTypeIcon kind={classifyFileType(entry.name)} size={16} className={css.fileIcon} />

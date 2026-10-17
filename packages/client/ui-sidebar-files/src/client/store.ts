@@ -74,8 +74,6 @@ export interface FilesTabState {
   open: readonly OpenFile[]
   /** Absolute path of the file the content column shows; `undefined` while nothing is open. */
   active: string | undefined
-  /** The tree row a reveal asked for, with a token that changes on every request. */
-  revealed: { readonly path: string; readonly token: number } | undefined
   /** The content column's share of the workbench, between `MIN_RATIO` and `MAX_RATIO`. */
   ratio: number
 }
@@ -98,25 +96,6 @@ function bucket(state: FilesState, tabId: TabId): FilesTabState {
   return tree
 }
 
-/**
- * The directories between a tree's root and one path, outermost first.
- *
- * Levels are keyed the way the tree joins them (`childPath`: the root's own
- * separators kept, every child appended with `/`), so a Windows root's reveal
- * names the same keys its listing wrote. The root itself is never included: it
- * is always expanded, and a path outside the root — or the root's own row — has
- * no ancestor to reveal.
- * @param root - the tree's absolute root.
- * @param path - absolute path of a file or directory under it.
- * @returns each ancestor directory, from the root's first child down to the path's parent.
- */
-export function ancestorDirectories(root: string, path: string): string[] {
-  const trimmed = root.replace(/[/\\]+$/, '')
-  if (!path.startsWith(`${trimmed}/`) && !path.startsWith(`${trimmed}\\`)) return []
-  const segments = path.slice(trimmed.length + 1).split(/[/\\]+/).filter(segment => segment !== '')
-  return segments.slice(0, -1).map((_, index) => `${trimmed}/${segments.slice(0, index + 1).join('/')}`)
-}
-
 /** The tree store's write set; every action names the tab it writes. */
 type FilesActions = {
   autoRefresh: (draft: FilesState, tabId: TabId, enabled: boolean) => void
@@ -133,7 +112,6 @@ type FilesActions = {
   filesClosedAll: (draft: FilesState, tabId: TabId) => void
   filesClosedBefore: (draft: FilesState, tabId: TabId, path: string) => void
   filesClosedAfter: (draft: FilesState, tabId: TabId, path: string) => void
-  revealed: (draft: FilesState, tabId: TabId, path: string) => void
   ratioChanged: (draft: FilesState, tabId: TabId, ratio: number) => void
   reset: (draft: FilesState, tabId: TabId) => void
   forget: (draft: FilesState, tabId: TabId) => void
@@ -160,7 +138,7 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
       start: (d, tabId: TabId, root: string) => {
         d.byTab[tabId] = {
           root, levels: {}, expanded: [root], scrollTop: 0, autoRefresh: true,
-          open: [], active: undefined, revealed: undefined, ratio: DEFAULT_RATIO,
+          open: [], active: undefined, ratio: DEFAULT_RATIO,
         }
       },
       /**
@@ -320,22 +298,6 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
         if (at < 0 || at === state.open.length - 1) return
         state.open = state.open.slice(0, at + 1)
         if (!state.open.some(open => open.path === state.active)) state.active = state.open.at(-1)?.path
-      },
-      /**
-       * Expand one file's ancestor directories and remember it as the path the
-       * tree should show, so the body can scroll its row into view.
-       * @param d - draft state.
-       * @param tabId - the tab being drawn.
-       * @param path - absolute path of the file to show in the tree.
-       */
-      revealed: (d, tabId: TabId, path: string) => {
-        const state = bucket(d, tabId)
-        for (const directory of ancestorDirectories(state.root, path)) {
-          if (!state.expanded.includes(directory)) state.expanded.push(directory)
-        }
-        // The token moves even for a path revealed before, so a reader asking
-        // again gets the row shown again rather than an unchanged value.
-        state.revealed = { path, token: (state.revealed?.token ?? 0) + 1 }
       },
       /**
        * Record where a divider drag left the two columns.

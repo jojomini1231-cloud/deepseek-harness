@@ -49,8 +49,12 @@ export interface FileTabsProps {
   readonly onCloseLeft: (path: string) => void
   /** Close the chips opened after this file's. */
   readonly onCloseRight: (path: string) => void
-  /** Show this file in the workspace tree. */
-  readonly onReveal: (path: string) => void
+  /**
+   * Rows other plugins contribute to the menu, rendered after the workbench's
+   * own arms; absent means none. The callback dismisses the menu when the row
+   * is picked, so a contributed surface closes it on the workbench's behalf.
+   */
+  readonly renderMenuRow?: (path: string, onPicked: () => void) => ReactNode
   readonly t: TranslateNS<'sidebarFiles'>
 }
 
@@ -71,8 +75,6 @@ function chipMenu(t: TranslateNS<'sidebarFiles'>, index: number, count: number):
     { id: 'close-all', label: t('tabs.menu.closeAll') },
     { id: 'close-left', label: t('tabs.menu.closeLeft'), disabled: index === 0 },
     { id: 'close-right', label: t('tabs.menu.closeRight'), disabled: index === count - 1 },
-    { type: 'separator', id: 'reveal-separator' },
-    { id: 'reveal', label: t('tabs.menu.reveal') },
   ]
 }
 
@@ -93,7 +95,7 @@ function wheelPixels(event: WheelEvent): number {
  * @returns the strip, or nothing when no file is open.
  */
 export function FileTabs({
-  files, active, onOpen, onClose, onCloseOthers, onCloseAll, onCloseLeft, onCloseRight, onReveal, t,
+  files, active, onOpen, onClose, onCloseOthers, onCloseAll, onCloseLeft, onCloseRight, renderMenuRow, t,
 }: FileTabsProps): ReactNode {
   const strip = useRef<HTMLDivElement | null>(null)
   const [hidden, setHidden] = useState<HiddenSides>(undefined)
@@ -153,7 +155,7 @@ export function FileTabs({
     else if (rect.right > box.right) element.scrollLeft += rect.right - box.right + EDGE_FADE_PX
   }, [active, files.length])
   // The menu acts on the chip it was opened from: the path it holds is the one
-  // every close arm needs, and `reveal` needs nothing else.
+  // every close arm needs.
   const menuAction = (path: string, id: string): void => {
     switch (id) {
       case 'close': onClose(path); return
@@ -161,7 +163,6 @@ export function FileTabs({
       case 'close-all': onCloseAll(); return
       case 'close-left': onCloseLeft(path); return
       case 'close-right': onCloseRight(path); return
-      case 'reveal': onReveal(path); return
       /* v8 ignore next -- closed union of the menu's own ids. */
       default: return
     }
@@ -204,7 +205,9 @@ export function FileTabs({
             items={chipMenu(t, index, files.length)}
             onSelect={(id) => { setMenu(undefined); menuAction(file.path, id) }}
             onClose={() => { setMenu(undefined) }}
-          />
+          >
+            {renderMenuRow?.(file.path, () => { setMenu(undefined) })}
+          </Menu>
           <button
             type="button"
             className={css.tabClose}

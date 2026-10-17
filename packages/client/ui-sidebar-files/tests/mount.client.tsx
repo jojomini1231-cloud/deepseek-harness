@@ -58,6 +58,8 @@ export interface Mounted {
   readonly remount: () => RenderResult
   /** The reusable preview Factory's renderer, recording what the body asked for. */
   readonly renderFactorySlot: Mock
+  /** The body's child-slot renderer, recording what the body asked for. */
+  readonly renderSlot: Mock
 }
 
 /** One store instance, one face, one owner share. */
@@ -89,7 +91,17 @@ function harness(cwd: string | null, refreshShortcut?: ReturnType<FilesBodyProps
         actions: tabActions, refreshShortcut,
       },
     }),
-    renderSlot: () => null,
+    // The chip menu's contributed rows render a marker the body spec can pick,
+    // the way a feature plugin's row would; every other slot stays empty.
+    renderSlot: vi.fn((name: string, props?: { readonly path?: string; readonly onPicked?: () => void }) =>
+      name === 'sidebar.right.tab.files.chip.actions' && props?.path !== undefined
+        ? createElement('button', {
+          type: 'button',
+          role: 'menuitem',
+          'data-chip-row': props.path,
+          onClick: () => { props?.onPicked?.() },
+        }, 'Show file location')
+        : null),
     renderFactorySlot: vi.fn((name: string, input: { address: string }) => name === 'sidebar.document.preview'
       ? createElement('div', { 'data-preview-address': input.address })
       : null),
@@ -112,7 +124,7 @@ export function mountBody(cwd: string | null = ROOT, refreshShortcut?: ReturnTyp
   const { shared, ...hands } = harness(cwd, refreshShortcut)
   const view = render(<FilesBody {...shared as unknown as FilesBodyProps} />)
   return {
-    ...hands, view, renderFactorySlot: shared.renderFactorySlot,
+    ...hands, view, renderFactorySlot: shared.renderFactorySlot, renderSlot: shared.renderSlot,
     remount: () => render(<FilesBody {...shared as unknown as FilesBodyProps} />),
   }
 }

@@ -22,6 +22,7 @@ import { apply as nodeApply } from '../src/index.ts'
 import { OpenInAppAction } from '../src/client/OpenInAppAction.tsx'
 import { OpenPathAction } from '../src/client/OpenPathAction.tsx'
 import { OpenPathEmptyAction } from '../src/client/OpenPathEmptyAction.tsx'
+import { OpenPathMenuRow } from '../src/client/OpenPathMenuRow.tsx'
 import { en, NS, zh } from '../src/client/locales.ts'
 
 afterEach(() => {
@@ -47,6 +48,7 @@ async function bench() {
     children: {
       'conversation.session.header.utilities': { kind: 'list', scope: 'session' },
       'sidebar.right.tab.files.actions': { kind: 'list', scope: 'session' },
+      'sidebar.right.tab.files.chip.actions': { kind: 'list', scope: 'session' },
       'sidebar.right.tab.document.actions': { kind: 'list', scope: 'session' },
       'sidebar.right.tab.document.unpreviewable': { kind: 'list', scope: 'session' },
       'deliverables.file.actions': { kind: 'list', scope: 'session' },
@@ -170,6 +172,9 @@ describe('open-in-app browser half', () => {
   it('registers both document-preview path controls behind one desktop answer, and fiber teardown removes them', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ apps: [] }), { status: 200 })))
     const { ctx, fiber } = await bench()
+    const chipRow = ctx.slots.entries('sidebar.right.tab.files.chip.actions')[0]
+    expect(chipRow?.component).toBe(OpenPathMenuRow)
+    expect(chipRow?.options).toMatchObject({ id: 'open-in-app' })
     const header = ctx.slots.entries('sidebar.right.tab.document.actions')[0]
     const empty = ctx.slots.entries('sidebar.right.tab.document.unpreviewable')[0]
     expect(header?.component).toBe(OpenPathAction)
@@ -190,6 +195,7 @@ describe('open-in-app browser half', () => {
     expect(await face.openPath('/w/clip.mp4', 'reveal')).toBeNull()
     expect(remote.session.openWorkspacePath).toHaveBeenLastCalledWith({ path: '/w/clip.mp4', action: 'reveal' })
     await fiber.dispose()
+    expect(ctx.slots.entries('sidebar.right.tab.files.chip.actions')).toHaveLength(0)
     expect(ctx.slots.entries('sidebar.right.tab.document.actions').map(entry => entry.options.id)).not.toContain('open-in-app')
     expect(ctx.slots.entries('sidebar.right.tab.document.unpreviewable').map(entry => entry.options.id)).not.toContain('open-in-app')
     expect(ctx.slots.entries('deliverables.file.actions')).toHaveLength(0)

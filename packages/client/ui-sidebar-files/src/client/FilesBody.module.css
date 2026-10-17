@@ -95,12 +95,6 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-/* The row a chip's "Open in Files" landed on takes the same touched fill, so the
-   reveal answers where the file came from without claiming it is the shown one. */
-.rowRevealed {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
 /* The folder glyph rides the tertiary ink, as the workspace tree's does (ui-workspace Rows `.slot`). */
 .icon {
   flex: 0 0 auto;

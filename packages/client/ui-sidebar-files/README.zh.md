@@ -40,11 +40,11 @@ kind: "package-reference"
 
 正文画两栏，中间是分隔条：引导侧是内容栏，尾随侧是树。拖拽由 `SplitView` 负责：按下时捕获指针，移动时只在组件自身状态里预览比例，松开时上报一个已结算的比例，由 `ratioChanged` 收敛到 20%–80%。正文对两栏做了 memo，因此拖拽帧只重绘分隔条，不重绘其后的文档。
 
-内容栏在读者选中的文件上方放打开文件的 chips。文件行调用 `fileOpened`，追加一个 chip 并显示该文件；再次打开同一路径会复用它已有的 chip。chips 条不画滚动条：滚轮让它横向滚动（纵向滚轮滚动该行，行模式或横向 delta 同样生效，没有可滚内容的条会把该次滚动留给祖先），在条边界之外打开或成为当前显示的文件会被滚回可见范围内且不移动任何祖先的滚动位置，每个被隐藏的边缘会把 chips 渐隐 24px，让该行读起来是继续而非被截断。chips 最小只缩到 100px，因此长行会溢出而不是一路缩小。点击 chip 调用 `fileActivated`；chip 的关闭控件（或中键点击）调用 `fileClosed`，它会显示下一个 chip，被关闭的是最后一个时显示上一个，关闭最后一个 chip 后内容栏清空。次键点击打开该 chip 的菜单：关闭、关闭其他标签页、关闭所有标签页、关闭左侧标签页与关闭右侧标签页分别调用 `fileClosed`、`filesClosedExcept`、`filesClosedAll`、`filesClosedBefore` 与 `filesClosedAfter`，而不会删掉任何 chip 的那一项是禁用而不是隐藏。`打开所在文件夹` 调用树 face 的 `reveal`，展开该文件的各级祖先目录并标出其行，让读者看到文件来自哪里。清空状态说明文件从哪里来，而不是留一片空白。
+内容栏在读者选中的文件上方放打开文件的 chips。文件行调用 `fileOpened`，追加一个 chip 并显示该文件；再次打开同一路径会复用它已有的 chip。chips 条不画滚动条：滚轮让它横向滚动（纵向滚轮滚动该行，行模式或横向 delta 同样生效，没有可滚内容的条会把该次滚动留给祖先），在条边界之外打开或成为当前显示的文件会被滚回可见范围内且不移动任何祖先的滚动位置，每个被隐藏的边缘会把 chips 渐隐 24px，让该行读起来是继续而非被截断。chips 最小只缩到 100px，因此长行会溢出而不是一路缩小。点击 chip 调用 `fileActivated`；chip 的关闭控件（或中键点击）调用 `fileClosed`，它会显示下一个 chip，被关闭的是最后一个时显示上一个，关闭最后一个 chip 后内容栏清空。次键点击打开该 chip 的菜单：关闭、关闭其他标签页、关闭所有标签页、关闭左侧标签页与关闭右侧标签页分别调用 `fileClosed`、`filesClosedExcept`、`filesClosedAll`、`filesClosedBefore` 与 `filesClosedAfter`，而不会删掉任何 chip 的那一项是禁用而不是隐藏。这些臂之后是其他插件贡献到 `sidebar.right.tab.files.chip.actions` 的行，`ui-open-in-app` 在此放一个把文件所在文件夹交给桌面文件管理器的行。清空状态说明文件从哪里来，而不是留一片空白。
 
-文件通过 `renderFactorySlot('sidebar.document.preview', { address, viewKey: absolutePath, navigation, signal })` 绘制：存储里保存绝对路径，地址由 `@deepseek-ai/dsh-util-workspace-path` 的 `fileAddressFor` 生成。因此两个工作台看同一个文件时，滚动、缩放、换行与查看器选择各自独立，因为 Factory 按视图键分桶。无法预览的文件、Host 路径未知的文件、以及没有注册渲染器的二进制容器，都是 Factory 自己的状态，与在侧栏预览 tab 中完全一致。
+文件通过 `renderFactorySlot('sidebar.document.preview', { address, viewKey, navigation, signal })` 绘制：存储里保存绝对路径，地址由 `@deepseek-ai/dsh-util-workspace-path` 的 `fileAddressFor` 生成，视图键在文件的绝对路径前加上 tab id，因此两个工作台 tab 看同一个文件时，滚动、缩放、换行与查看器选择各自独立，因为 Factory 按视图键分桶。无法预览的文件、Host 路径未知的文件、以及没有注册渲染器的二进制容器，都是 Factory 自己的状态，与在侧栏预览 tab 中完全一致。
 
-工作台保存的一切都在类型自己的存储里，按 tab id 分桶：`root`、`levels`、`expanded`、`scrollTop`、`autoRefresh`、打开的文件（`open`）、当前显示的路径（`active`）、某次 reveal 要求显示的行（`revealed`，其 token 每次请求都会前进）与 `ratio`。存储比 body 活得久，切到其他侧栏 tab 再切回来时，chips、当前文件、分隔条位置与树都保持原样。
+工作台保存的一切都在类型自己的存储里，按 tab id 分桶：`root`、`levels`、`expanded`、`scrollTop`、`autoRefresh`、打开的文件（`open`）、当前显示的路径（`active`） 与 `ratio`。存储比 body 活得久，切到其他侧栏 tab 再切回来时，chips、当前文件、分隔条位置与树都保持原样。
 
 <a id="the-tree"></a>
 ## 树
@@ -54,7 +54,7 @@ kind: "package-reference"
 | 条目类型 | 行 |
 |---|---|
 | `directory` | 切换展开与折叠；再次打开时重新列举，并恢复仍存在的已展开后代。折叠期间保留已显示条目的缓存。 |
-| `file` | 调用 `fileOpened`，传入条目的绝对路径、由 `fileAddressFor` 生成的 `dsh-resource://file/session/<sessionId>/<encoded path relative to the root>` 地址与文件名：该文件加入内容栏的 chips 并成为当前显示的文件。行上会标出当前显示的文件，而 chip 的 `打开所在文件夹` 落到的那一行取触感填充，树因此既回答了读者所在的位置，也回答了 reveal 到了哪里。 |
+| `file` | 调用 `fileOpened`，传入条目的绝对路径、由 `fileAddressFor` 生成的 `dsh-resource://file/session/<sessionId>/<encoded path relative to the root>` 地址与文件名：该文件加入内容栏的 chips 并成为当前显示的文件。行上会标出当前显示的文件，树因此回答了读者所在的位置。 |
 | `other` | 灰显且不可点击，从而完整呈现目录内容。 |
 
 被端点条目上限截断的层以一条标记收尾；空层如实说明；失败的层按错误码各显示一行（`workspace-file/not-found`、`outside-workspace`、`not-directory`），其他情况显示传输层自己的消息。重新读取就地刷新根与展开中的层，读取期间保留显示条目，不重置整棵树；折叠的层在下次打开时重新拉取。没有工作目录的会话只显示一行说明，而不是树。

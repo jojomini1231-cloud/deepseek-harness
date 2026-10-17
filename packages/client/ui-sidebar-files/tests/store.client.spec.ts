@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import { createFilesStore } from '../src/client/store.ts'
 import type { DirLevel } from '../src/client/store.ts'
-import { ancestorDirectories, DEFAULT_RATIO, MAX_RATIO, MIN_RATIO } from '../src/client/store.ts'
+import { DEFAULT_RATIO, MAX_RATIO, MIN_RATIO } from '../src/client/store.ts'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 
 const ROOT = '/work/app'
@@ -167,34 +167,6 @@ describe('createFilesStore', () => {
     actions.filesClosedBefore(TAB, a.path)
     expect(open()).toEqual([a.path, b.path, c.path])
     expect(active()).toBe(c.path)
-  })
-
-  it('reveals a file by expanding its ancestors and remembering the row to show', () => {
-    const store = createFilesStore().create()
-    const { actions } = store
-    const getSnapshot = (): ReturnType<typeof store.getSnapshot> => store.getSnapshot()
-    actions.start(TAB, ROOT)
-    actions.revealed(TAB, `${ROOT}/src/deep/notes.md`)
-    expect(getSnapshot().byTab[TAB]?.expanded).toEqual([ROOT, `${ROOT}/src`, `${ROOT}/src/deep`])
-    expect(getSnapshot().byTab[TAB]?.revealed).toEqual({ path: `${ROOT}/src/deep/notes.md`, token: 1 })
-    // Revealing again keeps one entry per directory, and the token moves so a
-    // repeated request is still a new one for the body.
-    actions.revealed(TAB, `${ROOT}/src/other.md`)
-    expect(getSnapshot().byTab[TAB]?.expanded).toEqual([ROOT, `${ROOT}/src`, `${ROOT}/src/deep`])
-    expect(getSnapshot().byTab[TAB]?.revealed).toEqual({ path: `${ROOT}/src/other.md`, token: 2 })
-  })
-
-  it('names the directories between a root and a path the way the tree keys them', () => {
-    expect(ancestorDirectories('/work/app', '/work/app/src/lib/a.ts')).toEqual(['/work/app/src', '/work/app/src/lib'])
-    // A file directly in the root has no ancestor, and the root's own row has none either.
-    expect(ancestorDirectories('/work/app', '/work/app/a.ts')).toEqual([])
-    expect(ancestorDirectories('/work/app', '/work/app')).toEqual([])
-    expect(ancestorDirectories('/work/app/', '/work/app/src/a.ts')).toEqual(['/work/app/src'])
-    // A path outside the root, and a sibling whose name merely shares its prefix, reveal nothing.
-    expect(ancestorDirectories('/work/app', '/work/other/a.ts')).toEqual([])
-    expect(ancestorDirectories('/work/app', '/work/application/a.ts')).toEqual([])
-    // A Windows root keeps its backslash for the root and joins children with `/`, as listings do.
-    expect(ancestorDirectories('C:\\work\\app', 'C:\\work\\app\\src\\lib\\a.ts')).toEqual(['C:\\work\\app/src', 'C:\\work\\app/src/lib'])
   })
 
   it('keeps a divider drag inside its range', () => {

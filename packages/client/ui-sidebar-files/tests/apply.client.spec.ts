@@ -25,6 +25,7 @@ interface Recorded {
   store: unknown
   inject: unknown
   component: unknown
+  children?: Record<string, { kind: string; scope: string }>
 }
 
 async function boot() {
@@ -103,6 +104,12 @@ describe('ui-sidebar-files apply', () => {
     ])
     expect(registered[0]?.store).toBeDefined()
     expect(typeof registered[0]?.inject).toBe('function')
+    // The body declares the chip menu's contributed-row slot as its child, so
+    // a feature plugin's row reaches a real seat rather than a SlotOwnershipError.
+    expect(registered[0]?.children).toEqual({
+      'sidebar.right.tab.files.actions': { kind: 'list', scope: 'session' },
+      'sidebar.right.tab.files.chip.actions': { kind: 'list', scope: 'session' },
+    })
   })
 
   it('takes every registration back when the plugin is disposed', async () => {

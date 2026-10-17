@@ -39,6 +39,21 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
         readonly absolutePath: string
       }
     }
+    /**
+     * Rows a chip's secondary-press menu offers after the workbench's own arms,
+     * for gestures the workbench does not own — handing a file's folder to the
+     * desktop file manager, for instance.
+     */
+    'sidebar.right.tab.files.chip.actions': {
+      kind: 'list'
+      scope: 'session'
+      owner: {
+        /** Absolute path of the file whose chip menu is open. */
+        readonly path: string
+        /** Dismiss the menu after the row's gesture settles, so a failure the row announces outlives the menu. */
+        readonly onPicked: () => void
+      }
+    }
   }
 }
 
@@ -86,7 +101,10 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register(
     {
       name: 'sidebar.right.pane.tab', key: FILES_ID, locale: NS, store, inject,
-      children: { 'sidebar.right.tab.files.actions': { kind: 'list', scope: 'session' } },
+      children: {
+        'sidebar.right.tab.files.actions': { kind: 'list', scope: 'session' },
+        'sidebar.right.tab.files.chip.actions': { kind: 'list', scope: 'session' },
+      },
     },
     FilesBody,
   )), 'ui-sidebar-files: files tab body')

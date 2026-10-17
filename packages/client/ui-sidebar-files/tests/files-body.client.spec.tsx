@@ -237,97 +237,17 @@ describe('FilesBody', () => {
     expect(env.aborted).toBe(true)
   })
 
-  it('does not re-scroll a reveal the reader has scrolled away from when a directory reloads', async () => {
-    const { view, script, instance } = mountBody()
+  it('renders the chip actions slot in the open menu and lets its row dismiss the menu', async () => {
+    const { view, script, renderSlot } = mountBody()
     await act(() => script.watches.ready(ROOT))
     await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
-    const body = view.container.querySelector<HTMLElement>('[data-files-body]')!
-    const row = view.container.querySelector<HTMLElement>(`[data-files-path="${ROOT}/README.md"]`)!
-    // The reveal lands on a row outside the viewport.
-    const box = { top: 0, bottom: 100, left: 0, right: 100, width: 100, height: 100, x: 0, y: 0, toJSON: () => ({}) }
-    Object.defineProperty(body, 'getBoundingClientRect', { value: () => box, configurable: true })
-    Object.defineProperty(row, 'getBoundingClientRect', {
-      value: () => ({ ...box, top: 400, bottom: 420 }), configurable: true,
-    })
-    act(() => { instance.actions.revealed(TAB, `${ROOT}/README.md`) })
-    await act(async () => {})
-    expect(body.scrollTop).toBe(400)
-    // The reader scrolls elsewhere, and a directory reload changes `levels`
-    // without a new reveal: the handled token keeps the reader's place.
-    body.scrollTop = 0
-    await act(async () => { instance.actions.loaded(TAB, ROOT, ROOT_LEVEL) })
-    expect(body.scrollTop).toBe(0)
-    // A new reveal request scrolls again.
-    act(() => { instance.actions.revealed(TAB, `${ROOT}/README.md`) })
-    await act(async () => {})
-    expect(body.scrollTop).toBe(400)
-  })
-
-  it('reveals a file in the tree from its chip menu, scrolling its row into view', async () => {
-    const { view, script, instance } = mountBody()
-    await act(() => script.watches.ready(ROOT))
-    await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
-    // Open a file inside a directory, then collapse that directory again.
-    act(() => { fireEvent.click(view.container.querySelector(`[data-files-path="${ROOT}/src"] > button`)!) })
-    await act(() => script.watches.ready(`${ROOT}/src`))
-    await act(() => script.settle({ ok: true, value: { entries: [{ name: 'a.ts', type: 'file' }], truncated: false } }))
-    fireEvent.click(view.container.querySelector(`[data-files-path="${ROOT}/src/a.ts"] > button`)!)
-    // Collapsing lists nothing: the level stays in the store, the rows go.
-    act(() => { fireEvent.click(view.container.querySelector(`[data-files-path="${ROOT}/src"] > button`)!) })
-    expect(view.container.querySelector(`[data-files-path="${ROOT}/src/a.ts"]`)).toBeNull()
-    // The menu expands the chain again and marks the row it landed on.
-    fireEvent.contextMenu(view.container.querySelector<HTMLElement>(`[data-files-tab="${ROOT}/src/a.ts"]`)!)
-    fireEvent.click(screen.getByRole('menuitem', { name: '打开所在文件夹' }))
-    expect(instance.getSnapshot().byTab[TAB]?.revealed).toMatchObject({ path: `${ROOT}/src/a.ts` })
-    await act(() => script.watches.ready(`${ROOT}/src`, 1))
-    await act(() => script.settle({ ok: true, value: { entries: [{ name: 'a.ts', type: 'file' }], truncated: false } }))
-    const row = view.container.querySelector<HTMLElement>(`[data-files-path="${ROOT}/src/a.ts"]`)!
-    expect(row.querySelector('button')?.getAttribute('data-files-revealed')).toBe('')
-    // A row outside the tree's viewport is scrolled to. Revealing the same file
-    // again is a new request (the mark carries a token), and the row is already
-    // listed, so no listing is awaited here.
-    const body = view.container.querySelector<HTMLElement>('[data-files-body]')!
-    const box = { top: 0, bottom: 100, left: 0, right: 100, width: 100, height: 100, x: 0, y: 0, toJSON: () => ({}) }
-    Object.defineProperty(body, 'getBoundingClientRect', { value: () => box, configurable: true })
-    Object.defineProperty(row, 'getBoundingClientRect', {
-      value: () => ({ ...box, top: 400, bottom: 420 }), configurable: true,
-    })
-    fireEvent.contextMenu(view.container.querySelector<HTMLElement>(`[data-files-tab="${ROOT}/src/a.ts"]`)!)
-    fireEvent.click(screen.getByRole('menuitem', { name: '打开所在文件夹' }))
-    await act(async () => {})
-    expect(body.scrollTop).toBe(400)
-    // A revealed row that is not the shown one keeps the touched fill rather than
-    // the shown file's, and a repeat reveal is a new request.
     fireEvent.click(view.container.querySelector(`[data-files-path="${ROOT}/README.md"] > button`)!)
-    Object.defineProperty(row, 'getBoundingClientRect', {
-      value: () => ({ ...box, top: 20, bottom: 40 }), configurable: true,
-    })
-    fireEvent.contextMenu(view.container.querySelector<HTMLElement>(`[data-files-tab="${ROOT}/src/a.ts"]`)!)
-    fireEvent.click(screen.getByRole('menuitem', { name: '打开所在文件夹' }))
-    await act(async () => {})
-    expect(instance.getSnapshot().byTab[TAB]?.active).toBe(`${ROOT}/README.md`)
-    expect(row.querySelector('button')?.getAttribute('data-files-revealed')).toBe('')
-    expect(row.querySelector('button')?.getAttribute('aria-current')).toBeNull()
-    expect(view.container.querySelector(`[data-files-path="${ROOT}/README.md"] button`)?.getAttribute('aria-current')).toBe('true')
-    // A row already inside the viewport moves nothing.
-    body.scrollTop = 0
-    Object.defineProperty(row, 'getBoundingClientRect', {
-      value: () => ({ ...box, top: 20, bottom: 40 }), configurable: true,
-    })
-    fireEvent.contextMenu(view.container.querySelector<HTMLElement>(`[data-files-tab="${ROOT}/src/a.ts"]`)!)
-    fireEvent.click(screen.getByRole('menuitem', { name: '打开所在文件夹' }))
-    await act(async () => {})
-    expect(body.scrollTop).toBe(0)
-  })
-
-  it('marks a reveal the tree has no row for without scrolling anything', async () => {
-    const { view, script, instance } = mountBody()
-    await act(() => script.watches.ready(ROOT))
-    await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
-    const body = view.container.querySelector<HTMLElement>('[data-files-body]')!
-    act(() => { instance.actions.revealed(TAB, `${ROOT}/gone/notes.md`) })
-    expect(instance.getSnapshot().byTab[TAB]?.revealed).toMatchObject({ path: `${ROOT}/gone/notes.md` })
-    expect(body.scrollTop).toBe(0)
+    fireEvent.contextMenu(view.container.querySelector<HTMLElement>(`[data-files-tab="${ROOT}/README.md"]`)!)
+    expect(renderSlot.mock.calls.map(call => String(call[0]))).toContain('sidebar.right.tab.files.chip.actions')
+    const row = document.querySelector<HTMLElement>(`[data-chip-row="${ROOT}/README.md"]`)
+    expect(row).not.toBeNull()
+    fireEvent.click(row!)
+    expect(document.querySelector('[role="menuitem"]')).toBeNull()
   })
 
   it('settles the divider ratio when a drag ends, and ignores a press without movement', async () => {

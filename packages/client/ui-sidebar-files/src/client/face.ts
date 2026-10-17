@@ -27,7 +27,6 @@ import type { ClientRemote, RemoteResult } from '@deepseek-ai/dsh-api-remotes/cl
 import type { BoundActions } from '@deepseek-ai/dsh-client-store'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import { ancestorDirectories } from './store.ts'
 import type { DirLevel, createFilesStore } from './store.ts'
 import type { WorkspaceFileWatchFrame } from '@deepseek-ai/dsh-api-workspace-files/types'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
@@ -148,16 +147,6 @@ export interface FilesInjected {
    */
   readonly toggle: (tabId: TabId, parentPath: string, path: string, expanded: readonly string[], signal: AbortSignal) => void
   /**
-   * Expand one file's ancestor directories and mark it as the path the tree
-   * should show, so its row is listed and the body can scroll it into view.
-   * @param tabId - the tab being drawn.
-   * @param root - the tree's absolute root.
-   * @param path - absolute path of the file to show.
-   * @param expanded - current expansion preferences, including descendants to restore.
-   * @param signal - the tab record's lifetime.
-   */
-  readonly reveal: (tabId: TabId, root: string, path: string, expanded: readonly string[], signal: AbortSignal) => void
-  /**
    * The lifetime signal of one open chip's preview, minted on first use and
    * stable for the chip until it closes: the tab record's signal combined with
    * a controller the face holds, so a remounted body receives the same signal
@@ -264,20 +253,6 @@ export function filesFace(
           chips.delete(path)
           chip.controller.abort()
         }
-      },
-      reveal(tabId, root, path, expanded, signal) {
-        if (signal.aborted) return
-        const ancestors = ancestorDirectories(root, path)
-        const innermost = ancestors[0]
-        actions.revealed(tabId, path)
-        if (innermost === undefined) return
-        // The whole preference set travels with the first expansion: each level
-        // that loads next expands its own child from it, so a reveal deeper than
-        // one level opens the chain without a request per directory.
-        const next = [...new Set([...expanded, ...ancestors])]
-        const node = roots.get(tabId)
-        node?.setExpanded(next)
-        node?.expand(innermost, next)
       },
       toggle(tabId, parentPath, path, expanded, signal) {
         if (signal.aborted) return

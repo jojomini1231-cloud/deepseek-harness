@@ -36,7 +36,7 @@ import css from './FilesBody.module.css'
 /** The body's composed props: the tab it draws, its store, its face, its copy, and the preview Factory. */
 export type FilesBodyProps =
   & PropsRuntime<'sidebar.right.pane.tab'>
-  & PropsRenderSlots<'sidebar.right.tab.files.actions'>
+  & PropsRenderSlots<'sidebar.right.tab.files.actions' | 'sidebar.right.tab.files.chip.actions'>
   & PropsRenderFactories
   & PropsStore<ReturnType<typeof createFilesStore>>
   & FilesInjected
@@ -56,7 +56,7 @@ export function openFileFor(sessionId: Parameters<typeof fileAddressFor>[0], roo
 /** The files workbench: the workspace root and whatever the reader has open under it. */
 export function FilesBody({
   useTabInfo, sessionId, useSessions, useStore, actions, renderSlot, renderFactorySlot,
-  start, refresh, setAutoRefresh, toggle, reveal, chipSignal, chipsClosed, t,
+  start, refresh, setAutoRefresh, toggle, chipSignal, chipsClosed, t,
 }: FilesBodyProps): ReactNode {
   const { tab } = useTabInfo()
   useEffect(() => tab.actions.bindCommands({ refresh: () => { refresh(tab.id) } }), [tab.actions, tab.id, refresh])
@@ -89,26 +89,6 @@ export function FilesBody({
     start(tab.id, cwd, signal)
   }, [state, cwd, tab.id, signal, start])
 
-  // Bring the row a reveal landed on into view once the tree lists it. A row
-  // already in view moves nothing, so repeated commits settle here without a
-  // jump; the row appearing is what re-runs this, not a second reveal request.
-  // The handled token is remembered so a directory reload — which changes
-  // `levels` and would otherwise re-run this — does not scroll away from where
-  // the reader has moved since the reveal.
-  const revealedTokenRef = useRef(-1)
-  useLayoutEffect(() => {
-    const revealed = state?.revealed
-    const body = bodyRef.current
-    if (revealed === undefined || body === null || revealedTokenRef.current === revealed.token) return
-    const row = [...body.querySelectorAll<HTMLElement>('[data-files-path]')]
-      .find(node => node.dataset.filesPath === revealed.path)
-    if (row === undefined) return
-    revealedTokenRef.current = revealed.token
-    const box = body.getBoundingClientRect()
-    const rect = row.getBoundingClientRect()
-    if (rect.top >= box.top && rect.bottom <= box.bottom) return
-    body.scrollTop += rect.top - box.top
-  }, [state?.revealed?.token, state?.levels])
   const tree = useMemo((): TreeContext | undefined => state === undefined ? undefined : {
     state,
     onToggle: (parent, path) => { toggle(tab.id, parent, path, state.expanded, signal) },
@@ -119,6 +99,18 @@ export function FilesBody({
   // nor the document behind it. The chip lifetimes are minted at memo time:
   // `chipSignal` hands back the same composed signal for a chip already open,
   // so the memo re-running never re-keys the preview's state.
+  /**
+   * Rows other plugins contribute to a chip's menu, rendered with the menu so
+   * they join its keyboard walk; picking one dismisses it.
+   * @param path - absolute path of the file whose chip menu is open.
+   * @param onPicked - the menu's dismiss callback.
+   * @returns the contributed rows, or nothing when none registered.
+   */
+  const renderMenuRow = useMemo(
+    () => (path: string, onPicked: () => void): ReactNode =>
+      renderSlot('sidebar.right.tab.files.chip.actions', { path, onPicked }),
+    [renderSlot],
+  )
   const contentColumn = useMemo((): ReactNode => {
     if (state === undefined) return null
     const value = state
@@ -135,12 +127,12 @@ export function FilesBody({
           files={value.open}
           active={value.active}
           onOpen={(path) => { actions.fileActivated(tab.id, path) }}
-          onClose={path => close([path], () => { actions.fileClosed(tab.id, path) })}
-          onCloseOthers={path => close(
-            value.open.map(open => open.path).filter(open => open !== path),
-            () => { actions.filesClosedExcept(tab.id, path) },
-          )}
-          onCloseAll={() => close(value.open.map(open => open.path), () => { actions.filesClosedAll(tab.id) })}
+          onClose={(path) => { close([path], () => { actions.fileClosed(tab.id, path) }) }}
+          onCloseOthers={(path) => {
+            close(value.open.map(open => open.path).filter(open => open !== path),
+              () => { actions.filesClosedExcept(tab.id, path) })
+          }}
+          onCloseAll={() => { close(value.open.map(open => open.path), () => { actions.filesClosedAll(tab.id) }) }}
           onCloseLeft={(path) => {
             const at = value.open.findIndex(open => open.path === path)
             close(value.open.slice(0, Math.max(at, 0)).map(open => open.path), () => { actions.filesClosedBefore(tab.id, path) })
@@ -149,7 +141,7 @@ export function FilesBody({
             const at = value.open.findIndex(open => open.path === path)
             close(value.open.slice(at + 1).map(open => open.path), () => { actions.filesClosedAfter(tab.id, path) })}
           }
-          onReveal={(path) => { reveal(tab.id, value.root, path, value.expanded, signal) }}
+          renderMenuRow={renderMenuRow}
           t={t}
         />
         <div className={css.preview} data-files-preview>
@@ -166,8 +158,8 @@ export function FilesBody({
         </div>
       </>
     )
-  }, [state?.open, state?.active, state?.expanded, state?.root, actions, tab.id, signal,
-    chipSignal, chipsClosed, t, renderFactorySlot, reveal])
+  }, [state?.open, state?.active, actions, tab.id, signal,
+    chipSignal, chipsClosed, t, renderFactorySlot, renderMenuRow])
   const treeColumn = useMemo((): ReactNode => tree === undefined ? null : (
     <div
       ref={bodyRef}

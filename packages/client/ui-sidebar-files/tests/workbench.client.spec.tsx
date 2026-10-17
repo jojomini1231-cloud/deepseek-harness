@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { MenuItemButton } from '@deepseek-ai/dsh-client-ui-primitives'
 import { FileTabs } from '../src/client/FileTabs.tsx'
 import type { FileTabsProps } from '../src/client/FileTabs.tsx'
 import { SplitView } from '../src/client/SplitView.tsx'
@@ -20,7 +21,7 @@ const FILES = [
 
 /** The menu arms a chip render needs; each case replaces the ones it watches. */
 const menuArms = {
-  onCloseOthers: vi.fn(), onCloseAll: vi.fn(), onCloseLeft: vi.fn(), onCloseRight: vi.fn(), onReveal: vi.fn(),
+  onCloseOthers: vi.fn(), onCloseAll: vi.fn(), onCloseLeft: vi.fn(), onCloseRight: vi.fn(),
 }
 
 /**
@@ -156,14 +157,14 @@ describe('FileTabs', () => {
   it('opens the chip menu on a secondary press and runs the arm each row names', () => {
     const arms = {
       onClose: vi.fn(), onCloseOthers: vi.fn(), onCloseAll: vi.fn(),
-      onCloseLeft: vi.fn(), onCloseRight: vi.fn(), onReveal: vi.fn(),
+      onCloseLeft: vi.fn(), onCloseRight: vi.fn(),
     }
     const { container, getByRole } = render(chipStrip({ files: FILES, active: FILES[0]!.path, t: tEn, ...arms }))
     const chip = container.querySelector<HTMLElement>(`[data-files-tab="${FILES[1]!.path}"]`)!
     fireEvent.contextMenu(chip)
     const rows = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
     expect(rows.map(row => row.textContent)).toEqual([
-      'Close', 'Close Other Tabs', 'Close All Tabs', 'Close Tabs to the Left', 'Close Tabs to the Right', 'Open in Files',
+      'Close', 'Close Other Tabs', 'Close All Tabs', 'Close Tabs to the Left', 'Close Tabs to the Right',
     ])
     // The right-hand chip leaves "to the right" with nothing to close.
     expect(rows[3]!.disabled).toBe(false)
@@ -186,9 +187,6 @@ describe('FileTabs', () => {
     fireEvent.contextMenu(container.querySelector<HTMLElement>(`[data-files-tab="${FILES[0]!.path}"]`)!)
     fireEvent.click(getByRole('menuitem', { name: 'Close Tabs to the Right' }))
     expect(arms.onCloseRight).toHaveBeenCalledWith(FILES[0]!.path)
-    fireEvent.contextMenu(chip)
-    fireEvent.click(getByRole('menuitem', { name: 'Open in Files' }))
-    expect(arms.onReveal).toHaveBeenCalledWith(FILES[1]!.path)
     // Escape dismisses the menu without running an arm.
     const before = Object.values(arms).map(arm => arm.mock.calls.length)
     fireEvent.contextMenu(chip)
@@ -207,8 +205,50 @@ describe('FileTabs', () => {
       ['Close All Tabs', false],
       ['Close Tabs to the Left', true],
       ['Close Tabs to the Right', true],
-      ['Open in Files', false],
     ])
+  })
+
+  it('renders the rows other plugins contribute and dismisses the menu when one is picked', () => {
+    const onPicked = vi.fn()
+    const picked = vi.fn()
+    const { container } = render(chipStrip({
+      files: FILES,
+      active: FILES[0]!.path,
+      t: tEn,
+      renderMenuRow: (path, done) => (
+        <button type="button" role="menuitem" data-contributed={path} onClick={() => { onPicked(); done(); picked(path) }}>
+          Show file location
+        </button>
+      ),
+    }))
+    fireEvent.contextMenu(container.querySelector<HTMLElement>(`[data-files-tab="${FILES[1]!.path}"]`)!)
+    const row = document.querySelector<HTMLElement>(`[data-contributed="${FILES[1]!.path}"]`)
+    expect(row).not.toBeNull()
+    // The contributed row follows the workbench's own arms.
+    expect([...document.querySelectorAll('[role="menuitem"]')].at(-1)).toBe(row)
+    fireEvent.click(row!)
+    expect(picked).toHaveBeenCalledWith(FILES[1]!.path)
+    expect(document.querySelector('[role="menuitem"]')).toBeNull()
+  })
+
+  it('walks the keyboard from the workbench arms into a contributed MenuItemButton', () => {
+    const { container } = render(chipStrip({
+      files: FILES,
+      active: FILES[0]!.path,
+      t: tEn,
+      renderMenuRow: (path, done) => (
+        <MenuItemButton onSelect={done}>{`Reveal ${path}`}</MenuItemButton>
+      ),
+    }))
+    const chip = container.querySelector<HTMLElement>(`[data-files-tab="${FILES[0]!.path}"]`)!
+    fireEvent.contextMenu(chip)
+    // The walk enters from the trigger, so the keyboard starts on the chip.
+    container.querySelector<HTMLElement>(`[data-files-tab-open="${FILES[0]!.path}"]`)!.focus()
+    // End lands on the last reachable row, which is the contributed one: the
+    // menu's keyboard walk treats contributed rows the same as its own arms.
+    fireEvent.keyDown(document, { key: 'End' })
+    expect(document.activeElement?.getAttribute('role')).toBe('menuitem')
+    expect(document.activeElement?.textContent).toContain(`Reveal ${FILES[0]!.path}`)
   })
 
   it('closes on a middle click of the chip and ignores the other extra buttons', () => {
