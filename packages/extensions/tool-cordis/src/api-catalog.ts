@@ -3806,6 +3806,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the comparison, or undefined once its Session was disposed, when this Host never recorded it, or when no file has that index.',
         throws: ['when a snapshot read fails for a live Session.'],
       },
+      {
+        signature: 'workingTree(cwd: string, signal: AbortSignal): Promise<WorkspaceGitStatus>',
+        description: 'Read one working directory\'s git state.',
+        parameters: [{ name: 'cwd', description: 'the Session working directory.' }, { name: 'signal', description: 'the request\'s cancellation.' }],
+        returns: 'the state, or `unavailable` when git cannot answer.',
+      },
+      {
+        signature: 'workingDiff(cwd: string, request: WorkspaceGitDiffRequest, signal: AbortSignal): Promise<WorkspaceFileDiff | undefined>',
+        description: 'Compare one working-tree path with its `HEAD` content.',
+        parameters: [{ name: 'cwd', description: 'the Session working directory.' }, { name: 'request', description: 'the path to compare and, for a rename or copy, its original path.' }, { name: 'signal', description: 'the request\'s cancellation.' }],
+        returns: 'the comparison, or undefined when a path leaves `cwd`, the path is gone, or git cannot answer.',
+      },
     ],
   },
   {
@@ -8870,6 +8882,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'WorkspaceFollowIncrement',
     declaration: 'export type WorkspaceFollowIncrement = {\n    readonly type: \'replace\';\n    readonly value: WorkspaceBaseline;\n} | {\n    readonly type: \'upsert\';\n    readonly workspace: WorkspaceView;\n} | {\n    readonly type: \'remove\';\n    readonly workspaceId: WorkspaceId;\n} | {\n    readonly type: \'order\';\n    readonly workspaceIds: readonly WorkspaceId[];\n} | {\n    readonly type: \'archived\';\n    readonly archivedSessionIds: readonly SessionId[];\n} | {\n    readonly type: \'pinned\';\n    readonly pinnedSessionIds: readonly SessionId[];\n} | {\n    readonly type: \'temporary\';\n    readonly temporarySessionIds: readonly SessionId[];\n};',
+  },
+  {
+    name: 'WorkspaceGitDiffRequest',
+    declaration: 'export interface WorkspaceGitDiffRequest {\n    path: string;\n    from?: string;\n}',
+  },
+  {
+    name: 'WorkspaceGitEntry',
+    declaration: 'export interface WorkspaceGitEntry {\n    path: string;\n    display: string;\n    kind: \'modified\' | \'added\' | \'deleted\' | \'renamed\' | \'untracked\';\n    from?: string;\n}',
+  },
+  {
+    name: 'WorkspaceGitStatus',
+    declaration: 'export interface WorkspaceGitStatus {\n    kind: \'repository\' | \'not-a-repository\' | \'unavailable\';\n    branch?: string;\n    entries: readonly WorkspaceGitEntry[];\n    total: number;\n}',
   },
   {
     name: 'WorkspaceInsertBeforeRequest',

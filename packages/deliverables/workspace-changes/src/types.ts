@@ -75,6 +75,38 @@ export type WorkspaceFileDiff =
   /** A side larger than the plugin's `maxFileBytes`; no lines are served. */
   | { kind: 'oversized'; path: string; display: string }
 
+/** One path git reports as changed in the Session working tree. */
+export interface WorkspaceGitEntry {
+  /** Path relative to the Session working directory, always slash-separated. */
+  path: string
+  /** Sort key and label: the working-directory-relative path, always slash-separated. */
+  display: string
+  /** What happened to the path. */
+  kind: 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked'
+  /** Original path of a rename or copy, relative to the Session working directory. */
+  from?: string
+}
+
+/** The Session working tree's git state, as the Files workbench's git view lists it. */
+export interface WorkspaceGitStatus {
+  /** `repository` when the working directory is inside a git work tree. */
+  kind: 'repository' | 'not-a-repository' | 'unavailable'
+  /** Branch name; absent when HEAD is detached. */
+  branch?: string
+  /** Changed paths in `display` order, capped at the plugin's `maxFiles`. */
+  entries: readonly WorkspaceGitEntry[]
+  /** Complete changed-path count, including entries omitted by the cap. */
+  total: number
+}
+
+/** One working-tree path the git view asks to compare with `HEAD`. */
+export interface WorkspaceGitDiffRequest {
+  /** Path relative to the Session working directory. */
+  path: string
+  /** Original path of a rename or copy, relative to the Session working directory; its `HEAD` content is the old side. */
+  from?: string
+}
+
 /** Serves the summaries and file comparisons the recorder keeps for live Sessions. */
 export interface WorkspaceChanges {
   /**
@@ -94,6 +126,21 @@ export interface WorkspaceChanges {
    * @throws when a snapshot read fails for a live Session.
    */
   diff(sessionId: SessionId, seq: number, index: number, signal: AbortSignal): Promise<WorkspaceFileDiff | undefined>
+  /**
+   * Read one working directory's git state.
+   * @param cwd - the Session working directory.
+   * @param signal - the request's cancellation.
+   * @returns the state, or `unavailable` when git cannot answer.
+   */
+  workingTree(cwd: string, signal: AbortSignal): Promise<WorkspaceGitStatus>
+  /**
+   * Compare one working-tree path with its `HEAD` content.
+   * @param cwd - the Session working directory.
+   * @param request - the path to compare and, for a rename or copy, its original path.
+   * @param signal - the request's cancellation.
+   * @returns the comparison, or undefined when a path leaves `cwd`, the path is gone, or git cannot answer.
+   */
+  workingDiff(cwd: string, request: WorkspaceGitDiffRequest, signal: AbortSignal): Promise<WorkspaceFileDiff | undefined>
 }
 
 declare module '@deepseek-ai/dsh-session/types' {

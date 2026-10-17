@@ -15,11 +15,14 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SidebarRightTabActions } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import { filesFace } from '../src/client/face.ts'
-import type { FilesInjected } from '../src/client/face.ts'
+import type { FilesInjected, GitRead } from '../src/client/face.ts'
 import { FilesBody } from '../src/client/FilesBody.tsx'
 import type { FilesBodyProps } from '../src/client/FilesBody.tsx'
 import { zh } from '../src/client/locales.ts'
 import { createFilesStore } from '../src/client/store.ts'
+import type {
+  WorkspaceFileDiff, WorkspaceGitDiffRequest, WorkspaceGitStatus,
+} from '@deepseek-ai/dsh-workspace-changes/types'
 import { scriptedList } from './scripted-list.client.ts'
 import type { ScriptedList } from './scripted-list.client.ts'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
@@ -46,6 +49,12 @@ interface MockedTabActions {
   readonly close: Mock<SidebarRightTabActions['close']>
 }
 
+/** Scripted answers for the working-tree reads a mount should see. */
+export interface MountedGit {
+  readonly status?: WorkspaceGitStatus
+  readonly diff?: WorkspaceFileDiff
+}
+
 /** What a spec holds after mounting: the rendered view and every hand on the tree. */
 export interface Mounted {
   readonly view: RenderResult
@@ -60,13 +69,26 @@ export interface Mounted {
   readonly renderFactorySlot: Mock
   /** The body's child-slot renderer, recording what the body asked for. */
   readonly renderSlot: Mock
+  /** The scripted working-tree status read the body sees. */
+  readonly gitStatus: Mock<(tabId: TabId, cwd: string, signal: AbortSignal) => Promise<GitRead<WorkspaceGitStatus>>>
+  /** The scripted comparison read the body sees. */
+  readonly gitDiff: Mock<(
+    tabId: TabId, cwd: string, request: WorkspaceGitDiffRequest, signal: AbortSignal,
+  ) => Promise<GitRead<WorkspaceFileDiff>>>
 }
 
 /** One store instance, one face, one owner share. */
-function harness(cwd: string | null, refreshShortcut?: ReturnType<FilesBodyProps['useTabInfo']>['tab']['refreshShortcut']) {
+function harness(cwd: string | null, refreshShortcut?: ReturnType<FilesBodyProps['useTabInfo']>['tab']['refreshShortcut'], git?: MountedGit) {
   const instance = createFilesStore().create()
   const script = scriptedList()
-  const face = filesFace(script.list, script.watch)(SESSION, instance.actions)
+  const real = filesFace(script.list, script.watch)(SESSION, instance.actions)
+  // The git reads go through the Host over HTTP; specs script their answers
+  // instead of reaching for a network, and pass undefined for "no answer".
+  const gitStatus = vi.fn<FilesInjected['gitStatus']>(async () => ({ value: undefined, current: true }))
+  const gitDiff = vi.fn<FilesInjected['gitDiff']>(async () => ({ value: undefined, current: true }))
+  if (git?.status !== undefined) gitStatus.mockResolvedValue({ value: git.status, current: true })
+  if (git?.diff !== undefined) gitDiff.mockResolvedValue({ value: git.diff, current: true })
+  const face: FilesInjected = { ...real, gitStatus, gitDiff }
   const controller = new AbortController()
   onTestFinished(async () => {
     controller.abort()
@@ -112,7 +134,7 @@ function harness(cwd: string | null, refreshShortcut?: ReturnType<FilesBodyProps
     ...face,
     t: makeTranslate(zh),
   }
-  return { instance, script, face, controller, tabActions, shared }
+  return { instance, script, face, controller, tabActions, shared, gitStatus, gitDiff }
 }
 
 /**
@@ -120,8 +142,12 @@ function harness(cwd: string | null, refreshShortcut?: ReturnType<FilesBodyProps
  * @param cwd - the session's working directory as `useSessions` reports it; `null` for a session without one.
  * @param refreshShortcut - effective binding advertised by the tab owner.
  */
-export function mountBody(cwd: string | null = ROOT, refreshShortcut?: ReturnType<FilesBodyProps['useTabInfo']>['tab']['refreshShortcut']): Mounted {
-  const { shared, ...hands } = harness(cwd, refreshShortcut)
+export function mountBody(
+  cwd: string | null = ROOT,
+  refreshShortcut?: ReturnType<FilesBodyProps['useTabInfo']>['tab']['refreshShortcut'],
+  git?: MountedGit,
+): Mounted {
+  const { shared, ...hands } = harness(cwd, refreshShortcut, git)
   const view = render(<FilesBody {...shared as unknown as FilesBodyProps} />)
   return {
     ...hands, view, renderFactorySlot: shared.renderFactorySlot, renderSlot: shared.renderSlot,

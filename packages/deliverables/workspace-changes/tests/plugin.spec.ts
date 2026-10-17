@@ -532,3 +532,42 @@ describe('workspace-changes without git', () => {
     }
   })
 })
+
+describe('working-tree reads', () => {
+  it('serves the working tree and one path comparison, and stops with the request', async () => {
+    const cwd = await repository()
+    await writeFile(join(cwd, 'a.txt'), 'l1 changed\n')
+    await writeFile(join(cwd, 'u.txt'), 'u\n')
+    const { ctx } = await boot()
+    const status = await ctx.workspaceChanges.workingTree(cwd, signal)
+    expect(status.kind).toBe('repository')
+    expect(status.entries).toEqual([
+      { path: 'a.txt', display: 'a.txt', kind: 'modified' },
+      { path: 'u.txt', display: 'u.txt', kind: 'untracked' },
+    ])
+    expect(status.total).toBe(2)
+    expect(await ctx.workspaceChanges.workingDiff(cwd, { path: 'a.txt' }, signal))
+      .toMatchObject({ kind: 'text', before: true, after: true })
+    expect(await ctx.workspaceChanges.workingDiff(cwd, { path: '../outside' }, signal)).toBeUndefined()
+    const aborted = new AbortController()
+    aborted.abort()
+    expect(await ctx.workspaceChanges.workingTree(cwd, aborted.signal))
+      .toEqual({ kind: 'unavailable', entries: [], total: 0 })
+    expect(await ctx.workspaceChanges.workingDiff(cwd, { path: 'a.txt' }, aborted.signal)).toBeUndefined()
+  })
+
+  it('answers unavailable when git is absent or cannot run', async () => {
+    const cwd = await scratchDir('dsh-workspace-changes-gitless-', cleanups)
+    const absent = await boot()
+    vi.spyOn(absent.ctx.subprocess, 'resolveExecutable').mockRejectedValue(new Error('no git'))
+    expect(await absent.ctx.workspaceChanges.workingTree(cwd, signal))
+      .toEqual({ kind: 'unavailable', entries: [], total: 0 })
+    expect(await absent.ctx.workspaceChanges.workingDiff(cwd, { path: 'a.txt' }, signal)).toBeUndefined()
+    // A git executable that cannot spawn fails the read instead of rejecting it.
+    const broken = await boot()
+    vi.spyOn(broken.ctx.subprocess, 'resolveExecutable').mockResolvedValue('/nonexistent/dsh-git')
+    expect(await broken.ctx.workspaceChanges.workingTree(cwd, signal))
+      .toEqual({ kind: 'unavailable', entries: [], total: 0 })
+    expect(await broken.ctx.workspaceChanges.workingDiff(cwd, { path: 'a.txt' }, signal)).toBeUndefined()
+  })
+})

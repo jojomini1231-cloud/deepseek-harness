@@ -30,6 +30,10 @@ describe('createFilesStore', () => {
     expect(getSnapshot().byTab[TAB]).toEqual({
       root: ROOT, levels: {}, expanded: [ROOT], scrollTop: 0, autoRefresh: true,
       open: [], active: undefined, ratio: DEFAULT_RATIO, container: 'files',
+      git: {
+        status: undefined, loading: false, failure: false, selected: undefined, selectedFrom: undefined,
+        scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: 0.58, groups: { changed: true, untracked: true },
+      },
     })
   })
 
@@ -204,6 +208,10 @@ describe('createFilesStore', () => {
     expect(getSnapshot().byTab[TAB]).toEqual({
       root: ROOT, levels: {}, expanded: [ROOT, child], scrollTop: 120, autoRefresh: false,
       open: [], active: undefined, ratio: DEFAULT_RATIO, container: 'files',
+      git: {
+        status: undefined, loading: false, failure: false, selected: undefined, selectedFrom: undefined,
+        scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: 0.58, groups: { changed: true, untracked: true },
+      },
     })
   })
 

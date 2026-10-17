@@ -20,7 +20,7 @@ import { PresentedOpenController } from '../src/client/present-open.ts'
 import {
   ReviewTab, type ReviewInjected, type ReviewTabProps,
 } from '../src/client/ReviewTab.tsx'
-import { hunkRows, MAX_RENDERED_LINES, renderedHunks, splitRows } from '../src/client/FileDiff.tsx'
+import { hunkRows, MAX_DIFF_HUNK_LINES, renderedHunks, splitRows } from '@deepseek-ai/dsh-client-ui-primitives'
 import { changesReviewDefinition } from '../src/client/review-definition.ts'
 import { createReviewStore } from '../src/client/review-store.ts'
 import { en, zh } from '../src/client/locales.ts'
@@ -122,14 +122,14 @@ describe('hunk rows', () => {
   it('cuts the drawn hunks at the rendered-line cap', () => {
     const long = (count: number): string[] => Array.from({ length: count }, (_, at) => `+line ${at}`)
     const whole: WorkspaceDiffHunk = {
-      oldStart: 1, oldLines: 0, newStart: 1, newLines: MAX_RENDERED_LINES + 2, lines: long(MAX_RENDERED_LINES + 2),
+      oldStart: 1, oldLines: 0, newStart: 1, newLines: MAX_DIFF_HUNK_LINES + 2, lines: long(MAX_DIFF_HUNK_LINES + 2),
     }
     const cut = renderedHunks([whole])
     expect(cut.truncated).toBe(true)
-    expect(cut.hunks[0]!.lines).toHaveLength(MAX_RENDERED_LINES)
+    expect(cut.hunks[0]!.lines).toHaveLength(MAX_DIFF_HUNK_LINES)
     const small: WorkspaceDiffHunk = { oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ['-a', '+b'] }
     expect(renderedHunks([small, small])).toEqual({ hunks: [small, small], truncated: false })
-    const two = renderedHunks([{ ...whole, lines: long(MAX_RENDERED_LINES) }, small])
+    const two = renderedHunks([{ ...whole, lines: long(MAX_DIFF_HUNK_LINES) }, small])
     expect(two.hunks).toHaveLength(1)
     expect(two.truncated).toBe(true)
   })
@@ -383,13 +383,13 @@ describe('ReviewTab', () => {
     expect(view.getByText(zh['diff.deleted'])).toBeTruthy()
     act(() => { diffs.state.set({ [url]: { ...text, hunks: [] } }) })
     expect(view.getByText(zh['diff.unchanged'])).toBeTruthy()
-    const long = Array.from({ length: MAX_RENDERED_LINES + 1 }, (_, at) => `+line ${at}`)
+    const long = Array.from({ length: MAX_DIFF_HUNK_LINES + 1 }, (_, at) => `+line ${at}`)
     act(() => {
       diffs.state.set({ [url]: { ...text, hunks: [{ oldStart: 1, oldLines: 0, newStart: 1, newLines: long.length, lines: long }] } })
     })
     expect(view.container.querySelector('[data-review-view]')?.getAttribute('data-review-view')).toBe('unified')
-    expect(view.container.querySelectorAll('[data-diff-line]')).toHaveLength(MAX_RENDERED_LINES)
-    expect(view.container.querySelector('[data-diff-truncated]')?.textContent).toBe(`只显示前 ${MAX_RENDERED_LINES} 行`)
+    expect(view.container.querySelectorAll('[data-diff-line]')).toHaveLength(MAX_DIFF_HUNK_LINES)
+    expect(view.container.querySelector('[data-diff-truncated]')?.textContent).toBe(`只显示前 ${MAX_DIFF_HUNK_LINES} 行`)
   })
 
   it('falls back to the first file for an index the summary does not list, and forgets its state with the tab', () => {

@@ -47,6 +47,8 @@ kind: "package-reference"
 
 每个文件携带持久的 `path`——位于工作目录内时为相对路径，否则为绝对路径——以及用于排序和标签的 `display` 路径：相对路径，仓库内位于工作目录之上的文件为 `../` 路径，家目录下的文件为 `~` 路径，其余为绝对路径。文件按 `display` 的码元顺序排序，因此上级路径和绝对路径排在工作目录自身文件之前。`workspace/changes` 事件只携带轮号；`ctx.workspaceChanges.summary(sessionId, seq)` 返回该序号的事件宣告的摘要，Session 已释放或本 Host 进程从未记录时返回 undefined。`ctx.workspaceChanges.diff(sessionId, seq, index, signal)` 对比该下标所列的文件：从两棵快照树或两份副本得出带三行上下文的 hunk；git 报告为二进制或某一侧含 NUL 字节时返回 `binary`；某一侧超过 `maxFileBytes` 时返回 `oversized`。逐行对比运行超过 `diffTimeoutMs` 时退化为一个替换全部行的 hunk，并标记 `coarse`。因此 Host 重启后重新打开的对话，先前轮次既没有卡片也没有对比。
 
+`ctx.workspaceChanges.workingTree(cwd, signal)` 读取工作目录本身而不是某个已记录的轮次，供 Files 工作台的 git 视图使用：一次限定在 `cwd` 的 `git -c core.fsmonitor=false status --porcelain=v1 --branch -z --untracked-files=all`，路径相对 `cwd`，条目上限为 `maxFiles`，`total` 保留完整数量，重命名或复制的原路径放在 `from`。不在 git 工作树内的工作目录返回 `not-a-repository`；没有 git，或刷新无法完成时返回 `unavailable`。`ctx.workspaceChanges.workingDiff(cwd, { path, from }, signal)` 返回 git 针对一个改动路径与 `HEAD` 的自身补丁，因此重命名、行尾与 clean 过滤器、符号链接都按 git 的方式读取，`coarse` 始终为 false。这些读取不运行仓库配置的程序：状态探测禁用 `core.fsmonitor`，对比禁用外部 diff 驱动和 textconv。`HEAD` 不包含的路径与 `/dev/null` 对比，覆盖未跟踪文件和没有提交的仓库；链接按其文本而不是目标对比。任意一侧超过 `maxFileBytes`，或补丁超过 `outputMaxBytes` 时，对比为 `oversized`；git 报告二进制补丁时为 `binary`。路径或原路径位于 `cwd` 之外——无论是直接拼写还是经由目录链接到达——或 git 失败时返回 undefined。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -94,6 +96,7 @@ git 通过 `subprocess` 能力运行，使用净化后的环境、`GIT_CONFIG_CO
 - 对比会把所列文件的完整文本送到客户端，包括被忽略的文件、工作目录之上的仓库文件和工作区外的文件；摘要路由只送路径和行数。必须把这类内容留在 Host 上的部署应把本插件组合出去。
 - 退化为整文件替换的对比携带两侧的全部行，最多两倍 `maxFileBytes`。
 - Windows 路径在 `path` 中保留原生分隔符；`display` 始终用斜杠分隔。
+- 当索引条目已删除但文件仍以未跟踪状态存在时，git 会为同一路径报告两条记录；视图按已跟踪记录只列出该路径一次，因此该行及其对比显示删除，未跟踪文件自身的内容不在其中列出。
 
 <a id="dev-note"></a>
 ### 开发备注

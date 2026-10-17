@@ -7,7 +7,7 @@ import { MenuItemButton } from '@deepseek-ai/dsh-client-ui-primitives'
 import { FileTabs } from '../src/client/FileTabs.tsx'
 import type { FileTabsProps } from '../src/client/FileTabs.tsx'
 import { SplitView } from '../src/client/SplitView.tsx'
-import { WorkbenchRail } from '../src/client/WorkbenchRail.tsx'
+import { FILES_RAIL_ITEM, GIT_RAIL_ITEM, WorkbenchRail } from '../src/client/WorkbenchRail.tsx'
 import { en as enCopy, zh } from '../src/client/locales.ts'
 
 afterEach(() => { cleanup() })
@@ -266,14 +266,17 @@ describe('FileTabs', () => {
 describe('WorkbenchRail', () => {
   it('marks the selected container and reports a press', () => {
     const onSelect = vi.fn()
-    const { container, rerender } = render(<WorkbenchRail selected="files" onSelect={onSelect} t={t} />)
+    const { container, rerender } = render(<WorkbenchRail items={[FILES_RAIL_ITEM, GIT_RAIL_ITEM]} selected="files" onSelect={onSelect} t={t} />)
     const item = container.querySelector<HTMLElement>('[data-files-rail-item="files"]')!
     expect(item.getAttribute('aria-current')).toBe('page')
     fireEvent.click(item)
     expect(onSelect).toHaveBeenCalledWith('files')
-    // A container that is not selected draws no current mark.
-    rerender(<WorkbenchRail selected="search" onSelect={onSelect} t={t} />)
+    // A container that is not selected draws no current mark, and the git item
+    // appears only when the body offers it.
+    expect(container.querySelector('[data-files-rail-item="git"]')).not.toBeNull()
+    rerender(<WorkbenchRail items={[FILES_RAIL_ITEM]} selected="search" onSelect={onSelect} t={t} />)
     expect(container.querySelector('[data-files-rail-item="files"]')?.getAttribute('aria-current')).toBeNull()
+    expect(container.querySelector('[data-files-rail-item="git"]')).toBeNull()
   })
 })
 
@@ -344,6 +347,8 @@ describe('SplitView', () => {
     expect(onRatio).toHaveBeenCalledTimes(1)
     fireEvent.pointerDown(splitter, { pointerId: 6, button: 0, clientX: 500 })
     width.value = 0
+    fireEvent.pointerMove(splitter, { pointerId: 6, clientX: 900 })
+    // The first move records the new zero width; the next one leaves the drag alone.
     fireEvent.pointerMove(splitter, { pointerId: 6, clientX: 900 })
     fireEvent.pointerUp(splitter, { pointerId: 6, clientX: 900 })
     expect(onRatio).toHaveBeenCalledTimes(1)

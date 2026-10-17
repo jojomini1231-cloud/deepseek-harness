@@ -1,10 +1,12 @@
 /**
- * The tree's asynchronous half: listing directories into the store.
+ * The tree's asynchronous half: listing directories into the store and reading
+ * the git view's two working-tree routes.
  *
  * The component never awaits anything. It calls `start` / `refresh` / `toggle`, and
  * this face performs the listing and writes the outcome through the store's own
  * actions — the Slot-standard `inject` shape, so the session id is resolved by
- * the framework and the write set stays the store's.
+ * the framework and the write set stays the store's. The git reads validate
+ * their wire payloads before the body writes them to the same store.
  *
  * The listing itself is bound here to the Client Remote face: the tree keys
  * every level by absolute path and hands the endpoint that same absolute path;
@@ -28,6 +30,10 @@ import type { BoundActions } from '@deepseek-ai/dsh-client-store'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { DirLevel, createFilesStore } from './store.ts'
+import type {
+  WorkspaceFileDiff, WorkspaceGitDiffRequest, WorkspaceGitStatus,
+} from '@deepseek-ai/dsh-workspace-changes/types'
+import { gitDiffUrl, gitStatusUrl, isFileDiff, isGitStatus } from '../git.ts'
 import type { WorkspaceFileWatchFrame } from '@deepseek-ai/dsh-api-workspace-files/types'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import { DirectoryNode } from './directory-node.ts'
@@ -172,6 +178,33 @@ export interface FilesInjected {
    * @param signal - the tab record's lifetime.
    */
   readonly collapseAll: (tabId: TabId, signal: AbortSignal) => void
+  /**
+   * Read the working tree's git state.
+   * @param tabId - the tab asking.
+   * @param cwd - the Session working directory.
+   * @param signal - the request's cancellation.
+   * @returns the state, or undefined when the Host refused or answered with something else.
+   */
+  readonly gitStatus: (tabId: TabId, cwd: string, signal: AbortSignal) => Promise<GitRead<WorkspaceGitStatus>>
+  /**
+   * Read one changed path's comparison with its `HEAD` content.
+   * @param tabId - the tab asking.
+   * @param cwd - the Session working directory.
+   * @param request - the changed path and, for a rename or copy, its original path.
+   * @param signal - the request's cancellation.
+   * @returns the comparison, or undefined when the Host refused, has none, or answered for another path.
+   */
+  readonly gitDiff: (
+    tabId: TabId, cwd: string, request: WorkspaceGitDiffRequest, signal: AbortSignal,
+  ) => Promise<GitRead<WorkspaceFileDiff>>
+}
+
+/** One settled git read and whether a newer read of its kind has started since. */
+export interface GitRead<T> {
+  /** The Host's answer, or undefined when it refused or the read failed. */
+  readonly value: T | undefined
+  /** False when the tab started a newer read of the same kind before this one settled. */
+  readonly current: boolean
 }
 
 /**
@@ -190,6 +223,8 @@ export function filesFace(
   ): FilesInjected => {
     /** Per tab, per absolute path: the listing generation a settlement must match; the latest request wins. */
     const generations = new Map<TabId, Map<string, number>>()
+    /** Per tab: the latest git read of each kind, so a slow answer never overwrites a newer one. */
+    const gitReads = new Map<TabId, { status: number; diff: number }>()
     const roots = new Map<TabId, DirectoryNode>()
     // One controller per open chip, owned here because the body unmounts while
     // the tab lives: the preview's first read arms its cleanup on this signal,
@@ -202,6 +237,14 @@ export function filesFace(
       byPath.set(path, generation)
       return generation
     }
+    const nextGitRead = (tabId: TabId, kind: 'status' | 'diff'): number => {
+      const reads = gitReads.get(tabId) ?? { status: 0, diff: 0 }
+      gitReads.set(tabId, reads)
+      reads[kind] += 1
+      return reads[kind]
+    }
+    const currentGitRead = (tabId: TabId, kind: 'status' | 'diff', generation: number): boolean =>
+      gitReads.get(tabId)?.[kind] === generation
     const load = async (tabId: TabId, path: string, signal: AbortSignal): Promise<DirLevel | undefined> => {
       if (signal.aborted) return
       const generation = nextGeneration(tabId, path)
@@ -215,6 +258,32 @@ export function filesFace(
         return result.ok ? result.value : undefined
       })
     }
+    const readGitStatus = async (cwd: string, signal: AbortSignal): Promise<WorkspaceGitStatus | undefined> => {
+      try {
+        const response = await fetch(gitStatusUrl(sessionId, cwd), { signal })
+        if (!response.ok) return undefined
+        const value: unknown = await response.json()
+        return isGitStatus(value) ? value : undefined
+      } catch {
+        // A refused or interrupted read is the panel's failed state, not a throw.
+        return undefined
+      }
+    }
+    const readGitDiff = async (
+      cwd: string, request: WorkspaceGitDiffRequest, signal: AbortSignal,
+    ): Promise<WorkspaceFileDiff | undefined> => {
+      try {
+        const response = await fetch(gitDiffUrl(sessionId, cwd, request), { signal })
+        if (!response.ok) return undefined
+        const value: unknown = await response.json()
+        // The answer must describe the path that was asked for, or it is not this
+        // selection's comparison.
+        return isFileDiff(value) && value.path === request.path ? value : undefined
+      } catch {
+        // A refused or interrupted read is the panel's failed comparison, not a throw.
+        return undefined
+      }
+    }
     return {
       refresh: (tabId) => { void roots.get(tabId)?.refreshTree() },
       setAutoRefresh: (tabId, enabled) => {
@@ -227,6 +296,7 @@ export function filesFace(
           void roots.get(tabId)?.close()
           roots.delete(tabId)
           generations.delete(tabId)
+          gitReads.delete(tabId)
           const chips = chipSignals.get(tabId)
           chipSignals.delete(tabId)
           for (const { controller } of chips?.values() ?? []) controller.abort()
@@ -260,6 +330,16 @@ export function filesFace(
           chips.delete(path)
           chip.controller.abort()
         }
+      },
+      async gitStatus(tabId, cwd, signal) {
+        const generation = nextGitRead(tabId, 'status')
+        const value = await readGitStatus(cwd, signal)
+        return { value, current: currentGitRead(tabId, 'status', generation) }
+      },
+      async gitDiff(tabId, cwd, request, signal) {
+        const generation = nextGitRead(tabId, 'diff')
+        const value = await readGitDiff(cwd, request, signal)
+        return { value, current: currentGitRead(tabId, 'diff', generation) }
       },
       collapseAll(tabId, signal) {
         if (signal.aborted) return

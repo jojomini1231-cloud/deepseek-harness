@@ -20,9 +20,18 @@
 /deliverables/workspacefilediff-one-file-s-comparison:
   en: f46c513203b5c4b3
   zh: 5462c4ab3370d719
-/deliverables/workspacechanges-the-host-service-serving-summaries-and-comparisons:
-  en: d83ba5599b57425a
-  zh: 23fdbccf9173221d
+/deliverables/workspacegitentry-one-changed-path:
+  en: 8596be7ca04db006
+  zh: 17ff2893c6de3d1a
+/deliverables/workspacegitstatus-the-working-tree-s-git-state:
+  en: e7a3905818de78cd
+  zh: 9285f29f70908c42
+/deliverables/workspacegitdiffrequest-one-working-tree-comparison-request:
+  en: 3903fdf10d69a54b
+  zh: 390a62d5102ab81e
+/deliverables/workspacechanges-the-host-service-serving-summaries-comparisons-and-the-working-tree:
+  en: 2cf852000e2d2b6f
+  zh: b5153da91d825200
 /deliverables/durable-events-and-the-served-summary:
   en: 138e4540efe09196
   zh: 3c50c4e650b19194

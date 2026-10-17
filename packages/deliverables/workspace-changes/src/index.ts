@@ -17,11 +17,13 @@ import type {} from '@deepseek-ai/dsh-subprocess'
 import type {} from '@deepseek-ai/dsh-tools'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
 import { GitRunner } from './git.ts'
+import { worktreeDiff, worktreeStatus } from './worktree.ts'
 import { TurnRecorder } from './recorder.ts'
 import type { WorkspaceChanges } from './types.ts'
 
 export type {
   WorkspaceChangedFile, WorkspaceChanges, WorkspaceChangesSummary, WorkspaceDiffHunk, WorkspaceFileDiff,
+  WorkspaceGitDiffRequest, WorkspaceGitEntry, WorkspaceGitStatus,
 } from './types.ts'
 
 /** Stable Loader identity. */
@@ -113,20 +115,42 @@ export function apply(ctx: Context, config: Config): void {
     lifetime.abort()
     await Promise.all([...recorders.keys()].map(forget))
   })
+  const worktreeLimits = {
+    maxFiles: config.maxFiles, maxFileBytes: config.maxFileBytes, outputMaxBytes: config.outputMaxBytes,
+  }
   const service: WorkspaceChanges = {
     summary: (sessionId, seq) => byId.get(sessionId)?.summary(seq),
     diff: (sessionId, seq, index, signal) => byId.get(sessionId)?.diff(seq, index, signal) ?? Promise.resolve(undefined),
+    // A git failure or timeout is a view state, not a route failure: the
+    // workbench shows why it has nothing rather than an error page.
+    workingTree: async (cwd, signal) => (signal.aborted ? { kind: 'unavailable', entries: [], total: 0 }
+      : worktreeStatus(await gitRunner(), cwd, signal, worktreeLimits)
+        .catch(() => ({ kind: 'unavailable', entries: [], total: 0 }))),
+    workingDiff: async (cwd, request, signal) => {
+      if (signal.aborted) return undefined
+      const git = await gitRunner()
+      return git === null ? undefined : worktreeDiff(git, ctx.fs, cwd, request, signal, worktreeLimits).catch(() => undefined)
+    },
   }
   ctx.provide('workspaceChanges', service)
   let runner: Promise<GitRunner | null> | undefined
   const gitRunner = (): Promise<GitRunner | null> => {
-    runner ??= resolveGit(ctx, lifetime.signal).then((executable) => {
-      if (executable === null) {
-        ctx.logger.info('workspace-changes: git is unavailable; only file-tool edits are summarized')
+    if (runner === undefined) {
+      const resolving = resolveGit(ctx, lifetime.signal).then((executable) => {
+        if (executable === null) {
+          ctx.logger.info('workspace-changes: git is unavailable; only file-tool edits are summarized')
+          return null
+        }
+        return new GitRunner(ctx.subprocess, executable, { timeoutMs: config.timeoutMs, outputMaxBytes: config.outputMaxBytes })
+      })
+      /* v8 ignore start -- resolveGit catches its own failures; this keeps an unexpected one from being cached forever. */
+      runner = resolving.catch((error: unknown) => {
+        ctx.logger.warn(`workspace-changes: git could not be resolved: ${error instanceof Error ? error.message : String(error)}`)
+        runner = undefined
         return null
-      }
-      return new GitRunner(ctx.subprocess, executable, { timeoutMs: config.timeoutMs, outputMaxBytes: config.outputMaxBytes })
-    })
+      })
+      /* v8 ignore stop */
+    }
     return runner
   }
   const recorderFor = (session: Session, cwd: string): TurnRecorder => {

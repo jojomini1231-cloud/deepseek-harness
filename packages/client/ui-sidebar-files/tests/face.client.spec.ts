@@ -54,6 +54,10 @@ describe('filesFace', () => {
     expect(snapshot()).toEqual({
       root: ROOT, levels: {}, expanded: [ROOT], scrollTop: 0, autoRefresh: true,
       open: [], active: undefined, ratio: DEFAULT_RATIO, container: 'files',
+      git: {
+        status: undefined, loading: false, failure: false, selected: undefined, selectedFrom: undefined,
+        scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: 0.58, groups: { changed: true, untracked: true },
+      },
     })
     await stream.deliver('ready')
     expect(list).toHaveBeenCalledWith(SESSION, ROOT, stream.signal)

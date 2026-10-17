@@ -69,6 +69,7 @@ Check this table before writing a control in a feature package. A plugin cannot 
 | `UserTextRun`, `ReferenceChip` | Uninterpreted inline text and business-resolved reference labels or activation buttons. |
 | `CommandText` | Selectable command or argument text; only horizontal overflow adds a named keyboard focus target. |
 | `TerminalBlock`, `ReadBlock`, `DiffBlock`, `SearchBlock`, `WebBlock` | The agent-output card matching each tool-result intent. |
+| `DiffHunks` | A file comparison's hunks with line numbers and highlighting, either as one unified column or with the old and new sides beside each other; the shared renderer for change review and the workspace git view. |
 | `icons/*`, `FishLogo`, `BrandWordmark`, `ReferenceIconRegular`/`ReferenceIconMedium`, `LinkIconRegular`/`LinkIconMedium` | Glyphs and brand marks. The thinking glyph keeps an inset orbit within its 16px view box. Use `LinkIconMedium` for 14px clickable-link categories and known-site marks. |
 | `PermissionIconReadOnlyRegular`/`Medium`, `PermissionIconWorkspaceWriteRegular`/`Medium`, `PermissionIconFullAccessRegular`/`Medium`, `PermissionIconAutoReviewRegular`/`Medium` | Permission-mode glyphs for read-only, workspace-write, full-access, and auto-review choices. |
 | `PluginArtworkTerminal`/`Loop`/`Subagent`/`Search`/`Default` | Fixed-palette 36×36 plugin artwork; `Terminal` supplies the light-blue prompt in plugin cards and sidebar guide entries. `Default` marks plugins without artwork of their own. Def ids are per-instance, so the same artwork repeats safely on one page. |

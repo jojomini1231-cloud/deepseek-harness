@@ -187,6 +187,225 @@
   flex: none;
 }
 
+/* The git view fills the workbench beside the rail: the selected file's
+   comparison on the leading side and the changed-path list on the trailing one. */
+.gitPanel {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.gitList {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.gitHeader {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: center;
+  box-sizing: border-box;
+  height: var(--files-row-height);
+  padding: 0 6px 0 12px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l3);
+}
+
+.gitTitle {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+.gitBranch {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gitGroup {
+  flex: 0 0 auto;
+  padding: 4px 0;
+}
+
+.gitGroupTitle {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  margin: 0;
+  padding: 4px 10px;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-weight: 500;
+  text-align: start;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.gitGroupTitle:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.gitGroupTitle svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+
+.gitCount {
+  color: var(--dsw-alias-label-caption, var(--dsw-alias-label-secondary));
+}
+
+.gitRow {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  width: 100%;
+  min-width: 0;
+  padding: 4px 10px;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.gitRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.gitRowActive {
+  background: var(--dsw-alias-interactive-bg-active, var(--dsw-alias-interactive-bg-hover));
+}
+
+.gitLetter {
+  flex: none;
+  width: 12px;
+  color: inherit;
+  font-weight: 500;
+  text-align: center;
+}
+
+/* One color per change kind, carried by the whole row so the status letter and
+   the file name read as one fact. The containing directory keeps the row's
+   quiet ink, so only the name and its letter take the status color. */
+.gitRow_modified { color: var(--dsw-alias-state-warn-primary); }
+.gitRow_added { color: var(--dsw-alias-state-success-primary); }
+/* Untracked content is new but not yet part of the index: the brand accent keeps
+   it distinct from the staged addition that shares its green. */
+.gitRow_untracked { color: var(--dsw-alias-state-business-primary); }
+.gitRow_deleted { color: var(--dsw-alias-state-error-primary); }
+.gitRow_renamed { color: var(--dsw-alias-label-secondary); }
+
+.gitName {
+  flex: none;
+  min-width: 0;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gitPath {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gitCompare {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
+.gitDiff {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The compared path and the layout control sit above the hunks. */
+.gitDiffHeader {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  align-items: center;
+  padding: 0 0 8px;
+}
+
+.gitDiffPath {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Two segments choosing the comparison layout, the chosen one filled. */
+.gitMode {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  border-radius: var(--dsw-radius-sm);
+}
+
+.gitModeButton {
+  padding: 2px 8px;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  cursor: pointer;
+}
+
+.gitModeButton:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.gitModeActive {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-active);
+}
+
+.gitNote {
+  margin: 0;
+  padding: 12px 10px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* A note with a retry control beside it: the failure line and the way back. */
+.gitNoteRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  color: var(--dsw-alias-label-secondary);
+}
+
 /* The fixed activity rail at the workbench's trailing edge, after the two
    columns: the rail never takes part in the divider, so it keeps its width
    while the columns resize. */

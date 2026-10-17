@@ -13,6 +13,7 @@
  */
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-store'
 import type { RemoteFailure } from '@deepseek-ai/dsh-api-remotes/client'
+import type { WorkspaceFileDiff, WorkspaceGitStatus } from '@deepseek-ai/dsh-workspace-changes/types'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { WorkspaceDirectoryEntry } from '@deepseek-ai/dsh-api-workspace-files/types'
 
@@ -48,6 +49,9 @@ export interface OpenFile {
 /** How the workbench's two columns divide, as the content column's share. */
 export const DEFAULT_RATIO = 0.6
 
+/** How the git view's two columns divide, as the comparison column's share. */
+export const DEFAULT_GIT_RATIO = 0.58
+
 /** The narrowest share a divider drag may leave the content column. */
 export const MIN_RATIO = 0.2
 
@@ -78,6 +82,35 @@ export interface FilesTabState {
   ratio: number
   /** Id of the view container the activity rail has selected. */
   container: string
+  /** The working tree's git view. */
+  git: GitTabState
+}
+
+/**
+ * The working tree's git view: what the status read last answered, which path
+ * the panel shows, and that path's comparison.
+ */
+export interface GitTabState {
+  /** The last settled status, `undefined` until the first answer arrives. */
+  status: WorkspaceGitStatus | undefined
+  /** Whether a status read is in flight. */
+  loading: boolean
+  /** Whether the latest status read failed; the panel keeps a retry reachable while the answer is unknown. */
+  failure: boolean
+  /** Path the panel shows, relative to the working directory. */
+  selected: string | undefined
+  /** The selected entry's rename or copy origin, echoed in its comparison request. */
+  selectedFrom: string | undefined
+  /** The changed-path list's scroll offset in px, so the list comes back where the reader was. */
+  scrollTop: number
+  /** The selected path's comparison, or why the panel has none yet. */
+  diff: WorkspaceFileDiff | 'loading' | 'failed' | undefined
+  /** How the comparison is laid out: one unified column, or both sides. */
+  diffMode: 'unified' | 'split'
+  /** The comparison column's share of the git view, between `MIN_RATIO` and `MAX_RATIO`. */
+  ratio: number
+  /** Which changed-path groups are open; both start expanded. */
+  groups: { changed: boolean; untracked: boolean }
 }
 
 /** Every tab's tree, keyed by tab id. */
@@ -117,6 +150,17 @@ type FilesActions = {
   ratioChanged: (draft: FilesState, tabId: TabId, ratio: number) => void
   collapsed: (draft: FilesState, tabId: TabId) => void
   containerSelected: (draft: FilesState, tabId: TabId, container: string) => void
+  gitLoading: (draft: FilesState, tabId: TabId) => void
+  gitStatusLoaded: (draft: FilesState, tabId: TabId, status: WorkspaceGitStatus) => void
+  gitStatusFailed: (draft: FilesState, tabId: TabId) => void
+  gitEntrySelected: (draft: FilesState, tabId: TabId, path: string, from: string | undefined) => void
+  gitDiffReloading: (draft: FilesState, tabId: TabId) => void
+  gitDiffLoaded: (draft: FilesState, tabId: TabId, path: string, diff: WorkspaceFileDiff) => void
+  gitDiffFailed: (draft: FilesState, tabId: TabId, path: string) => void
+  gitListScrolled: (draft: FilesState, tabId: TabId, scrollTop: number) => void
+  gitDiffModeSelected: (draft: FilesState, tabId: TabId, mode: 'unified' | 'split') => void
+  gitRatioChanged: (draft: FilesState, tabId: TabId, ratio: number) => void
+  gitGroupToggled: (draft: FilesState, tabId: TabId, group: 'changed' | 'untracked') => void
   reset: (draft: FilesState, tabId: TabId) => void
   forget: (draft: FilesState, tabId: TabId) => void
 }
@@ -143,6 +187,11 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
         d.byTab[tabId] = {
           root, levels: {}, expanded: [root], scrollTop: 0, autoRefresh: true,
           open: [], active: undefined, ratio: DEFAULT_RATIO, container: 'files',
+          git: {
+            status: undefined, loading: false, failure: false, selected: undefined, selectedFrom: undefined,
+            scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: DEFAULT_GIT_RATIO,
+            groups: { changed: true, untracked: true },
+          },
         }
       },
       /**
@@ -320,6 +369,139 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
        */
       containerSelected: (d, tabId: TabId, container: string) => {
         bucket(d, tabId).container = container
+      },
+      /**
+       * Mark a status read in flight; the read itself is the caller's.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       */
+      gitLoading: (d, tabId: TabId) => {
+        bucket(d, tabId).git.loading = true
+      },
+      /**
+       * Record a settled status. A status that no longer has the selected path
+       * (the file was committed or reverted) drops the comparison with it, and
+       * a working directory that stopped being a repository returns the
+       * workbench to its files container.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param status - what git answered.
+       */
+      gitStatusLoaded: (d, tabId: TabId, status: WorkspaceGitStatus) => {
+        const state = bucket(d, tabId)
+        const git = state.git
+        git.status = status
+        git.loading = false
+        git.failure = false
+        // A directory outside a repository has no git view; an unavailable read
+        // keeps the rail so the panel's retry stays reachable.
+        if (status.kind === 'not-a-repository' && state.container === 'git') state.container = 'files'
+        const selected = git.selected
+        if (selected === undefined) return
+        const entry = status.entries.find(value => value.path === selected)
+        if (entry === undefined) {
+          git.selected = undefined
+          git.selectedFrom = undefined
+          git.diff = undefined
+        } else {
+          git.selectedFrom = entry.from
+        }
+      },
+      /**
+       * Record a failed status read; the panel offers a retry.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       */
+      gitStatusFailed: (d, tabId: TabId) => {
+        const git = bucket(d, tabId).git
+        git.loading = false
+        git.failure = true
+      },
+      /**
+       * Show one changed path and ask for its comparison. Re-selecting the path
+       * already shown keeps its settled comparison; a changed rename origin
+       * asks again.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param path - the entry's path.
+       * @param from - the entry's rename or copy origin, when git reported one.
+       */
+      gitEntrySelected: (d, tabId: TabId, path: string, from: string | undefined) => {
+        const git = bucket(d, tabId).git
+        if (git.selected === path && git.selectedFrom === from && git.diff !== undefined && git.diff !== 'failed') return
+        git.selected = path
+        git.selectedFrom = from
+        git.diff = 'loading'
+      },
+      /**
+       * Mark the shown path's comparison as being read again, for a reload
+       * that must not keep showing a stale comparison.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       */
+      gitDiffReloading: (d, tabId: TabId) => {
+        const git = bucket(d, tabId).git
+        if (git.selected !== undefined) git.diff = 'loading'
+      },
+      /**
+       * Record where the changed-path list is scrolled to.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param scrollTop - the list's scroll offset, in px.
+       */
+      gitListScrolled: (d, tabId: TabId, scrollTop: number) => {
+        bucket(d, tabId).git.scrollTop = scrollTop
+      },
+      /**
+       * Record one path's comparison; a comparison for a path the panel no
+       * longer shows is dropped.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param path - the compared path.
+       * @param diff - the comparison.
+       */
+      gitDiffLoaded: (d, tabId: TabId, path: string, diff: WorkspaceFileDiff) => {
+        const git = bucket(d, tabId).git
+        if (git.selected !== path) return
+        git.diff = diff
+      },
+      /**
+       * Record a failed comparison read for the shown path.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param path - the compared path.
+       */
+      gitDiffFailed: (d, tabId: TabId, path: string) => {
+        const git = bucket(d, tabId).git
+        if (git.selected === path) git.diff = 'failed'
+      },
+      /**
+       * Choose how the comparison is laid out.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param mode - the layout the reader picked.
+       */
+      gitDiffModeSelected: (d, tabId: TabId, mode: 'unified' | 'split') => {
+        bucket(d, tabId).git.diffMode = mode
+      },
+      /**
+       * Record where a drag left the git view's two columns.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param ratio - the comparison column's share, clamped to the draggable range.
+       */
+      gitRatioChanged: (d, tabId: TabId, ratio: number) => {
+        bucket(d, tabId).git.ratio = Math.min(MAX_RATIO, Math.max(MIN_RATIO, ratio))
+      },
+      /**
+       * Open or fold one changed-path group.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param group - the group whose header was pressed.
+       */
+      gitGroupToggled: (d, tabId: TabId, group: 'changed' | 'untracked') => {
+        const groups = bucket(d, tabId).git.groups
+        groups[group] = !groups[group]
       },
       /**
        * Collapse every directory back to the root, keeping the loaded levels.

@@ -13,7 +13,6 @@ import type { ShortcutCommand } from '@deepseek-ai/dsh-client-shortcuts/client'
 import { SidebarRightTabRegistry } from '@deepseek-ai/dsh-client-ui-sidebar-right/src/client/tab-registry.ts'
 import { FILES_ID, FILES_KIND } from '../src/client/definition.tsx'
 import { apply, inject } from '../src/client/index.ts'
-import { apply as hostApply } from '../src/index.ts'
 import { FilesBody } from '../src/client/FilesBody.tsx'
 import { FilesTitle } from '../src/client/FilesTitle.tsx'
 import { en, zh } from '../src/client/locales.ts'
@@ -72,6 +71,7 @@ describe('ui-sidebar-files apply', () => {
     const h = await boot()
     try {
       const command = h.commands[0]!
+      expect(command.label()).toBe('guide.title')
       const input = { region: 'page', modal: null, target: null } as const
       expect(command.resolve(input)).toEqual({ status: 'blocked', reason: 'shortcut.noSession' })
       const target = { sessionId: 'files-session' }
@@ -83,10 +83,6 @@ describe('ui-sidebar-files apply', () => {
     } finally { await h.fiber.dispose() }
     expect(h.commands).toEqual([])
   })
-  it('keeps the host Loader entry inert', () => {
-    expect(hostApply).not.toThrow()
-  })
-
   it('registers the type, its dictionaries, and the body and title seats under the type\'s id', async () => {
     const { tabs, registered, dictionaries } = await boot()
     const definition = tabs.get(FILES_KIND)

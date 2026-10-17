@@ -25,11 +25,13 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-slots'
 import { fileAddressFor, pathPartsOf } from '@deepseek-ai/dsh-util-workspace-path'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client'
+import type { WorkspaceGitEntry } from '@deepseek-ai/dsh-workspace-changes/types'
 import type { FilesInjected } from './face.ts'
 import { FileTabs } from './FileTabs.tsx'
 import type {} from './locales.ts'
 import { SplitView } from './SplitView.tsx'
-import { WorkbenchRail } from './WorkbenchRail.tsx'
+import { FILES_RAIL_ITEM, GIT_RAIL_ITEM, WorkbenchRail } from './WorkbenchRail.tsx'
+import { GitPanel } from './GitPanel.tsx'
 import type { createFilesStore, OpenFile } from './store.ts'
 import { TreeList } from './tree.tsx'
 import type { TreeContext } from './tree.tsx'
@@ -58,7 +60,7 @@ export function openFileFor(sessionId: Parameters<typeof fileAddressFor>[0], roo
 /** The files workbench: the workspace root and whatever the reader has open under it. */
 export function FilesBody({
   useTabInfo, sessionId, useSessions, useStore, actions, renderSlot, renderFactorySlot,
-  start, refresh, setAutoRefresh, toggle, collapseAll, chipSignal, chipsClosed, t,
+  start, refresh, setAutoRefresh, toggle, collapseAll, chipSignal, chipsClosed, gitStatus, gitDiff, t,
 }: FilesBodyProps): ReactNode {
   const { tab } = useTabInfo()
   useEffect(() => tab.actions.bindCommands({ refresh: () => { refresh(tab.id) } }), [tab.actions, tab.id, refresh])
@@ -67,17 +69,31 @@ export function FilesBody({
   const state = useStore(store => store.byTab[tab.id])
   const bodyRef = useRef<HTMLDivElement>(null)
   const scrollTopRef = useRef(0)
+  // The reads each gesture supersedes; a newer probe or comparison aborts the
+  // one still in flight, and the face drops whichever settles out of order.
+  const gitProbe = useRef<AbortController | undefined>(undefined)
+  const gitCompare = useRef<{ controller: AbortController; path: string } | undefined>(undefined)
+  // The selection the latest committed render shows. A status read settles
+  // after a gesture may have moved it, so its settlement reads the current one.
+  const gitSelection = useRef<{ path: string; from: string | undefined } | undefined>(undefined)
+  gitSelection.current = state?.git.selected === undefined
+    ? undefined
+    : { path: state.git.selected, from: state.git.selectedFrom }
   // Come back where the reader was: loaded levels outlive the body in the
   // store, so a remounted tree lays out at its full height before this runs
-  // and the stored offset re-lands exactly. A fresh tree stores 0.
+  // and the stored offset re-lands exactly. Switching to the git container
+  // unmounts the tree without writing the store, so the live offset kept in
+  // the ref wins over the stored one.
   const seeded = state !== undefined
+  const gitContainer = state !== undefined && state.container === 'git'
+    && (state.git.status?.kind === 'repository' || state.git.status?.kind === 'unavailable' || state.git.failure)
   useLayoutEffect(() => {
     const body = bodyRef.current
     if (seeded && body !== null) {
-      body.scrollTop = state.scrollTop
+      body.scrollTop = scrollTopRef.current || state.scrollTop
       scrollTopRef.current = body.scrollTop
     }
-  }, [seeded])
+  }, [seeded, gitContainer, state?.scrollTop])
   // Scrolling only moves the ref; the store hears about it once, on unmount,
   // so a scroll neither re-renders the tree nor writes after the owner's
   // abort has forgotten the bucket.
@@ -89,8 +105,72 @@ export function FilesBody({
     // component that has not unmounted yet.
     if (state !== undefined || cwd === undefined || signal.aborted) return
     start(tab.id, cwd, signal)
+    probeGit(cwd)
+    // The probe belongs to this seeding step: one per tab, not per store write.
   }, [state, cwd, tab.id, signal, start])
 
+  // The rail offers the git container for a repository, and for an unavailable
+  // or failed status read so its retry stays reachable. The seeding effect
+  // probes once per tab, and the panel's reload and retry gestures probe again;
+  // reads are gesture-driven so a store write never starts a request of its own.
+  const requestDiff = (root: string, path: string, from: string | undefined): void => {
+    gitCompare.current?.controller.abort()
+    const controller = new AbortController()
+    gitCompare.current = { controller, path }
+    const read = AbortSignal.any([signal, controller.signal])
+    void gitDiff(tab.id, root, from === undefined ? { path } : { path, from }, read).then((answer) => {
+      // The read is no longer in flight, whether or not its answer is current.
+      if (gitCompare.current?.controller === controller) gitCompare.current = undefined
+      if (signal.aborted || !answer.current) return
+      if (answer.value === undefined) actions.gitDiffFailed(tab.id, path)
+      else actions.gitDiffLoaded(tab.id, path, answer.value)
+    })
+  }
+  const probeGit = (root: string): void => {
+    gitProbe.current?.abort()
+    const controller = new AbortController()
+    gitProbe.current = controller
+    const read = AbortSignal.any([signal, controller.signal])
+    // The path the gesture wants refreshed. The reader may select another path
+    // while the status read runs; that selection reads the current tree itself.
+    const refreshing = gitSelection.current
+    actions.gitLoading(tab.id)
+    void gitStatus(tab.id, root, read).then((answer) => {
+      if (signal.aborted || !answer.current) return
+      if (answer.value === undefined) {
+        actions.gitStatusFailed(tab.id)
+        return
+      }
+      actions.gitStatusLoaded(tab.id, answer.value)
+      const current = gitSelection.current
+      const shown = current === undefined
+        ? undefined
+        : answer.value.entries.find(value => value.path === current.path)
+      // The status dropped the shown path: its in-flight comparison is moot.
+      if (current !== undefined && shown === undefined && gitCompare.current?.path === current.path) {
+        gitCompare.current.controller.abort()
+        gitCompare.current = undefined
+      }
+      // Refresh the comparison the gesture showed the reader, unless they moved
+      // to another path or a comparison started after the gesture is in flight.
+      if (refreshing === undefined || current?.path !== refreshing.path || shown === undefined
+        || gitCompare.current !== undefined) return
+      actions.gitDiffReloading(tab.id)
+      requestDiff(root, shown.path, shown.from)
+    })
+  }
+  const selectGitEntry = (entry: WorkspaceGitEntry): void => {
+    /* v8 ignore next -- the panel that reports the gesture only renders with a seeded state. */
+    if (state === undefined) return
+    actions.gitEntrySelected(tab.id, entry.path, entry.from)
+    requestDiff(state.root, entry.path, entry.from)
+  }
+  const retryGitDiff = (): void => {
+    /* v8 ignore next -- the panel that reports the gesture only renders with a seeded state. */
+    if (state === undefined || state.git.selected === undefined) return
+    actions.gitDiffReloading(tab.id)
+    requestDiff(state.root, state.git.selected, state.git.selectedFrom)
+  }
   const tree = useMemo((): TreeContext | undefined => state === undefined ? undefined : {
     state,
     onToggle: (parent, path) => { toggle(tab.id, parent, path, state.expanded, signal) },
@@ -259,14 +339,35 @@ export function FilesBody({
         })}
       </div>
       <div className={css.railRow}>
-        <SplitView
-          ratio={state.ratio}
-          onRatio={(ratio) => { actions.ratioChanged(tab.id, ratio) }}
-          content={contentColumn}
-          tree={treeColumn}
-          label={t('splitter.aria')}
-        />
+        {gitContainer ? (
+          <GitPanel
+            git={state.git}
+            onSelect={selectGitEntry}
+            onReload={() => { probeGit(state.root) }}
+            onRetryDiff={retryGitDiff}
+            onMode={(mode) => { actions.gitDiffModeSelected(tab.id, mode) }}
+            onRatio={(ratio) => { actions.gitRatioChanged(tab.id, ratio) }}
+            // The abort forgets the bucket before the unmount reports the offset.
+            onScrolled={(scrollTop) => { if (!signal.aborted) actions.gitListScrolled(tab.id, scrollTop) }}
+            ratio={state.git.ratio}
+            onToggleGroup={(group) => { actions.gitGroupToggled(tab.id, group) }}
+            t={t}
+          />
+        ) : (
+          <SplitView
+            ratio={state.ratio}
+            onRatio={(ratio) => { actions.ratioChanged(tab.id, ratio) }}
+            content={contentColumn}
+            tree={treeColumn}
+            label={t('splitter.aria')}
+          />
+        )}
         <WorkbenchRail
+          items={state.git.failure
+            || state.git.status?.kind === 'repository'
+            || state.git.status?.kind === 'unavailable'
+            ? [FILES_RAIL_ITEM, GIT_RAIL_ITEM]
+            : [FILES_RAIL_ITEM]}
           selected={state.container}
           onSelect={(id) => { actions.containerSelected(tab.id, id) }}
           t={t}

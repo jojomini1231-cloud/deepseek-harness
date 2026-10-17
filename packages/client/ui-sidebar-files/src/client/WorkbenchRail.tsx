@@ -3,12 +3,12 @@
  * per view container, that selects what the body draws beside it.
  *
  * The rail owns no state. It draws the containers it is given and reports the
- * selected one back; today the workbench has one container, so the array below
- * holds one item and a second one extends both the array and the body.
+ * selected one back; the workbench offers the files container and, for a
+ * repository, the git container.
  */
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
-import { Tooltip, IconFolderOpenOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconBranchOutlineRegular, IconFolderOpenOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from './locales.ts'
 import css from './FilesBody.module.css'
@@ -20,16 +20,19 @@ export interface RailItem {
   /** The container's icon; the rail never draws text. */
   readonly icon: ReactNode
   /** Locale key naming the container, used for the tooltip and the accessible name. */
-  readonly label: 'rail.files'
+  readonly label: 'rail.files' | 'rail.git'
 }
 
-/** The containers this workbench offers, in rail order. */
-const RAIL: readonly RailItem[] = [
-  { id: 'files', icon: <IconFolderOpenOutlineRegular />, label: 'rail.files' },
-]
+/** The file container, always offered: the workbench's own tree and preview. */
+export const FILES_RAIL_ITEM: RailItem = { id: 'files', icon: <IconFolderOpenOutlineRegular />, label: 'rail.files' }
+
+/** The git container, offered only when the working directory is a repository. */
+export const GIT_RAIL_ITEM: RailItem = { id: 'git', icon: <IconBranchOutlineRegular />, label: 'rail.git' }
 
 /** The rail's props: the selected container and the gesture that selects one. */
 export interface WorkbenchRailProps {
+  /** The containers this workbench offers, in rail order. */
+  readonly items: readonly RailItem[]
   /** Id of the container the body is drawing. */
   readonly selected: string
   /** Select a container. */
@@ -42,10 +45,10 @@ export interface WorkbenchRailProps {
  * @param props - the selected container, the select gesture, and translate.
  * @returns the rail column.
  */
-export function WorkbenchRail({ selected, onSelect, t }: WorkbenchRailProps): ReactNode {
+export function WorkbenchRail({ items, selected, onSelect, t }: WorkbenchRailProps): ReactNode {
   return (
     <div className={css.rail} role="toolbar" aria-orientation="vertical" aria-label={t('rail.aria')} data-files-rail>
-      {RAIL.map(item => (
+      {items.map(item => (
         <Tooltip key={item.id} label={t(item.label)} side="right" delayMs={300}>
           <button
             type="button"
