@@ -1460,6 +1460,52 @@ else process.exit(1);
     const prominent = unsupported.locator('[data-open-target="file"][data-size="large"]')
     expect((await prominent.boundingBox())?.height).toBe(36)
     expect((await unsupported.locator('[data-open-path]').boundingBox())?.height).toBe(24)
+    // The rail is a fixed narrow icon-only column: one folder item today, and it
+    // never resizes with the columns beside it.
+    const rail = column.locator('[data-files-rail]')
+    const railItem = rail.locator('[data-files-rail-item="files"]')
+    await expect.poll(() => railItem.count()).toBe(1)
+    expect(await railItem.innerText()).toBe('')
+    expect(await railItem.getAttribute('aria-current')).toBe('page')
+    const railBox = (await rail.boundingBox())!
+    expect(railBox.width).toBeGreaterThanOrEqual(48)
+    expect(railBox.width).toBeLessThanOrEqual(80)
+    // It sits at the workbench's trailing edge, past the tree column.
+    const treeBox = (await column.locator('[data-files-tree-column]').boundingBox())!
+    expect(railBox.x).toBeGreaterThanOrEqual(treeBox.x + treeBox.width - 1)
+    // The tree panel's header carries the three icon actions and the Project title.
+    const treeHeader = column.locator('[data-files-tree-header]')
+    expect(await treeHeader.locator('[data-files-tree-title]').innerText()).toBe('Project')
+    expect(await treeHeader.locator('[data-files-tree-action]').evaluateAll(nodes => nodes.map(node => (
+      `${node.getAttribute('data-files-tree-action')}:${node.getAttribute('aria-label')}`)))).toEqual([
+      'expand:Expand All', 'collapse:Collapse All',
+    ])
+    // The chips strip and the tree panel header share one row height, so their
+    // rules meet the divider instead of stepping across it.
+    const rows = await column.evaluate((node) => {
+      const box = (selector: string) => node.querySelector(selector)?.getBoundingClientRect()
+      const chips = box('[data-files-tabs]')
+      const header = box('[data-files-tree-header]')
+      return {
+        chipsHeight: chips?.height, headerHeight: header?.height,
+        chipsBottom: chips === undefined ? undefined : chips.top + chips.height,
+        headerBottom: header === undefined ? undefined : header.top + header.height,
+      }
+    })
+    expect(rows.chipsHeight).toBeCloseTo(rows.headerHeight ?? -1, 0)
+    expect(rows.chipsBottom).toBeCloseTo(rows.headerBottom ?? -1, 0)
+    // Collapse All draws its own inward-chevron artwork, not the expand glyph
+    // rotated: those chevrons are point-symmetric, so a turn would render the
+    // same picture. The two buttons therefore differ in their path data.
+    const paths = await treeHeader.locator('[data-files-tree-action] svg').evaluateAll(nodes => nodes.map(node => (
+      [...node.querySelectorAll('path')].map(path => path.getAttribute('d')))))
+    expect(paths[0]).toEqual(['m5.1 6 2.9-2.9L10.9 6', 'm5.1 10 2.9 2.9 2.9-2.9'])
+    expect(paths[1]).toEqual(['m5.1 3.1 2.9 3.6L10.9 3.1', 'm5.1 12.9 2.9-3.6 2.9 3.6'])
+    // Expand All opens the listed directories; Collapse All folds everything back.
+    await treeHeader.locator('[data-files-tree-action="expand"]').click()
+    await expect.poll(() => column.locator('[data-files-entry="directory"] button[aria-expanded="true"]').count()).toBeGreaterThan(0)
+    await treeHeader.locator('[data-files-tree-action="collapse"]').click()
+    await expect.poll(() => column.locator('[data-files-entry="directory"] button[aria-expanded="true"]').count()).toBe(0)
     // An overflowing chip row stays reachable: the chips keep a width floor, the
     // strip overflows instead of shrinking them away, no scrollbar is drawn, and
     // the wheel scrolls it.

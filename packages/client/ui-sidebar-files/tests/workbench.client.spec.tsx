@@ -7,6 +7,7 @@ import { MenuItemButton } from '@deepseek-ai/dsh-client-ui-primitives'
 import { FileTabs } from '../src/client/FileTabs.tsx'
 import type { FileTabsProps } from '../src/client/FileTabs.tsx'
 import { SplitView } from '../src/client/SplitView.tsx'
+import { WorkbenchRail } from '../src/client/WorkbenchRail.tsx'
 import { en as enCopy, zh } from '../src/client/locales.ts'
 
 afterEach(() => { cleanup() })
@@ -259,6 +260,20 @@ describe('FileTabs', () => {
     expect(onClose).not.toHaveBeenCalled()
     open.dispatchEvent(new MouseEvent('auxclick', { bubbles: true, button: 1 }))
     expect(onClose).toHaveBeenCalledWith(FILES[0]!.path)
+  })
+})
+
+describe('WorkbenchRail', () => {
+  it('marks the selected container and reports a press', () => {
+    const onSelect = vi.fn()
+    const { container, rerender } = render(<WorkbenchRail selected="files" onSelect={onSelect} t={t} />)
+    const item = container.querySelector<HTMLElement>('[data-files-rail-item="files"]')!
+    expect(item.getAttribute('aria-current')).toBe('page')
+    fireEvent.click(item)
+    expect(onSelect).toHaveBeenCalledWith('files')
+    // A container that is not selected draws no current mark.
+    rerender(<WorkbenchRail selected="search" onSelect={onSelect} t={t} />)
+    expect(container.querySelector('[data-files-rail-item="files"]')?.getAttribute('aria-current')).toBeNull()
   })
 })
 

@@ -29,7 +29,7 @@ describe('createFilesStore', () => {
     actions.start(TAB, ROOT)
     expect(getSnapshot().byTab[TAB]).toEqual({
       root: ROOT, levels: {}, expanded: [ROOT], scrollTop: 0, autoRefresh: true,
-      open: [], active: undefined, ratio: DEFAULT_RATIO,
+      open: [], active: undefined, ratio: DEFAULT_RATIO, container: 'files',
     })
   })
 
@@ -169,6 +169,14 @@ describe('createFilesStore', () => {
     expect(active()).toBe(c.path)
   })
 
+  it('records the activity rail selection', () => {
+    const store = createFilesStore().create()
+    store.actions.start(TAB, ROOT)
+    expect(store.getSnapshot().byTab[TAB]?.container).toBe('files')
+    store.actions.containerSelected(TAB, 'search')
+    expect(store.getSnapshot().byTab[TAB]?.container).toBe('search')
+  })
+
   it('keeps a divider drag inside its range', () => {
     const store = createFilesStore().create()
     const { actions } = store
@@ -195,7 +203,7 @@ describe('createFilesStore', () => {
     actions.reset(TAB)
     expect(getSnapshot().byTab[TAB]).toEqual({
       root: ROOT, levels: {}, expanded: [ROOT, child], scrollTop: 120, autoRefresh: false,
-      open: [], active: undefined, ratio: DEFAULT_RATIO,
+      open: [], active: undefined, ratio: DEFAULT_RATIO, container: 'files',
     })
   })
 

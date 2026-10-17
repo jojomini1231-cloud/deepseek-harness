@@ -2,6 +2,10 @@
    that height outright: the header row stays put and the levels below are the
    one scroller. */
 .root {
+  /* One row height for the path header, the chips strip, and the tree panel
+     header: their rules only meet the divider on the same line when all three
+     rows end together, so the height is declared once and consumed by each. */
+  --files-row-height: 38px;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -22,7 +26,7 @@
   gap: 4px;
   align-items: center;
   box-sizing: border-box;
-  height: 38px;
+  height: var(--files-row-height);
   padding: 0 6px 0 16px;
   border-bottom: 0.5px solid var(--dsw-alias-border-l3);
 }
@@ -183,6 +187,92 @@
   flex: none;
 }
 
+/* The fixed activity rail at the workbench's trailing edge, after the two
+   columns: the rail never takes part in the divider, so it keeps its width
+   while the columns resize. */
+.railRow {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* A narrow icon-only rail (the product's 48-80px band): one item per view
+   container, the selected one filled. */
+.rail {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  box-sizing: border-box;
+  width: 48px;
+  padding: 6px 0;
+  border-left: 0.5px solid var(--dsw-alias-border-l3);
+}
+
+.railItem {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--dsw-alias-label-secondary);
+  line-height: 1;
+  background: transparent;
+  border: none;
+  border-radius: var(--dsw-radius-md);
+  cursor: pointer;
+}
+
+.railItem svg {
+  width: 16px;
+  height: 16px;
+}
+
+.railItem:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.railItemActive {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-active, var(--dsw-alias-interactive-bg-hover));
+}
+
+/* The tree panel's header: its icon actions at the inline start and the panel
+   title at the end, on the row above the tree's own scroller. */
+.treeHeader {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  align-items: center;
+  box-sizing: border-box;
+  height: var(--files-row-height);
+  padding: 0 8px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l3);
+}
+
+.treeActions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  align-items: center;
+}
+
+.treeTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 500;
+  text-align: end;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The workbench's two columns. The tree column is the body's one scroller and
    the content column is a fixed grid of chips above the document, so a divider
    drag resizes a box instead of reflowing a document. */
@@ -253,7 +343,9 @@
   flex: 0 0 auto;
   gap: 2px;
   align-items: center;
+  box-sizing: border-box;
   min-width: 0;
+  height: var(--files-row-height);
   padding: 4px 6px;
   overflow-x: auto;
   overflow-y: hidden;

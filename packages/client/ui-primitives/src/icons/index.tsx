@@ -1571,6 +1571,31 @@ export const IconChevronsUpDownOutlineMedium = (props: IconProps) => (
   <IconChevronsUpDownOutlineArtwork {...props} strokeWidth={ICON_MEDIUM_STROKE} />
 )
 
+/**
+ * Chevrons pointing inward at the centre, the fold gesture of a collapsible
+ * region. Not a rotation of {@link IconChevronsUpDownOutlineArtwork}: that glyph
+ * is point-symmetric, so turning it leaves the same picture. Both chevrons keep
+ * the outward glyph's width and stroke, with their apexes meeting nearer the
+ * middle so the pair reads as closing rather than opening.
+ */
+const IconChevronsInwardOutlineArtwork = ({ size = 16, className, strokeWidth }: WeightedIconProps) => (
+  <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none"
+    stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" strokeWidth={strokeWidth}>
+    <path d="m5.1 3.1 2.9 3.6L10.9 3.1" />
+    <path d="m5.1 12.9 2.9-3.6 2.9 3.6" />
+  </svg>
+)
+
+/** Regular one-pixel IconChevronsInwardOutline artwork. */
+export const IconChevronsInwardOutlineRegular = (props: IconProps) => (
+  <IconChevronsInwardOutlineArtwork {...props} strokeWidth={ICON_REGULAR_STROKE} />
+)
+
+/** Medium IconChevronsInwardOutline artwork with a 1.3px stroke. */
+export const IconChevronsInwardOutlineMedium = (props: IconProps) => (
+  <IconChevronsInwardOutlineArtwork {...props} strokeWidth={ICON_MEDIUM_STROKE} />
+)
+
 const IconArchiveOffOutlineArtwork = ({ size = 16, className, strokeWidth }: WeightedIconProps) => {
   // The mask carves whitespace along the slash out of the box strokes, so the
   // id must stay unique per rendered instance.

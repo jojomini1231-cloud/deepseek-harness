@@ -165,6 +165,13 @@ export interface FilesInjected {
    * @param paths - absolute paths of the files whose chips closed.
    */
   readonly chipsClosed: (tabId: TabId, paths: readonly string[]) => void
+  /**
+   * Collapse every open directory back to the root, ending their listings and
+   * watches; the loaded levels stay, so reopening one is instant.
+   * @param tabId - the tab being drawn.
+   * @param signal - the tab record's lifetime.
+   */
+  readonly collapseAll: (tabId: TabId, signal: AbortSignal) => void
 }
 
 /**
@@ -253,6 +260,14 @@ export function filesFace(
           chips.delete(path)
           chip.controller.abort()
         }
+      },
+      collapseAll(tabId, signal) {
+        if (signal.aborted) return
+        actions.collapsed(tabId)
+        const root = roots.get(tabId)
+        /* v8 ignore next -- start creates the bucket and the root together, and abort drops both. */
+        if (root === undefined) return
+        for (const child of [...root.children.values()]) void root.collapse(child.path)
       },
       toggle(tabId, parentPath, path, expanded, signal) {
         if (signal.aborted) return

@@ -237,6 +237,73 @@ describe('FilesBody', () => {
     expect(env.aborted).toBe(true)
   })
 
+  it('draws the activity rail with one selected folder container', async () => {
+    const { view, script } = mountBody()
+    await act(() => script.watches.ready(ROOT))
+    await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
+    const rail = view.container.querySelector<HTMLElement>('[data-files-rail]')!
+    expect(rail.getAttribute('role')).toBe('toolbar')
+    expect(rail.getAttribute('aria-label')).toBe(zh['rail.aria'])
+    const items = [...rail.querySelectorAll<HTMLElement>('[data-files-rail-item]')]
+    expect(items.map(item => item.dataset.filesRailItem)).toEqual(['files'])
+    expect(items[0]!.getAttribute('aria-label')).toBe(zh['rail.files'])
+    expect(items[0]!.getAttribute('aria-current')).toBe('page')
+    expect(items[0]!.textContent).toBe('')
+    // It is the workbench's trailing edge: after both columns, not before them.
+    const row = rail.parentElement!
+    expect(row.lastElementChild).toBe(rail)
+    expect(row.querySelector('[data-files-content-column]')).not.toBeNull()
+  })
+
+  it('heads the tree panel with its title and two icon actions', async () => {
+    const { view, script } = mountBody()
+    await act(() => script.watches.ready(ROOT))
+    await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
+    const header = view.container.querySelector<HTMLElement>('[data-files-tree-header]')!
+    expect(header.querySelector('[data-files-tree-title]')?.textContent).toBe(zh['tree.title'])
+    const actions = [...header.querySelectorAll<HTMLButtonElement>('[data-files-tree-action]')]
+    expect(actions.map(action => action.dataset.filesTreeAction)).toEqual(['expand', 'collapse'])
+    expect(actions.map(action => action.getAttribute('aria-label'))).toEqual([
+      zh['tree.expand'], zh['tree.collapse'],
+    ])
+    expect(actions.map(action => action.disabled)).toEqual([false, false])
+  })
+
+  it('expands every listed directory and collapses them all again', async () => {
+    const { view, script, instance } = mountBody()
+    await act(() => script.watches.ready(ROOT))
+    await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
+    fireEvent.click(view.container.querySelector('[data-files-tree-action="expand"]')!)
+    const src = await act(() => script.watches.ready(`${ROOT}/src`))
+    expect(src.path).toBe(`${ROOT}/src`)
+    await act(() => script.settle({ ok: true, value: { entries: [{ name: 'a.ts', type: 'file' }], truncated: false } }))
+    expect(instance.getSnapshot().byTab[TAB]?.expanded).toContain(`${ROOT}/src`)
+    expect(view.container.querySelector(`[data-files-path="${ROOT}/src/a.ts"]`)).not.toBeNull()
+    // Collapse all keeps the root open and drops every nested row.
+    fireEvent.click(view.container.querySelector('[data-files-tree-action="collapse"]')!)
+    expect(instance.getSnapshot().byTab[TAB]?.expanded).toEqual([ROOT])
+    expect(view.container.querySelector(`[data-files-path="${ROOT}/src/a.ts"]`)).toBeNull()
+    expect(view.container.querySelector(`[data-files-path="${ROOT}/src"] button`)?.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('selects the rail container and skips expanding levels it cannot read', async () => {
+    const { view, script, instance } = mountBody()
+    const rail = view.container.querySelector<HTMLElement>('[data-files-rail-item="files"]')!
+    fireEvent.click(rail)
+    expect(instance.getSnapshot().byTab[TAB]?.container).toBe('files')
+    // While the root listing is still in flight, expand-all has no ready level to open.
+    await act(() => script.watches.ready(ROOT))
+    fireEvent.click(view.container.querySelector('[data-files-tree-action="expand"]')!)
+    expect(instance.getSnapshot().byTab[TAB]?.expanded).toEqual([ROOT])
+    await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
+    // A directory already open is left alone by a second press.
+    fireEvent.click(view.container.querySelector('[data-files-tree-action="expand"]')!)
+    await act(() => script.watches.ready(`${ROOT}/src`))
+    await act(() => script.settle({ ok: true, value: { entries: [], truncated: false } }))
+    fireEvent.click(view.container.querySelector('[data-files-tree-action="expand"]')!)
+    expect(script.outstanding()).toEqual([])
+  })
+
   it('renders the chip actions slot in the open menu and lets its row dismiss the menu', async () => {
     const { view, script, renderSlot } = mountBody()
     await act(() => script.watches.ready(ROOT))

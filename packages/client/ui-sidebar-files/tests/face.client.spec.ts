@@ -53,13 +53,42 @@ describe('filesFace', () => {
     expect(list).not.toHaveBeenCalled()
     expect(snapshot()).toEqual({
       root: ROOT, levels: {}, expanded: [ROOT], scrollTop: 0, autoRefresh: true,
-      open: [], active: undefined, ratio: DEFAULT_RATIO,
+      open: [], active: undefined, ratio: DEFAULT_RATIO, container: 'files',
     })
     await stream.deliver('ready')
     expect(list).toHaveBeenCalledWith(SESSION, ROOT, stream.signal)
     expect(snapshot()!.levels[ROOT]).toEqual({ kind: 'loading' })
     await settle({ ok: true, value: LEVEL })
     expect(snapshot()!.levels[ROOT]).toEqual({ kind: 'ready', level: LEVEL })
+  })
+
+  it('ignores a chip close for a tab that never minted a preview lifetime', async () => {
+    const h = mount()
+    h.face.start(TAB, ROOT, h.controller.signal)
+    await h.watches.ready(ROOT)
+    h.face.chipsClosed(TAB, [`${ROOT}/a.md`])
+    // The other branch: a lifetime that was minted ends with its chip.
+    const signal = h.face.chipSignal(TAB, `${ROOT}/a.md`, h.controller.signal)
+    h.face.chipsClosed(TAB, [`${ROOT}/a.md`])
+    expect(signal.aborted).toBe(true)
+  })
+
+  it('collapses every open directory back to the root and keeps the loaded levels', async () => {
+    const h = mount()
+    h.face.start(TAB, ROOT, h.controller.signal)
+    await h.watches.ready(ROOT)
+    await h.settle({ ok: true, value: LEVEL })
+    h.face.toggle(TAB, ROOT, `${ROOT}/src`, h.snapshot()!.expanded, h.controller.signal)
+    await h.watches.ready(`${ROOT}/src`)
+    await h.settle({ ok: true, value: { entries: [], truncated: false } })
+    // A collapse asked for after the record ended writes nothing.
+    const ended = new AbortController()
+    ended.abort()
+    h.face.collapseAll(TAB, ended.signal)
+    expect(h.snapshot()?.expanded).toEqual([ROOT, `${ROOT}/src`])
+    h.face.collapseAll(TAB, h.controller.signal)
+    expect(h.snapshot()?.expanded).toEqual([ROOT])
+    expect(h.snapshot()?.levels[`${ROOT}/src`]).toMatchObject({ kind: 'ready' })
   })
 
   it('records a failed listing under its level', async () => {

@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-文件 tab 现在是一个**工作台**：标题行保留工作区根路径与重新读取控件，正文画两栏，中间是可拖拽的分隔条——引导侧是内容栏（打开文件的 chips 在读者选中文件的上方），尾随侧是目录树。点击文件行打开一个 chip 并就地显示该文件；chips 用于切换与关闭打开的文件，次键点击会打开 chip 菜单（关闭、关闭其他标签页、关闭所有标签页、关闭左侧标签页、关闭右侧标签页，以及其他插件贡献到 `sidebar.right.tab.files.chip.actions` 的行），chips 最小只缩到 100px，chips 条用滚轮横向滚动且不画滚动条、把隐藏的边缘渐隐，并把在条边界之外打开或成为当前显示的文件滚回可见范围；分隔条每次拖拽结算一个比例，收敛到 20%–80%。工作台的存储把 `open`、`active`、`ratio` 与树原有的 `root`、`levels`、`expanded`、`scrollTop`、`autoRefresh` 一起按 tab id 分桶，因此重新挂载的工作台会回到读者离开时的样子。
+文件 tab 现在是一个**工作台**：标题行保留工作区根路径与重新读取控件；正文画两栏、中间是可拖拽的分隔条，尾随边缘再放一条固定 48px 的活动栏（每个视图容器一个纯图标项，目前只有 `files` 一项）——引导侧是内容栏（打开文件的 chips 在读者选中文件的上方），尾随侧是目录树。点击文件行打开一个 chip 并就地显示该文件；chips 用于切换与关闭打开的文件，次键点击会打开 chip 菜单（关闭、关闭其他标签页、关闭所有标签页、关闭左侧标签页、关闭右侧标签页，以及其他插件贡献到 `sidebar.right.tab.files.chip.actions` 的行），chips 最小只缩到 100px，chips 条用滚轮横向滚动且不画滚动条、把隐藏的边缘渐隐，并把在条边界之外打开或成为当前显示的文件滚回可见范围；分隔条每次拖拽结算一个比例，收敛到 20%–80%。树列顶部带 Panel Header（inline 起始侧是 Expand All / Collapse All，末尾侧是 `Project` 标题），工作台的存储把 `open`、`active`、`ratio`、`container` 与树原有的 `root`、`levels`、`expanded`、`scrollTop`、`autoRefresh` 一起按 tab id 分桶，因此重新挂载的工作台会回到读者离开时的样子。
 
 预览现在是由 `ui-sidebar-documentpreview` 注册的可复用 Factory：`sidebar.document.preview`。它的输入是 `{ address, viewKey, navigation, signal, bindRefresh?, refreshShortcut? }`：地址与视图生命周期归宿主所有，读取、渲染器选择、工具栏以及四个文档 slot 归 Factory 所有，这些 slot 由它自己声明为自己的子 slot。`text` tab 正文为自身地址渲染它；文件工作台为某个 chip 显示的文件渲染它。
 

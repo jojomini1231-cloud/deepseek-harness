@@ -17,7 +17,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import {
-  IconPauseOutlineRegular, IconPlayOutlineRegular, IconRefreshOutlineRegular, PathLabel, Tooltip,
+  IconChevronsInwardOutlineRegular, IconChevronsUpDownOutlineRegular, IconPauseOutlineRegular, IconPlayOutlineRegular,
+  IconRefreshOutlineRegular, PathLabel, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   PropsLocale, PropsRenderFactories, PropsRenderSlots, PropsRuntime, PropsStore,
@@ -28,6 +29,7 @@ import type { FilesInjected } from './face.ts'
 import { FileTabs } from './FileTabs.tsx'
 import type {} from './locales.ts'
 import { SplitView } from './SplitView.tsx'
+import { WorkbenchRail } from './WorkbenchRail.tsx'
 import type { createFilesStore, OpenFile } from './store.ts'
 import { TreeList } from './tree.tsx'
 import type { TreeContext } from './tree.tsx'
@@ -56,7 +58,7 @@ export function openFileFor(sessionId: Parameters<typeof fileAddressFor>[0], roo
 /** The files workbench: the workspace root and whatever the reader has open under it. */
 export function FilesBody({
   useTabInfo, sessionId, useSessions, useStore, actions, renderSlot, renderFactorySlot,
-  start, refresh, setAutoRefresh, toggle, chipSignal, chipsClosed, t,
+  start, refresh, setAutoRefresh, toggle, collapseAll, chipSignal, chipsClosed, t,
 }: FilesBodyProps): ReactNode {
   const { tab } = useTabInfo()
   useEffect(() => tab.actions.bindCommands({ refresh: () => { refresh(tab.id) } }), [tab.actions, tab.id, refresh])
@@ -160,16 +162,62 @@ export function FilesBody({
     )
   }, [state?.open, state?.active, actions, tab.id, signal,
     chipSignal, chipsClosed, t, renderFactorySlot, renderMenuRow])
-  const treeColumn = useMemo((): ReactNode => tree === undefined ? null : (
-    <div
-      ref={bodyRef}
-      className={css.body}
-      data-files-body
-      onScroll={(event) => { scrollTopRef.current = event.currentTarget.scrollTop }}
-    >
-      <TreeList {...tree} />
-    </div>
-  ), [tree])
+  const treeColumn = useMemo((): ReactNode => {
+    if (tree === undefined || state === undefined) return null
+    /** Open every directory the tree has listed; deeper levels follow on the next press. */
+    const expandAll = (): void => {
+      for (const [parent, level] of Object.entries(state.levels)) {
+        if (level.kind !== 'ready') continue
+        for (const directory of level.level.entries.filter(entry => entry.type === 'directory')) {
+          const path = `${parent.replace(/[/\\]+$/, '')}/${directory.name}`
+          if (state.expanded.includes(path)) continue
+          toggle(tab.id, parent, path, state.expanded, signal)
+        }
+      }
+    }
+    const treeHeader = (
+      <div className={css.treeHeader} data-files-tree-header>
+        <div className={css.treeActions} role="toolbar" aria-label={t('tree.actions.aria')}>
+          <Tooltip label={t('tree.expand')} side="bottom" delayMs={300}>
+            <button
+              type="button"
+              className={css.tool}
+              aria-label={t('tree.expand')}
+              data-files-tree-action="expand"
+              onClick={expandAll}
+            >
+              <IconChevronsUpDownOutlineRegular />
+            </button>
+          </Tooltip>
+          <Tooltip label={t('tree.collapse')} side="bottom" delayMs={300}>
+            <button
+              type="button"
+              className={css.tool}
+              aria-label={t('tree.collapse')}
+              data-files-tree-action="collapse"
+              onClick={() => { collapseAll(tab.id, signal) }}
+            >
+              <IconChevronsInwardOutlineRegular />
+            </button>
+          </Tooltip>
+        </div>
+        <span className={css.treeTitle} data-files-tree-title>{t('tree.title')}</span>
+      </div>
+    )
+    return (
+      <>
+        {treeHeader}
+        <div
+          ref={bodyRef}
+          className={css.body}
+          data-files-body
+          onScroll={(event) => { scrollTopRef.current = event.currentTarget.scrollTop }}
+        >
+          <TreeList {...tree} />
+        </div>
+      </>
+    )
+  }, [tree, state, collapseAll, toggle, tab.id, signal, t])
 
   if (cwd === undefined) {
     return (
@@ -210,13 +258,20 @@ export function FilesBody({
           absolutePath: state.root,
         })}
       </div>
-      <SplitView
-        ratio={state.ratio}
-        onRatio={(ratio) => { actions.ratioChanged(tab.id, ratio) }}
-        content={contentColumn}
-        tree={treeColumn}
-        label={t('splitter.aria')}
-      />
+      <div className={css.railRow}>
+        <SplitView
+          ratio={state.ratio}
+          onRatio={(ratio) => { actions.ratioChanged(tab.id, ratio) }}
+          content={contentColumn}
+          tree={treeColumn}
+          label={t('splitter.aria')}
+        />
+        <WorkbenchRail
+          selected={state.container}
+          onSelect={(id) => { actions.containerSelected(tab.id, id) }}
+          t={t}
+        />
+      </div>
     </div>
   )
 }

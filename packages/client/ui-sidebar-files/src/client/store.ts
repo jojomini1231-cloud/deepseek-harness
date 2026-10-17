@@ -76,6 +76,8 @@ export interface FilesTabState {
   active: string | undefined
   /** The content column's share of the workbench, between `MIN_RATIO` and `MAX_RATIO`. */
   ratio: number
+  /** Id of the view container the activity rail has selected. */
+  container: string
 }
 
 /** Every tab's tree, keyed by tab id. */
@@ -113,6 +115,8 @@ type FilesActions = {
   filesClosedBefore: (draft: FilesState, tabId: TabId, path: string) => void
   filesClosedAfter: (draft: FilesState, tabId: TabId, path: string) => void
   ratioChanged: (draft: FilesState, tabId: TabId, ratio: number) => void
+  collapsed: (draft: FilesState, tabId: TabId) => void
+  containerSelected: (draft: FilesState, tabId: TabId, container: string) => void
   reset: (draft: FilesState, tabId: TabId) => void
   forget: (draft: FilesState, tabId: TabId) => void
 }
@@ -138,7 +142,7 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
       start: (d, tabId: TabId, root: string) => {
         d.byTab[tabId] = {
           root, levels: {}, expanded: [root], scrollTop: 0, autoRefresh: true,
-          open: [], active: undefined, ratio: DEFAULT_RATIO,
+          open: [], active: undefined, ratio: DEFAULT_RATIO, container: 'files',
         }
       },
       /**
@@ -307,6 +311,24 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
        */
       ratioChanged: (d, tabId: TabId, ratio: number) => {
         bucket(d, tabId).ratio = Math.min(MAX_RATIO, Math.max(MIN_RATIO, ratio))
+      },
+      /**
+       * Record the activity rail's selected view container.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param container - id of the container the reader selected.
+       */
+      containerSelected: (d, tabId: TabId, container: string) => {
+        bucket(d, tabId).container = container
+      },
+      /**
+       * Collapse every directory back to the root, keeping the loaded levels.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       */
+      collapsed: (d, tabId: TabId) => {
+        const state = bucket(d, tabId)
+        state.expanded = [state.root]
       },
       /**
        * Drop every loaded level, keeping what is expanded.
