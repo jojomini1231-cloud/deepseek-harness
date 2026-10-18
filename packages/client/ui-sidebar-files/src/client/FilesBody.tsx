@@ -57,12 +57,15 @@ export function openFileFor(sessionId: Parameters<typeof fileAddressFor>[0], roo
   return { path, address: fileAddressFor(sessionId, root, path), name: pathPartsOf(path).name }
 }
 
+/** Milliseconds between the git view's quiet working-tree reads. */
+const GIT_SILENT_REFRESH_MS = 3_000
+
 /** The files workbench: the workspace root and whatever the reader has open under it. */
 export function FilesBody({
   useTabInfo, sessionId, useSessions, useStore, actions, renderSlot, renderFactorySlot,
   start, refresh, setAutoRefresh, toggle, collapseAll, chipSignal, chipsClosed, gitStatus, gitDiff, t,
 }: FilesBodyProps): ReactNode {
-  const { tab } = useTabInfo()
+  const { tab, sidebar } = useTabInfo()
   useEffect(() => tab.actions.bindCommands({ refresh: () => { refresh(tab.id) } }), [tab.actions, tab.id, refresh])
   const { signal } = tab
   const cwd = useSessions(sessions => sessions.byId[sessionId]?.cwd)
@@ -126,7 +129,7 @@ export function FilesBody({
       else actions.gitDiffLoaded(tab.id, path, answer.value)
     })
   }
-  const probeGit = (root: string): void => {
+  const probeGit = (root: string, quiet = false): void => {
     gitProbe.current?.abort()
     const controller = new AbortController()
     gitProbe.current = controller
@@ -134,7 +137,7 @@ export function FilesBody({
     // The path the gesture wants refreshed. The reader may select another path
     // while the status read runs; that selection reads the current tree itself.
     const refreshing = gitSelection.current
-    actions.gitLoading(tab.id)
+    if (!quiet) actions.gitLoading(tab.id)
     void gitStatus(tab.id, root, read).then((answer) => {
       if (signal.aborted || !answer.current) return
       if (answer.value === undefined) {
@@ -155,10 +158,30 @@ export function FilesBody({
       // to another path or a comparison started after the gesture is in flight.
       if (refreshing === undefined || current?.path !== refreshing.path || shown === undefined
         || gitCompare.current !== undefined) return
-      actions.gitDiffReloading(tab.id)
+      if (!quiet) actions.gitDiffReloading(tab.id)
       requestDiff(root, shown.path, shown.from)
     })
   }
+  // While the git view is the one on screen the tree refreshes itself: a quiet
+  // read every few seconds that only writes when the working tree differs, so
+  // the rows never blank out and an unchanged tree costs no render. The latest
+  // probe is reached through a ref because the timer outlives one render.
+  const probeLatest = useRef(probeGit)
+  useEffect(() => { probeLatest.current = probeGit })
+  // A hidden panel keeps its tab bodies mounted, so the view has to ask whether
+  // it is on screen: a collapsed Sidebar or a hidden tab must not keep reading.
+  const onScreen = tab.visible && sidebar.expanded
+  const gitRoot = gitContainer && onScreen ? state.root : undefined
+  const polled = useRef(false)
+  useEffect(() => {
+    if (gitRoot === undefined) return undefined
+    // The first activation already read the tree while seeding; coming back on
+    // screen after a collapse refreshes at once, then the interval keeps it fresh.
+    if (polled.current) probeLatest.current(gitRoot, true)
+    polled.current = true
+    const timer = setInterval(() => { probeLatest.current(gitRoot, true) }, GIT_SILENT_REFRESH_MS)
+    return () => { clearInterval(timer) }
+  }, [gitRoot])
   const selectGitEntry = (entry: WorkspaceGitEntry): void => {
     /* v8 ignore next -- the panel that reports the gesture only renders with a seeded state. */
     if (state === undefined) return

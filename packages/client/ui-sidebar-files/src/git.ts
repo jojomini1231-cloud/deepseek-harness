@@ -87,6 +87,22 @@ function isHunk(value: unknown): value is WorkspaceDiffHunk {
 }
 
 /**
+ * Whether two working-tree states describe the same tree.
+ * @param left - the state the panel shows, if any.
+ * @param right - the state a read answered.
+ * @returns whether every field the view draws is identical.
+ */
+export function sameGitStatus(left: WorkspaceGitStatus | undefined, right: WorkspaceGitStatus): boolean {
+  if (left === undefined || left.kind !== right.kind || left.branch !== right.branch) return false
+  if (left.entries.length !== right.entries.length) return false
+  return left.entries.every((entry, at) => {
+    const other = right.entries[at]
+    return other !== undefined && entry.path === other.path && entry.display === other.display
+      && entry.kind === other.kind && entry.from === other.from
+  })
+}
+
+/**
  * Whether a decoded JSON value is one file comparison the view can draw.
  * @param value - decoded JSON.
  * @returns whether it is a text comparison with hunks, or a binary/oversized marker.

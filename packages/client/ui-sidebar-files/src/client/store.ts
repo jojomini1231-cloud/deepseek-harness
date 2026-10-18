@@ -14,6 +14,7 @@
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-store'
 import type { RemoteFailure } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkspaceFileDiff, WorkspaceGitStatus } from '@deepseek-ai/dsh-workspace-changes/types'
+import { sameGitStatus } from '../git.ts'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { WorkspaceDirectoryEntry } from '@deepseek-ai/dsh-api-workspace-files/types'
 
@@ -390,9 +391,12 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
       gitStatusLoaded: (d, tabId: TabId, status: WorkspaceGitStatus) => {
         const state = bucket(d, tabId)
         const git = state.git
-        git.status = status
         git.loading = false
         git.failure = false
+        // The silent refresh repeats this read while the panel is open; an
+        // unchanged tree writes nothing, so the list never re-renders under it.
+        if (sameGitStatus(git.status, status)) return
+        git.status = status
         // A directory outside a repository has no git view; an unavailable read
         // keeps the rail so the panel's retry stays reachable.
         if (status.kind === 'not-a-repository' && state.container === 'git') state.container = 'files'

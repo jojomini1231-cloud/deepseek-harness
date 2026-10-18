@@ -78,7 +78,12 @@ export interface Mounted {
 }
 
 /** One store instance, one face, one owner share. */
-function harness(cwd: string | null, refreshShortcut?: ReturnType<FilesBodyProps['useTabInfo']>['tab']['refreshShortcut'], git?: MountedGit) {
+function harness(
+  cwd: string | null,
+  refreshShortcut?: ReturnType<FilesBodyProps['useTabInfo']>['tab']['refreshShortcut'],
+  git?: MountedGit,
+  panel?: { readonly expanded?: boolean; readonly visible?: boolean },
+) {
   const instance = createFilesStore().create()
   const script = scriptedList()
   const real = filesFace(script.list, script.watch)(SESSION, instance.actions)
@@ -104,10 +109,10 @@ function harness(cwd: string | null, refreshShortcut?: ReturnType<FilesBodyProps
   const shared = {
     // A page tab's address is the shell's to mint; the body never reads it.
     useTabInfo: () => ({
-      sidebar: { expanded: true, fullscreen: false },
+      sidebar: { expanded: panel?.expanded ?? true, fullscreen: false },
       panel: { id: 'pane-1' },
       tab: {
-        id: TAB, kind: 'files', contentId: 'files', title: zh['type.label'], visible: true,
+        id: TAB, kind: 'files', contentId: 'files', title: zh['type.label'], visible: panel?.visible ?? true,
         navigation: { address: 'files', params: undefined, revision: 1 },
         signal: controller.signal,
         actions: tabActions, refreshShortcut,
@@ -146,8 +151,9 @@ export function mountBody(
   cwd: string | null = ROOT,
   refreshShortcut?: ReturnType<FilesBodyProps['useTabInfo']>['tab']['refreshShortcut'],
   git?: MountedGit,
+  panel?: { readonly expanded?: boolean; readonly visible?: boolean },
 ): Mounted {
-  const { shared, ...hands } = harness(cwd, refreshShortcut, git)
+  const { shared, ...hands } = harness(cwd, refreshShortcut, git, panel)
   const view = render(<FilesBody {...shared as unknown as FilesBodyProps} />)
   return {
     ...hands, view, renderFactorySlot: shared.renderFactorySlot, renderSlot: shared.renderSlot,

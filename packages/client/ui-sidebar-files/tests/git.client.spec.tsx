@@ -8,7 +8,7 @@ import type {
 } from '@deepseek-ai/dsh-workspace-changes/types'
 import { filesFace } from '../src/client/face.ts'
 import { GitPanel } from '../src/client/GitPanel.tsx'
-import { gitDiffUrl, gitStatusUrl, isFileDiff, isGitStatus } from '../src/git.ts'
+import { gitDiffUrl, gitStatusUrl, isFileDiff, isGitStatus, sameGitStatus } from '../src/git.ts'
 import { en, zh } from '../src/client/locales.ts'
 import { createFilesStore } from '../src/client/store.ts'
 import type { GitTabState } from '../src/client/store.ts'
@@ -26,8 +26,8 @@ const UNTRACKED: WorkspaceGitEntry = { path: 'new.ts', display: 'new.ts', kind: 
 const REPOSITORY: WorkspaceGitStatus = {
   kind: 'repository',
   branch: 'main',
-  entries: [MODIFIED, ADDED, UNTRACKED],
   total: 3,
+  entries: [MODIFIED, ADDED, UNTRACKED],
 }
 const DIFF: WorkspaceFileDiff = {
   kind: 'text',
@@ -114,6 +114,14 @@ describe('git route contract', () => {
       entries: [{ path: 'a', display: 'a', kind: 'renamed', from: '' }],
     })).toBe(false)
     expect(isGitStatus(null)).toBe(false)
+    expect(sameGitStatus(REPOSITORY, REPOSITORY)).toBe(true)
+    expect(sameGitStatus(undefined, REPOSITORY)).toBe(false)
+    expect(sameGitStatus(REPOSITORY, { ...REPOSITORY, branch: 'dev' })).toBe(false)
+    const emptyTree: WorkspaceGitStatus = { kind: 'repository', branch: 'main', entries: [], total: 0 }
+    expect(sameGitStatus(REPOSITORY, emptyTree)).toBe(false)
+    // A rename's original path is part of what the row draws.
+    expect(sameGitStatus(REPOSITORY, { ...REPOSITORY, entries: [REPOSITORY.entries[0]!, { ...REPOSITORY.entries[1]!, from: 'src/old.ts' }, REPOSITORY.entries[2]!] }))
+      .toBe(false)
     expect(isFileDiff(DIFF)).toBe(true)
     expect(isFileDiff({ kind: 'binary', path: 'a', display: 'a' })).toBe(true)
     expect(isFileDiff({ kind: 'oversized', path: 'a', display: 'a' })).toBe(true)
@@ -528,6 +536,64 @@ describe('git view through the body', () => {
     act(() => { fireEvent.pointerDown(split, { pointerId: 2, button: 0, clientX: 900 }) })
     act(() => { fireEvent.pointerUp(split, { pointerId: 2, clientX: 990 }) })
     expect(mounted.instance.getSnapshot().byTab[TAB]?.git.ratio).toBe(0.8)
+  })
+
+  it('refreshes the tree quietly while the git view is open', async () => {
+    vi.useFakeTimers()
+    try {
+      const mounted = mountBody(ROOT, undefined, { status: REPOSITORY, diff: DIFF })
+      await act(() => mounted.script.watches.ready(ROOT))
+      await act(() => mounted.script.settle({ ok: true, value: { entries: [], truncated: false } }))
+      fireEvent.click(mounted.view.container.querySelector('[data-files-rail-item="git"]')!)
+      await act(async () => { fireEvent.click(mounted.view.container.querySelector('[data-files-git-entry="src/a.ts"]')!) })
+      const before = mounted.gitStatus.mock.calls.length
+      // An unchanged tree: the quiet read runs, writes nothing, and shows no
+      // loading state (the list never blanks out).
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+      expect(mounted.gitStatus.mock.calls.length).toBe(before + 1)
+      expect(mounted.view.container.querySelector('[data-files-git-state="loading"]')).toBeNull()
+      // A changed tree updates in place, and the shown comparison is re-read.
+      const changed = { ...REPOSITORY, entries: [...REPOSITORY.entries, { path: 'src/c.ts', display: 'src/c.ts', kind: 'modified' as const }] }
+      mounted.gitStatus.mockResolvedValueOnce({ value: changed, current: true })
+      const diffs = mounted.gitDiff.mock.calls.length
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+      expect(mounted.instance.getSnapshot().byTab[TAB]?.git.status).toEqual(changed)
+      expect(mounted.view.container.querySelectorAll('[data-files-git-entry]')).toHaveLength(4)
+      expect(mounted.gitDiff.mock.calls.length).toBeGreaterThan(diffs)
+      // Leaving the container stops the timer.
+      fireEvent.click(mounted.view.container.querySelector('[data-files-rail-item="files"]')!)
+      const after = mounted.gitStatus.mock.calls.length
+      await act(async () => { await vi.advanceTimersByTimeAsync(9_000) })
+      expect(mounted.gitStatus.mock.calls.length).toBe(after)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stops refreshing while the panel is off screen and refreshes when it returns', async () => {
+    vi.useFakeTimers()
+    try {
+      // The Sidebar is collapsed: the tab body stays mounted, but the view must
+      // not keep reading a working tree nobody is looking at.
+      const hidden = mountBody(ROOT, undefined, { status: REPOSITORY }, { expanded: false })
+      await act(() => hidden.script.watches.ready(ROOT))
+      await act(() => hidden.script.settle({ ok: true, value: { entries: [], truncated: false } }))
+      fireEvent.click(hidden.view.container.querySelector('[data-files-rail-item="git"]')!)
+      const idle = hidden.gitStatus.mock.calls.length
+      await act(async () => { await vi.advanceTimersByTimeAsync(9_000) })
+      expect(hidden.gitStatus.mock.calls.length).toBe(idle)
+      cleanup()
+      // A visible panel polls, and a tab that is hidden by its pane behaves the same.
+      const visible = mountBody(ROOT, undefined, { status: REPOSITORY }, { expanded: true, visible: false })
+      await act(() => visible.script.watches.ready(ROOT))
+      await act(() => visible.script.settle({ ok: true, value: { entries: [], truncated: false } }))
+      fireEvent.click(visible.view.container.querySelector('[data-files-rail-item="git"]')!)
+      const before = visible.gitStatus.mock.calls.length
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+      expect(visible.gitStatus.mock.calls.length).toBe(before)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('drops a read that settles after the tab record ended', async () => {
