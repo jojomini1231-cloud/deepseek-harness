@@ -112,7 +112,7 @@ function ChangeGroup({ group, label, entries, open, onToggle, onSelect, selected
   )
 }
 
-/** The list column: the panel header, the groups, and their rows. */
+/** The list column: the panel header above the scrolling groups and their rows. */
 function ChangedPaths({ git, onSelect, onReload, onToggleGroup, onScrolled, t }: GitPanelProps): ReactNode {
   const scrollTopRef = useRef(git.scrollTop)
   const reportScrolled = useRef(onScrolled)
@@ -128,12 +128,9 @@ function ChangedPaths({ git, onSelect, onReload, onToggleGroup, onScrolled, t }:
   const changed = entries.filter(entry => entry.kind !== 'untracked')
   const untracked = entries.filter(entry => entry.kind === 'untracked')
   return (
-    <div
-      ref={listRef}
-      className={css.gitList}
-      data-files-git-list
-      onScroll={(event) => { scrollTopRef.current = event.currentTarget.scrollTop }}
-    >
+    <>
+      {/* The column's top bar stays above the scroller: a long changed-path
+          list scrolls under it instead of carrying it away. */}
       <div className={css.gitHeader} data-files-git-header>
         <span className={css.gitTitle} data-files-git-title>{t('git.title')}</span>
         {status?.kind === 'repository' && status.branch !== undefined && (
@@ -151,43 +148,50 @@ function ChangedPaths({ git, onSelect, onReload, onToggleGroup, onScrolled, t }:
           </button>
         </Tooltip>
       </div>
-      {status === undefined || status.kind === 'unavailable'
-        ? (
-          <div className={css.gitNoteRow} data-files-git-state={git.loading ? 'loading' : 'failed'}>
-            <span>{git.loading ? t('git.loading') : t('git.failed')}</span>
-            {!git.loading && <Button size="sm" data-files-git-retry onClick={onReload}>{t('retry')}</Button>}
-          </div>
-        )
-        : status.kind === 'not-a-repository'
-          ? null
-          : (
-            <>
-              {/* A reload that failed leaves the last list on screen; the
-                  banner says it is stale and offers the retry. */}
-              {git.failure && (
-                <div className={css.gitNoteRow} data-files-git-state="failed">
-                  <span>{t('git.failed')}</span>
-                  <Button size="sm" data-files-git-retry onClick={onReload}>{t('retry')}</Button>
-                </div>
-              )}
-              {entries.length === 0
-                ? (git.failure ? null : <p className={css.gitNote} data-files-git-state="clean">{t('git.clean')}</p>)
-                : (
-                  <>
-                    <ChangeGroup group="changed" label={t('git.changes')} entries={changed}
-                      open={git.groups.changed} onToggle={onToggleGroup} onSelect={onSelect} selected={git.selected} />
-                    <ChangeGroup group="untracked" label={t('git.untracked')} entries={untracked}
-                      open={git.groups.untracked} onToggle={onToggleGroup} onSelect={onSelect} selected={git.selected} />
-                    {status.total > entries.length && (
-                      <p className={css.gitNote} data-files-git-truncated>
-                        {t('git.truncated', { shown: entries.length, total: status.total })}
-                      </p>
-                    )}
-                  </>
+      <div
+        ref={listRef}
+        className={css.gitList}
+        data-files-git-list
+        onScroll={(event) => { scrollTopRef.current = event.currentTarget.scrollTop }}
+      >
+        {status === undefined || status.kind === 'unavailable'
+          ? (
+            <div className={css.gitNoteRow} data-files-git-state={git.loading ? 'loading' : 'failed'}>
+              <span>{git.loading ? t('git.loading') : t('git.failed')}</span>
+              {!git.loading && <Button size="sm" data-files-git-retry onClick={onReload}>{t('retry')}</Button>}
+            </div>
+          )
+          : status.kind === 'not-a-repository'
+            ? null
+            : (
+              <>
+                {/* A reload that failed leaves the last list on screen; the
+                    banner says it is stale and offers the retry. */}
+                {git.failure && (
+                  <div className={css.gitNoteRow} data-files-git-state="failed">
+                    <span>{t('git.failed')}</span>
+                    <Button size="sm" data-files-git-retry onClick={onReload}>{t('retry')}</Button>
+                  </div>
                 )}
-            </>
-          )}
-    </div>
+                {entries.length === 0
+                  ? (git.failure ? null : <p className={css.gitNote} data-files-git-state="clean">{t('git.clean')}</p>)
+                  : (
+                    <>
+                      <ChangeGroup group="changed" label={t('git.changes')} entries={changed}
+                        open={git.groups.changed} onToggle={onToggleGroup} onSelect={onSelect} selected={git.selected} />
+                      <ChangeGroup group="untracked" label={t('git.untracked')} entries={untracked}
+                        open={git.groups.untracked} onToggle={onToggleGroup} onSelect={onSelect} selected={git.selected} />
+                      {status.total > entries.length && (
+                        <p className={css.gitNote} data-files-git-truncated>
+                          {t('git.truncated', { shown: entries.length, total: status.total })}
+                        </p>
+                      )}
+                    </>
+                  )}
+              </>
+            )}
+      </div>
+    </>
   )
 }
 

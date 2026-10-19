@@ -119,4 +119,32 @@ describe('web e2e: the working-tree git view', () => {
     await expect.poll(async () => (await list.boundingBox())!.width).toBeGreaterThan(before.width + 20)
     expect(tripwire.pageErrors).toEqual([])
   })
+
+  it('keeps the changed-path top bar in place while the rows scroll', async () => {
+    const column = page.locator('[data-rightbar-col]')
+    const cwd = join(scaffold.workspaceCwd, WORKSPACE_NAME)
+    for (let index = 0; index < 40; index += 1) {
+      writeFileSync(join(cwd, `many-${String(index).padStart(2, '0')}.md`), `file ${index}\n`)
+    }
+    const panel = column.locator('[data-files-git-panel]')
+    await panel.waitFor({ timeout: 15_000 })
+    await column.locator('[data-files-git-refresh]').click()
+    // One modified path and the 41 untracked ones, more than the column shows.
+    await expect.poll(async () => await column.locator('[data-files-git-entry]').count(), { timeout: 15_000 })
+      .toBe(42)
+    const header = column.locator('[data-files-git-header]')
+    const list = column.locator('[data-files-git-list]')
+    expect(await list.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true)
+    const panelBox = (await panel.boundingBox())!
+    const before = (await header.boundingBox())!
+    await list.evaluate((node) => { node.scrollTop = node.scrollHeight })
+    await expect.poll(async () => await list.evaluate(node => node.scrollTop)).toBeGreaterThan(0)
+    // The title, branch, and reload stay drawn at the column's top edge; the
+    // rows move beneath them.
+    const after = (await header.boundingBox())!
+    expect(after.y).toBeCloseTo(before.y, 1)
+    expect(after.y).toBeGreaterThanOrEqual(panelBox.y)
+    expect(after.y + after.height).toBeLessThanOrEqual(panelBox.y + panelBox.height)
+    expect(tripwire.pageErrors).toEqual([])
+  })
 })

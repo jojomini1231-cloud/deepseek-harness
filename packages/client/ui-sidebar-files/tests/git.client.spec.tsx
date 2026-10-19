@@ -242,6 +242,11 @@ describe('GitPanel', () => {
     const compare = container.querySelector('[data-files-git-compare]')!
     const list = container.querySelector('[data-files-git-list]')!
     expect(compare.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // The list's top bar lives outside the scroller, so a long list scrolls
+    // under it instead of carrying title, branch, and reload out of view.
+    const gitHeader = container.querySelector('[data-files-git-header]')!
+    expect(list.contains(gitHeader)).toBe(false)
+    expect(gitHeader.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     // Each row states its change kind, which colors its letter.
     expect([...container.querySelectorAll('[data-files-git-entry]')].map(row => row.getAttribute('data-files-git-kind')))
       .toEqual(['modified', 'added', 'untracked'])
