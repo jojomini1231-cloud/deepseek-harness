@@ -1,7 +1,8 @@
 import { expect, it, vi } from 'vitest'
-import { browserUrl, logoutAccount, requestAccount, requestBonusNotified, requestPlatform, requestUnnotifiedBonuses } from '../src/protocol.ts'
+import { browserUrl, logoutAccount, requestAccount, requestBonusNotified, requestPlatform, requestUnnotifiedBonuses, requestUsage } from '../src/protocol.ts'
 import type { AccountBonusOrderId } from '@deepseek-ai/dsh-deepseek-account/types'
 import { readAccountDetail, readUnnotifiedBonuses } from '../src/details.ts'
+import { dshTrackingId } from '../src/usage.ts'
 
 it.each(['/dsh/authorize', '/dsh/authorized'])('maps %s to the configured development origin and preserves query bytes', (path) => {
   const origin = 'http://localhost:8081'
@@ -118,6 +119,19 @@ it.each([
   }
 })
 
+it('accepts a usage report larger than the account-detail response cap', async () => {
+  const payload = { rows: 'x'.repeat(100_000) }
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+    code: 0, data: { biz_code: 0, biz_data: payload },
+  })))
+  try {
+    await expect(requestUsage('https://platform.deepseek.com',
+      { start: 1, end: 2, tz: 0 }, 'private-token', new AbortController().signal, {})).resolves.toEqual(payload)
+  } finally {
+    fetcher.mockRestore()
+  }
+})
+
 it('keeps successful authorization, account, bonus and logout requests silent', async () => {
   const output = ['log', 'info', 'error'] as const
   const spies = output.map(method => vi.spyOn(console, method).mockImplementation(() => undefined))
@@ -173,6 +187,21 @@ it.each([
   }
 })
 
+it('reports invalid API key fields without logging key data', () => {
+  const output = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+  try {
+    expect(() => dshTrackingId({ api_keys: [{ tracking_id: ['private-id'], key_type: 'DSH' }] }))
+      .toThrow('account: protocol')
+    expect(output.mock.calls[0]?.[0]).toBe('[deepseek-account] usage schema rejected')
+    const logged = JSON.stringify(output.mock.calls)
+    expect(logged).toContain('api-keys')
+    expect(logged).toContain('tracking_id')
+    expect(logged).toContain('invalid_type')
+    expect(logged).not.toContain('private-')
+  } finally {
+    output.mockRestore()
+  }
+})
 
 it('reports invalid bonus fields without logging bonus data', async () => {
   const output = vi.spyOn(console, 'error').mockImplementation(() => undefined)

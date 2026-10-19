@@ -177,6 +177,11 @@ export function apply(ctx: Context): void {
     subscribeModelSignInRequired: listener => ctx.remote.$on('deepseek-account/model-sign-in-required', listener),
     ...nativePlatform === undefined ? {} : { openPlatformPage: platformPageOpener(refreshAccount) },
     refreshAccount,
+    async readUsage() {
+      const result = await ctx.remote.account.getUsage(client())
+      if (!result.ok) throw new Error('account usage failed')
+      return result.value
+    },
     contactUs() {
       // Sample the account, build and environment before awaiting native information, so
       // a profile the read outlasts cannot replace the UID this click reported.

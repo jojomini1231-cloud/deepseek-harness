@@ -2,6 +2,10 @@
 import { z } from 'zod'
 import type { AccountBonusOrderId, SignInErrorCode } from '@deepseek-ai/dsh-deepseek-account/types'
 
+// Usage reports carry per-key, per-model buckets for the whole window and can exceed
+// the small account-detail limit while remaining far below a memory concern.
+const USAGE_BODY_LIMIT = 4 * 1024 * 1024
+
 /** Protocol errors expose a stable code, never a response body or authorization URL. */
 export class PlatformAuthError extends Error {
   /** @param code - safe error classification. */
@@ -113,6 +117,51 @@ export function requestAccount(origin: string, path: '/auth-api/v0/users/current
 }
 
 /**
+ * Read the account's API key list with the grant kept in Host request headers.
+ * @param origin - configured and grant-matched origin.
+ * @param token - account grant.
+ * @param signal - credential lifetime and request timeout.
+ * @param headers - validated deployment headers for this origin.
+ * @returns successful business payload; the caller retains only key metadata it uses.
+ */
+export function requestApiKeys(origin: string, token: string,
+  signal: AbortSignal, headers: Record<string, string>): Promise<unknown> {
+  return platformRequest(`${origin}/api/v0/users/get_api_keys`,
+    { method: 'GET', headers: accountHeaders(headers, token) }, signal)
+}
+
+/** Window, bucketing zone, and optional API key filter for the usage cost query. */
+export interface PlatformUsageQuery {
+  readonly start: number
+  readonly end: number
+  /** Whole-hour UTC offset expected by the usage endpoint. */
+  readonly tz: number
+  /** Platform tracking id of the DeepSeek Harness key; absent reports every key. */
+  readonly trackingId?: string | undefined
+}
+
+const USAGE_COST_PATH = '/api/v0/usage/by_api_key/cost'
+
+/**
+ * Read the account's usage cost for one window with the grant kept in Host request headers.
+ * @param origin - configured and grant-matched origin.
+ * @param query - window start, exclusive end, bucketing offset, and optional key filter.
+ * @param token - account grant.
+ * @param signal - credential lifetime and request timeout.
+ * @param headers - validated deployment headers for this origin.
+ * @returns successful business payload.
+ */
+export function requestUsage(origin: string, query: PlatformUsageQuery,
+  token: string, signal: AbortSignal, headers: Record<string, string>): Promise<unknown> {
+  const url = new URL(USAGE_COST_PATH, origin)
+  url.searchParams.set('start', String(query.start))
+  url.searchParams.set('end', String(query.end))
+  url.searchParams.set('tz', String(query.tz))
+  if (query.trackingId !== undefined) url.searchParams.set('api_key_tracking_id', query.trackingId)
+  return platformRequest(url.href, { method: 'GET', headers: accountHeaders(headers, token) }, signal, USAGE_BODY_LIMIT)
+}
+
+/**
  * Read the granted bonuses Platform has not yet recorded as displayed.
  * @param origin - configured origin matching the grant issuer.
  * @param token - stored account grant.
@@ -169,7 +218,8 @@ function callerCancelled(signal: AbortSignal): boolean {
   return signal.aborted && !(reason instanceof Error && reason.name === 'TimeoutError')
 }
 
-async function platformRequest(url: string, init: RequestInit, signal: AbortSignal): Promise<unknown> {
+/** @param maxBodyBytes - response size cap for this endpoint family. */
+async function platformRequest(url: string, init: RequestInit, signal: AbortSignal, maxBodyBytes = 65_536): Promise<unknown> {
   const path = new URL(url).pathname
   let response: Response
   try {
@@ -199,7 +249,7 @@ async function platformRequest(url: string, init: RequestInit, signal: AbortSign
       const next = await reader.read()
       if (next.done) break
       size += next.value.byteLength
-      if (size > 65_536) {
+      if (size > maxBodyBytes) {
         stage = 'body-limit'
         throw new PlatformAuthError('protocol')
       }

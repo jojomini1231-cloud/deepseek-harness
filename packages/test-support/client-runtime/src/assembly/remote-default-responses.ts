@@ -37,6 +37,8 @@ export const remoteDefaultResponses: RemoteTable = {
     // ui-settings-account refreshes details after a stored-grant snapshot.
     'account/getProfile': ok(null),
     'account/getBalance': ok(null),
+    // ui-settings-account opens the account menu and reads its usage totals.
+    'account/getUsage': ok(null),
     // ui-settings-account bonus notice read and acknowledgement at signing in.
     'account/getUnnotifiedBonuses': ok(null),
     'account/ackBonusNotified': ok(true),

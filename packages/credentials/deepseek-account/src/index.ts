@@ -1,7 +1,7 @@
 /** Account Service Definition shared by platform, API, and model consumers. */
 import { Context, Service } from '@deepseek-ai/cordis'
-import type { AccountBonusBatch, AccountBonusOrderId, AccountClientMetadata, AccountDetails, AccountUserId, AccountView, SignInAttemptId } from './types.ts'
-export type { AccountBonusBatch, AccountBonusNotification, AccountBonusOrderId, AccountClientMetadata, AccountDetails, AccountProfile, AccountUserId, AccountWallet, AccountLinks, AccountView, SignInAttemptId, SignInAttemptView, SignInErrorCode } from './types.ts'
+import type { AccountBonusBatch, AccountBonusOrderId, AccountClientMetadata, AccountDetails, AccountUsageOutcome, AccountUserId, AccountView, SignInAttemptId } from './types.ts'
+export type { AccountBonusBatch, AccountBonusNotification, AccountBonusOrderId, AccountClientMetadata, AccountDetails, AccountProfile, AccountUsage, AccountUsageCost, AccountUsageOutcome, AccountUserId, AccountWallet, AccountLinks, AccountView, SignInAttemptId, SignInAttemptView, SignInErrorCode } from './types.ts'
 export { isRunningAccountTask, installAccountTaskCancellation } from './account-tasks.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -51,6 +51,14 @@ export abstract class DeepSeekAccount extends Service {
    * @returns balance outcome, or null if signed out or the grant changed during the query.
    */
   abstract getBalance(client: AccountClientMetadata): Promise<AccountDetails['balance'] | null>
+  /**
+   * Query the fixed-window usage totals for the caller's current local day.
+   * The provider derives the day from the client's full UTC offset and reports
+   * that offset's whole-hour form as Platform's bucketing zone.
+   * @param client - identity of the requesting UI for this call.
+   * @returns usage outcome, or null if signed out or the grant changed during the query.
+   */
+  abstract getUsage(client: AccountClientMetadata): Promise<AccountUsageOutcome | null>
   /**
    * Query the granted bonuses Platform has not yet recorded as displayed.
    * @param client - identity of the requesting UI for this call; its language selects the server-authored message.

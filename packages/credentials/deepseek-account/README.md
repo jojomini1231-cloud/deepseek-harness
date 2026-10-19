@@ -40,6 +40,8 @@ Successful local sign-out emits `deepseek-account/signed-out`. The platform prov
 
 The service defines account operations and reconnectable state snapshots. The platform provider owns the protocol and stored grant. Credentials are Host-only; the API controller exports state and commands without resolveToken.
 
+getUsage returns the caller's current-local-day consumption per currency; the provider reports the UTC offset's whole-hour form as Platform's bucketing zone. Usage failure is its own outcome and never invents a zero total.
+
 Account model failures with `ACCOUNT_SIGN_IN_REQUIRED` emit `deepseek-account/model-sign-in-required`; the Client receives this live event for sign-in guidance. Other request errors do not emit it.
 
 <a id="understand-the-implementation"></a>
@@ -67,7 +69,7 @@ No model request prefix changes.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- Account tokens have no expiry or refresh flow. Sign-out removes the local grant before background provider revocation; remote logout failures never restore local login. Profile and balance query failures retain the stored grant. getProfile / getBalance reports profile and balance query outcomes independently.
+- Account tokens have no expiry or refresh flow. Sign-out removes the local grant before background provider revocation; remote logout failures never restore local login. Profile, balance and usage query failures retain the stored grant. getProfile / getBalance / getUsage report their query outcomes independently.
 
 <a id="dev-note"></a>
 ### Dev Note

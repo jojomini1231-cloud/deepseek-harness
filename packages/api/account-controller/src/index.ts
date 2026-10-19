@@ -3,7 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { isRunningAccountTask } from '@deepseek-ai/dsh-deepseek-account'
 import type {} from '@deepseek-ai/dsh-agent'
-import type { AccountBonusBatch, AccountBonusOrderId, AccountClientMetadata, AccountDetails, AccountUserId } from '@deepseek-ai/dsh-deepseek-account/types'
+import type { AccountBonusBatch, AccountBonusOrderId, AccountClientMetadata, AccountDetails, AccountUsageOutcome, AccountUserId } from '@deepseek-ai/dsh-deepseek-account/types'
 import type { AccountView, SignInAttemptId } from './types.ts'
 
 /** Account commands and reconnect-safe state stream. */
@@ -34,6 +34,16 @@ export class AccountController extends TypertRemoteService {
   @Remote
   getBalance(client: AccountClientMetadata): Promise<AccountDetails['balance'] | null> {
     return this.ctx.deepseekAccount.getBalance(client)
+  }
+  /**
+   * Query fixed-window usage totals.
+   * @param client - identity of the requesting UI; its UTC offset selects the reporting window.
+   * @returns usage outcome, or null when the account grant is absent or changed;
+   * a failed Platform read is a failed outcome rather than a thrown error.
+   */
+  @Remote
+  getUsage(client: AccountClientMetadata): Promise<AccountUsageOutcome | null> {
+    return this.ctx.deepseekAccount.getUsage(client)
   }
   /**
    * Query the granted bonuses Platform has not yet recorded as displayed.

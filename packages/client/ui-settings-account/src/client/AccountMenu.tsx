@@ -1,15 +1,17 @@
 /** Sidebar account launcher and locally authoritative sign-out action. */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import {
   Toast, Menu, IconEllipsisOutlineMedium, IconPaperPlaneOutlineMedium, IconSettingsOutlineMedium, IconUserOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { AccountDetails, AccountUsageOutcome } from '@deepseek-ai/dsh-deepseek-account/types'
 import type { AccountSectionInjected } from './AccountSection.tsx'
 import { SignOutDialog } from './SignOutDialog.tsx'
 import { SignInDialog } from './SignInDialog.tsx'
 import { LogoutIcon } from './LogoutIcon.tsx'
 import { AccountAvatar } from './AccountAvatar.tsx'
 import { AccountNoticeStack } from './AccountNotice.tsx'
+import { formatUsageCost, formatWallets, usageMeter } from './formatUsage.ts'
 import css from './AccountMenu.module.css'
 
 /** Account launcher composed by the settings shell. */
@@ -22,7 +24,7 @@ export type AccountMenuProps = PropsRuntime<'settings.launcher'> & PropsLocale<'
 export function AccountMenu({
   subscribeSessionExpired, subscribeModelSignInRequired, wide, settingsShortcut, openSettings, openOnboarding, settingsOpen,
   useAccount, useTheme, signOut, hasRunningAccountTasks, refreshAccount, bonusNoticeShown, bonusNoticeDismissed,
-  contactUs, showLogin, start, cancel, avatarFailed, t,
+  contactUs, showLogin, start, cancel, avatarFailed, readUsage, t,
 }: AccountMenuProps) {
   const anchor = useRef<HTMLDivElement>(null)
   // The launcher outlives the panel, so a false-to-true edge is one Settings entry:
@@ -43,6 +45,21 @@ export function AccountMenu({
   const label = profile === undefined ? null : profile.status === 'ready'
     ? profile.value.name ?? profile.value.contact ?? t('signedIn') : t('signedIn')
   const [open, setOpen] = useState(false)
+  const [usage, setUsage] = useState<AccountUsageOutcome>()
+  // The visual summary is a menu header, which assistive technology treats as
+  // outside the menu's rows; the trigger describes the same values instead.
+  const summaryId = useId()
+  useEffect(() => {
+    if (!signedIn) { setUsage(undefined); return }
+    if (!open) return
+    let current = true
+    // Opening the menu is the read; cleanup discards a result that settles after close.
+    void readUsage().then(
+      (value) => { if (current) setUsage(value ?? { status: 'failed' }) },
+      () => { if (current) setUsage({ status: 'failed' }) },
+    )
+    return () => { current = false }
+  }, [open, readUsage, signedIn])
   const trigger = useRef<HTMLButtonElement>(null)
   const [busy, setBusy] = useState(false)
   const [signOutImpact, setSignOutImpact] = useState<boolean | 'unknown'>()
@@ -61,9 +78,12 @@ export function AccountMenu({
       notices={account.notices}
       anchor={anchor} title={t('bonusNoticeTitle')} closeLabel={t('close')}
       onShown={bonusNoticeShown} onDismiss={bonusNoticeDismissed} />}
+    {signedIn && <span id={summaryId} className={css.srOnly}>{usageDescription(usage, account.details?.balance, t)}</span>}
     <Menu open={open} side="top" portal autoFocus className={css.anchor} listClassName={signedIn ? undefined : css.signedOutMenu}
+      header={signedIn ? <UsageSummary usage={usage} balance={account.details?.balance} t={t} /> : undefined}
       anchor={<button ref={trigger} type="button" className={css.trigger} data-collapsed={!wide} data-signed-out={!signedIn} aria-label={t('menu')}
-        aria-haspopup="menu" aria-expanded={open} onClick={() => { setOpen(value => !value) }}>
+        aria-haspopup="menu" aria-expanded={open} aria-describedby={signedIn ? summaryId : undefined}
+        onClick={() => { if (!open) setUsage(undefined); setOpen(value => !value) }}>
         {signedIn
           ? <span className={css.avatar} data-avatar-status={account.avatar?.status}>
             <AccountAvatar avatar={account.avatar} avatarFailed={avatarFailed} />
@@ -90,5 +110,81 @@ export function AccountMenu({
       close={() => { showLogin(false) }} useApiKey={() => { showLogin(false); openOnboarding('deepseek-official') }} />}
     {signedIn && signOutImpact !== undefined && <SignOutDialog running={signOutImpact} signOut={signOut}
       close={() => { setSignOutImpact(undefined) }} t={t} />}
+  </div>
+}
+
+/** Values the pinned usage header shows for one account snapshot. */
+interface UsageFacts {
+  readonly quotaText: string
+  readonly usedText: string
+  readonly meter: ReturnType<typeof usageMeter>
+}
+
+/**
+ * Derive the usage header's row text and meter.
+ * @param usage - latest usage read, or undefined while pending.
+ * @param balance - wallet outcome from the shared account snapshot.
+ * @param t - localized account copy.
+ * @returns the two row texts and the meter, or undefined when the meter has no data.
+ */
+function usageFacts(usage: AccountUsageOutcome | undefined, balance: AccountDetails['balance'] | undefined,
+  t: AccountMenuProps['t']): UsageFacts {
+  const wallets = balance?.status === 'ready' ? balance.value : undefined
+  const value = usage?.status === 'ready' ? usage.value : undefined
+  const quotaText = formatWallets(wallets ?? []) ?? (balance === undefined ? t('loading') : t('usageUnavailable'))
+  const usedText = value === undefined
+    ? (usage === undefined ? t('loading') : t('usageUnavailable'))
+    : formatUsageCost(value.cost, wallets?.[0]?.currency)
+  const meter = value === undefined ? undefined : usageMeter(value.cost, wallets ?? [])
+  return { quotaText, usedText, meter }
+}
+
+/**
+ * Accessible description for the launcher trigger: the menu's header is not one
+ * of its rows, so screen readers reach these totals through the trigger instead.
+ * @param usage - latest usage read, or undefined while pending.
+ * @param balance - wallet outcome from the shared account snapshot.
+ * @param t - localized account copy.
+ * @returns localized labels joined with the same values the header shows.
+ */
+function usageDescription(usage: AccountUsageOutcome | undefined, balance: AccountDetails['balance'] | undefined,
+  t: AccountMenuProps['t']): string {
+  const { quotaText, usedText, meter } = usageFacts(usage, balance, t)
+  return [
+    t('usageTitle'),
+    t('usagePeriod'),
+    `${t('usageQuota')} ${quotaText}`,
+    `${t('usageUsed')} ${usedText}`,
+    meter === undefined ? '' : `${t('usageMeterLabel')} ${meter.percent}%`,
+  ].filter(Boolean).join(' ')
+}
+
+/**
+ * Fixed-window account usage pinned above the menu actions.
+ * @param props.usage - latest usage read, or undefined while the current read is pending.
+ * @param props.balance - wallet outcome from the shared account snapshot.
+ * @param props.t - localized account copy.
+ * @returns the usage summary, or unavailable/loading values per row.
+ */
+function UsageSummary({ usage, balance, t }: {
+  usage: AccountUsageOutcome | undefined
+  balance: AccountDetails['balance'] | undefined
+  t: AccountMenuProps['t']
+}) {
+  const { quotaText, usedText, meter } = usageFacts(usage, balance, t)
+  return <div className={css.usage} role="group" aria-label={t('usageTitle')}>
+    <div className={css.usageHeading}>
+      <span>{t('usageTitle')}</span>
+      <span className={css.usagePeriod}>{t('usagePeriod')}</span>
+    </div>
+    <dl className={css.usageRows}>
+      <dt>{t('usageQuota')}</dt><dd>{quotaText}</dd>
+      <dt>{t('usageUsed')}</dt><dd>{usedText}</dd>
+    </dl>
+    {meter !== undefined && <div className={css.usageMeter} data-level={meter.level} role="progressbar"
+      aria-label={t('usageMeterLabel')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={meter.percent}
+      aria-valuetext={`${meter.percent}%`}>
+      <div className={css.usageMeterFill} style={{ width: `${meter.percent}%` }} />
+    </div>}
   </div>
 }

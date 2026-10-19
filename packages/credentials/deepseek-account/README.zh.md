@@ -40,6 +40,8 @@ getUnnotifiedBonuses 返回平台尚未记录为已展示的赠金及其所属�
 
 该服务定义账号操作和可重连的状态快照。平台提供者负责协议和授权记录。凭证仅限 Host；API 控制器只导出状态与操作，不导出 resolveToken。
 
+getUsage 返回调用方当前本地日的各币种消费金额；提供方以 UTC 偏移的整小时形式作为 Platform 的分桶时区。用量失败是独立结果，不会制造零值。
+
 账号模型请求以 `ACCOUNT_SIGN_IN_REQUIRED` 失败时，发出 `deepseek-account/model-sign-in-required`，Client 接收该实时事件以提示登录。其他请求错误不触发此事件。
 
 <a id="understand-the-implementation"></a>
@@ -67,7 +69,7 @@ AccountDetails.balance 就绪时，value 保存充值钱包，bonusWallets 保�
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- 账号 token 没有过期或刷新流程。退出时先移除本地授权，再由提供者在后台撤销；远程退登失败不会恢复本地登录态。资料和余额查询失败保留已存储授权。getProfile / getBalance 分别报告资料和余额的查询结果。
+- 账号 token 没有过期或刷新流程。退出时先移除本地授权，再由提供者在后台撤销；远程退登失败不会恢复本地登录态。资料、余额和用量查询失败保留已存储授权。getProfile / getBalance / getUsage 分别报告各自的查询结果。
 
 <a id="dev-note"></a>
 ### 开发备注

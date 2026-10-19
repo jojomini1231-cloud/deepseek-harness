@@ -62,6 +62,22 @@ export interface AccountDetails {
   readonly balance: { readonly status: 'ready'; readonly value: readonly AccountWallet[]; readonly bonusWallets: readonly AccountWallet[] } | { readonly status: 'failed' }
 }
 
+/** Per-currency consumption over the usage reporting window. */
+export interface AccountUsageCost {
+  readonly currency: 'CNY' | 'USD'
+  /** Consumed amount in the decimal grammar wallet balances use, including exponent notation. */
+  readonly amount: string
+}
+/** Platform consumption over the provider's usage window. */
+export interface AccountUsage {
+  /** Consumed amount per reported currency. */
+  readonly cost: readonly AccountUsageCost[]
+}
+/** Usage query outcome; a failed endpoint supplies no partial total. */
+export type AccountUsageOutcome =
+  | { readonly status: 'ready'; readonly value: AccountUsage }
+  | { readonly status: 'failed' }
+
 /** Identity of one granted bonus order; stable across devices and sign-ins. */
 export type AccountBonusOrderId = Branded<'AccountBonusOrderId'>
 /** One granted bonus Platform has not yet recorded as displayed; copy is server-authored. */

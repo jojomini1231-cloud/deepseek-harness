@@ -5,7 +5,7 @@ import { ok } from '@deepseek-ai/dsh-remote-mock'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import { createClientTest, type TestClient, webApp } from '@deepseek-ai/dsh-client-test-runtime/src/assembly/index.ts'
 import type {
-  AccountBonusBatch, AccountBonusOrderId, AccountDetails, AccountUserId, AccountView, SignInAttemptId,
+  AccountBonusBatch, AccountBonusOrderId, AccountDetails, AccountUsageOutcome, AccountUserId, AccountView, SignInAttemptId,
 } from '@deepseek-ai/dsh-deepseek-account/types'
 import type { QuotaNoticeOwnerProps } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { ThemeRuntime } from '@deepseek-ai/dsh-client-ui-theme/client'
@@ -204,6 +204,19 @@ it('reports the account sampled by the click when a native read outlasts a sign-
   device.resolve('platform=darwin; os=15.0; app_arch=arm64; memory_gib=16.0')
   await vi.waitFor(() => { expect(open).toHaveBeenCalledOnce() })
   expect(new URL(String(open.mock.calls.at(-1)![0])).searchParams.get('prefill_uid')).toBe('account-user')
+}, 60_000)
+
+it('reads menu usage through the account Remote and rejects a failed result', async ({ start }) => {
+  const c = await start()
+  const actions = operations(c)
+  const usage: AccountUsageOutcome = { status: 'ready', value: {
+    cost: [{ currency: 'CNY', amount: '11.94' }],
+  } }
+  c.mock.remote.account.getUsage.mockResolvedValue(ok(usage))
+  expect(await actions.readUsage()).toBe(usage)
+  expect(c.mock.remote.account.getUsage).toHaveBeenCalledOnce()
+  c.mock.remote.account.getUsage.mockResolvedValueOnce({ ok: false, error: new RemoteError('gateway/internal', 'offline', {}) })
+  await expect(actions.readUsage()).rejects.toThrow('account usage failed')
 }, 60_000)
 
 it('publishes one avatar load and retries it through the shared Settings refresh action', async ({ start }) => {

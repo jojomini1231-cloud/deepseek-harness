@@ -38,13 +38,15 @@ getPlatformSession 仅在已存授权的 issuer 与 platformOrigin 一致时导�
 
 getProfile / getBalance 将保存的授权 token 通过 x-dsh-auth-token 请求头，向 platformOrigin 上的 GET /auth-api/v0/users/current 和 GET /api/v0/users/get_user_summary 发起请求。授权签发来源必须与该来源一致。Host 只投影账号 UID、资料名称、头像 URL、由 Platform 脱敏的手机号或邮箱（原样保留），以及 normal_wallets / bonus_wallets 的币种和余额字符串，丢弃响应 token 与其他字段。余额和赠金金额字符串只要符合 Platform Web 客户端交给 big.js 的数字文法即可通过，该文法和 big.js 一致，允许省略整数或小数部分以及十进制指数，因此 0E-16、5.0000000000000000 这类值仍然有效；原始字符串会保留，NaN、Infinity 和非法文本仍被拒绝。赠送钱包不计入充值余额。凭证变化和销毁会使进行中的查询失效。
 
+getUsage 读取 GET /api/v0/usage/by_api_key/cost，并携带调用方的客户端请求头。时间窗覆盖调用方当前的本地日，由 `timezoneOffsetSeconds` 中的完整 UTC 偏移计算；查询以该偏移的整小时形式作为 `tz`，即 Platform 对用量序列采用的统计时区。金额按币种汇总 `series`（模型用量）和 `function_series`（工具调用用量）两者。Host 读取 API Key 列表，在存在 DeepSeek Harness（`DSH`）Key 时按最新 Key 的 tracking id 过滤；账号没有 DSH Key 时查询不添加筛选。用量响应使用比账号资料更大的响应大小上限，因为它可能携带大量 Key、模型和时间桶行。缺失、格式错误或失败的用量响应返回失败结果，不会制造零值；凭据被拒绝时清除授权。
+
 getUnnotifiedBonuses 读取同一来源上的 GET /api/v0/users/get_unnotified_bonuses，ackBonusNotified 向 POST /api/v0/users/ack_bonus_notified 发送仅含订单号的 JSON 正文，两者都按调用方元数据组装这五个客户端请求头。二者都先为捕获到的授权解析账号身份，因此退登或切号时返回 null 或 false，而不会确认另一个账号的赠金；一次读取只有在同一凭证生命周期内全部结算后才发布。Host 按 Platform 返回顺序转发赠金列表，保留字符串字段 order_id、expires_at 和 msg，并映射为 orderId、expiresAt 和 message。可选的字符串 title 原样转发；null 或缺省表示使用客户端默认标题。expires_at 为空字符串、null 或缺省时，统一转为空字符串 expiresAt，表示通知永不过期。订单号不要求 UUID 格式；campaign、amount、currency 和 granted_at 均为可选元数据，不做校验，分别原样转发为 campaign、amount、currency 和 grantedAt；格式错误、其他 HTTP 失败和其他业务失败都会抛出，而凭据被拒绝（HTTP 401 或响应码 `40003`）会使当前授权失效并返回 null 或 false。
 
 余额请求使用 balanceTimeoutMs（默认 30,000ms）；超时返回失败结果，不清除账号，也不制造零余额。在插件行配置 platformOrigin、allowLoopbackHttp、requestTimeoutMs、balanceTimeoutMs 和 attemptTimeoutMs。HTTP 仅用于显式启用的本机开发。提供者先在现有 Host webServer 注册 /oauth/callback，再调用 auth_init；校验 state、使用 S256 PKCE 授权码兑换一次，并在跳转 auth_exchange.biz_data.authorized_url 前提交授权记录。浏览器地址默认要求匹配配置的平台来源，并始终要求固定的 /dsh/authorize 或 /dsh/authorized 路径。完成页地址将 `login_source` 设为发起登录的客户端类型（`web` 或 `desktop`），并保留平台返回的其他查询参数。设备标识是独立的随机 UUID 记录，由使用同一凭证存储的进程共享；device_model 报告操作系统和架构。
 
 开放平台 URL 统一由 `platformOrigin` 配置管理。授权请求、浏览器地址校验、完成跳转、用量和充值入口都使用该来源。将配置放在私有的 `$DSH_HOME/cordis.patch.yml`，部署地址不进入源码仓库。默认要求 HTTPS；只有本机 HTTP 可通过 `allowLoopbackHttp: true` 显式启用。模型及文件 token 的目标由独立的 `inferenceOrigin` 配置管理。
 
-`requestHeaders` 为 `platformOrigin` 上的授权、资料、余额和退登请求添加仅 Host 使用的请求头。请求头值属于敏感配置，不包含在账号 UI 状态中。Authorization、X-DSH-Auth-Token、Host、Content-Type 及连接和消息分帧请求头由提供者保留。客户端身份请求头覆盖部署配置中的同名请求头。重定向会失败，不会转发请求头。开发环境 Cookie 应保存在私有配置或环境变量中；不会自动收集浏览器 Cookie。
+`requestHeaders` 为 `platformOrigin` 上的授权、资料、余额、用量和退登请求添加仅 Host 使用的请求头。请求头值属于敏感配置，不包含在账号 UI 状态中。Authorization、X-DSH-Auth-Token、Host、Content-Type 及连接和消息分帧请求头由提供者保留。客户端身份请求头覆盖部署配置中的同名请求头。重定向会失败，不会转发请求头。开发环境 Cookie 应保存在私有配置或环境变量中；不会自动收集浏览器 Cookie。
 
 私有 patch 也可通过 Cordis 表达式读取环境变量：
 
@@ -93,6 +95,7 @@ attemptTimeoutMs 包含初始化、等待浏览器和兑换的耗时。初始化
 <a id="known-limitations-and-deferred-work"></a>
 
 - 浏览器登录需要 Host webServer，仅支持通过带显式端口的 HTTP localhost、127.0.0.1 或 [::1] 本机访问及 SSH 本地转发，不支持非本机域名的反向代理。账号 token 没有过期或刷新流程；用户主动在 DSH 退出登录时，先删除本地授权，再在后台调用 POST /auth-api/v0/users/logout。远程失败不会恢复本地登录态。默认仅针对捕获的旧 token 最多额外重试五次，指数退避间隔为 1、2、4、8、16 秒；logoutMaxRetries（0–5）和 logoutRetryDelayMs 可配置该策略。每次请求使用 requestTimeoutMs。提供者关闭时取消请求和等待，不持久化待撤销任务。本地凭证删除失败仍向调用者报错。签发 token 前的授权尝试仍有有效期。初始化后的取消或超时会在后台发送一次 POST /auth-api/v0/dsh/auth_cancel，携带 auth_init.biz_data 中的 authorize_id 和原始 code_verifier，不附带账号授权。本地取消不等待该请求，也不会因失败而恢复；requestTimeoutMs 限制请求时间，提供者关闭时中止请求。TODO(product-error-ui)：产品需定义已给定 biz code 的本地化文案和交互表现。在此之前，业务失败沿用现有“操作失败，请重试”兜底；其他 code 和 HTTP 错误也使用该兜底。开发授权不能认证生产请求。
+- 用量时间窗由固定 UTC 偏移推导，无法表达夏令时日期：23 或 25 小时的本地日会按 24 小时窗口查询。
 
 <a id="dev-note"></a>
 ### 开发备注
@@ -101,7 +104,7 @@ attemptTimeoutMs 包含初始化、等待浏览器和兑换的耗时。初始化
 
 登录后首次读取资料使用 auth_exchange 返回并经筛选的 user。user 为 null 或格式无效时回退到 current；后续刷新及 Host 重启也查询 current。current 请求失败时保留 Host 内存中同一凭证最近一次成功的资料；凭证变更或提供者销毁时清空。current 成功返回的稳定账号 ID 首次可用或变化时仅通知使用 `watch(signal, true)` 的 Host 订阅者，供标识使用方重新读取 getPlatformSession；重复相同 ID 的刷新不通知。exchange 负责登记提交的设备信息。
 
-accountRequestHeaders 覆盖 requestHeaders，供 current、余额以及内嵌 Platform 页面/API 请求使用。Cookie 按名称合并，路由覆盖保留其他部署 Cookie。授权初始化、兑换、取消和退登保持使用 requestHeaders。两组请求头仅供 Host 和 Electron 主进程使用；快照的 userId 同样仅限 Host，渲染层 bootstrap 仅接收 origin 和 token。
+accountRequestHeaders 覆盖 requestHeaders，供 current、余额、用量以及内嵌 Platform 页面/API 请求使用。Cookie 按名称合并，路由覆盖保留其他部署 Cookie。授权初始化、兑换、取消和退登保持使用 requestHeaders。两组请求头仅供 Host 和 Electron 主进程使用；快照的 userId 同样仅限 Host，渲染层 bootstrap 仅接收 origin 和 token。
 
 账号提供者的 `embeddedPageDist` 配置为内嵌用量和充值页面 URL 添加 `dist` 查询参数。默认值为空；私有前端分支选择值应写在本地 profile patch 中。此配置不改变 API 地址或凭证传递方式。
 

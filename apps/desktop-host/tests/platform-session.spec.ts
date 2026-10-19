@@ -19,6 +19,7 @@ class Account extends DeepSeekAccount {
   override async getState() { return state }
   override async getProfile() { return null }
   override async getBalance() { return null }
+  override async getUsage() { return null }
   override async getUnnotifiedBonuses() { return null }
   override async ackBonusNotified() { return false }
   override async startSignIn() { return state }

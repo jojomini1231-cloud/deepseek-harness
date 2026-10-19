@@ -1,5 +1,5 @@
 ---
-description: "Account settings display DeepSeek login state and offer browser authorization and cancellation; the sidebar account menu provides Platform sign-out."
+description: "Account settings display DeepSeek login state and offer browser authorization and cancellation; the sidebar account menu shows fixed-window usage and provides Platform sign-out."
 kind: "package-reference"
 ---
 
@@ -47,6 +47,8 @@ The account menu's Feedback entry opens the Feishu questionnaire in the system b
 Account profile and balance cards share the [settings card material and radius](../../../docs/web-styling.md#corner-radii-and-settings-cards). Usage and top-up links match standard Button geometry; authorization actions use the shared Button.
 
 The sidebar account menu uses the shared Menu surface and backdrop blur. The signed-in menu keeps the shared row typography; the signed-out menu carries its own wider rows. Both menus label the questionnaire entry Feedback. Its Settings row shows the effective key combination supplied by the shell. Closing Settings returns focus to the sidebar account launcher.
+
+While signed in, the menu pins a Usage header above its actions. Each open reads today's consumed amount for the account's newest DeepSeek Harness API key when it has one, and for every key otherwise; the quota row uses the recharge balance from the shared account snapshot. The window follows the browser's UTC offset and has no date filter or export. Costs use the balance formatting of each wallet currency; a zero-cost report uses the first wallet currency when one is known, otherwise it shows a bare `0.00`. A meter below the two rows fills to today's consumed share of the first wallet balance, deriving its color from the rounded percentage: success through 50%, warning through 80%, error above that. It is hidden when no matching wallet or amount is available, and its fill transition is disabled under reduced motion. Each open starts a fresh read with Loading rows until it settles, and the previous opening's totals are never shown; a failed read shows Unavailable without hiding the actions, closing the menu discards a read still in flight, and signing out clears the totals. The pinned header is not part of the menu's accessible rows, so the launcher trigger describes the same totals for assistive technology. Usage reads never expose the account token to the renderer.
 
 The account card’s More account information link has no underline and opens the root of the Host-provided Platform usage URL in the system browser, following `platformOrigin`.
 

@@ -7,10 +7,11 @@ import { promises as streamPromises } from 'node:stream'
 import { Context, Service } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import { z } from 'zod'
-import { DeepSeekAccount, installAccountTaskCancellation, mergePlatformCookies, platformClientHeaders, platformWireLocale, type AccountBonusBatch, type AccountBonusOrderId, type AccountClientMetadata, type AccountDetails, type AccountUserId, type AccountView, type PlatformSession, type SignInAttemptId, type SignInAttemptView } from '@deepseek-ai/dsh-deepseek-account'
+import { DeepSeekAccount, installAccountTaskCancellation, mergePlatformCookies, platformClientHeaders, platformWireLocale, type AccountBonusBatch, type AccountBonusOrderId, type AccountClientMetadata, type AccountDetails, type AccountUsageOutcome, type AccountUserId, type AccountView, type PlatformSession, type SignInAttemptId, type SignInAttemptView } from '@deepseek-ai/dsh-deepseek-account'
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import type { AuthorizationSession } from '@deepseek-ai/dsh-authorization'
 import { profile, readAccountDetail, readUnnotifiedBonuses, sendBonusNotified } from './details.ts'
+import { readAccountUsage } from './usage.ts'
 import { revokeAccount, type LogoutRetryPolicy } from './logout.ts'
 import { AccountUnauthorizedError, PlatformAuthError, platformHeaders, platformOrigin, browserUrl, requestPlatform, initialization, exchange, loginOrigin } from './protocol.ts'
 
@@ -203,6 +204,22 @@ export class PlatformAccount extends DeepSeekAccount {
 
   override getBalance(client: AccountClientMetadata): Promise<AccountDetails['balance'] | null> {
     return this.getDetail('balance', this.detailHeaders(client))
+  }
+
+  override async getUsage(client: AccountClientMetadata): Promise<AccountUsageOutcome | null> {
+    const lifetime = this.detailsLifetime
+    const stored = await this.readCurrentGrant(lifetime)
+    if (stored === null || lifetime.signal.aborted) return null
+    const headers = this.detailHeaders(client)
+    try {
+      const usage = await readAccountUsage(this.origin, stored.token, client.timezoneOffsetSeconds,
+        lifetime.signal, this.requestTimeout, headers)
+      return this.detailsLifetime === lifetime ? usage : null
+    } catch (_unauthorized) {
+      // The usage reader exposes only authenticated credential rejection failures.
+      if (this.detailsLifetime === lifetime) await this.expireCredential(stored.token, lifetime)
+      return null
+    }
   }
 
   override async getUnnotifiedBonuses(client: AccountClientMetadata): Promise<AccountBonusBatch | null> {

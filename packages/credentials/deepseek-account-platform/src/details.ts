@@ -2,6 +2,7 @@
 import { z } from 'zod'
 import type { AccountBonusNotification, AccountBonusOrderId, AccountDetails, AccountProfile, AccountUserId } from '@deepseek-ai/dsh-deepseek-account/types'
 import { AccountUnauthorizedError, PlatformAuthError, requestAccount, requestBonusNotified, requestUnnotifiedBonuses } from './protocol.ts'
+import { platformDecimal } from './decimal.ts'
 
 const user = z.object({
   id: z.string().nullish(),
@@ -10,9 +11,8 @@ const user = z.object({
 })
 // balance and amount arrive as strings that Platform's Web client passes to big.js, whose decimal
 // grammar also accepts an omitted integer or fraction part and a decimal exponent (0E-16, 1e+3).
-const decimal = /^-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i
 const wallet = z.object({
-  currency: z.enum(['CNY', 'USD']), balance: z.string().regex(decimal),
+  currency: z.enum(['CNY', 'USD']), balance: z.string().regex(platformDecimal),
 })
 const summary = z.object({ normal_wallets: z.array(wallet), bonus_wallets: z.array(wallet) })
 // Protocol responses are JSON-decoded; metadata keeps any JSON value without field validation.

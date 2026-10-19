@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-10-18-account-menu-usage-summary.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-18-account-menu-usage-summary.md
+/agent-note-account-menu-usage-summary:
+  en: 950abb3d3a55a1a1
+  zh: d92258dfb37dfb9d
+/agent-note-account-menu-usage-summary/problem:
+  en: 824039bcce375a78
+  zh: bf870c5b32f60096
+/agent-note-account-menu-usage-summary/decision:
+  en: d75273139be71b5b
+  zh: 3e685e7ddda3596b
+/agent-note-account-menu-usage-summary/alternatives-considered:
+  en: 33047dbf6563d3a5
+  zh: 2c5339dcb3703cd9
+/agent-note-account-menu-usage-summary/consequences:
+  en: e03dfb4166a0f253
+  zh: 428eb6d753b5f508
+/agent-note-account-menu-usage-summary/testing:
+  en: 7e3aa8bca5048acb
+  zh: 9eed5eb29126222b

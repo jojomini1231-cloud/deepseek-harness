@@ -83,6 +83,14 @@ async function mockPlatform() {
       reply({ normal_wallets: [{ currency: 'CNY', balance: '1.00' }], bonus_wallets: [] })
       return
     }
+    if (url.pathname === '/api/v0/users/get_api_keys') {
+      reply({ api_keys: [{ tracking_id: 'dsh-test', key_type: 'DSH', created_at: 1 }] })
+      return
+    }
+    if (url.pathname === '/api/v0/usage/by_api_key/cost') {
+      reply({ data: [] })
+      return
+    }
     if (url.pathname === '/api/v0/users/get_unnotified_bonuses') { reply([]); return }
     res.writeHead(404).end()
   })
@@ -156,6 +164,18 @@ describe.skipIf(MODE === 'record')('web e2e: DeepSeek account sign-in in a plain
     }
     await capture('Initial load')
     await menu.click()
+    // The signed-in menu pins the usage summary above its actions; the read is
+    // asynchronous, so the rows settle from Loading to the loopback totals.
+    const usage = page.getByRole('group', { name: 'Usage', exact: true })
+    await expect.poll(() => usage.count()).toBe(1)
+    await expect.poll(() => usage.getByText('Today', { exact: true }).count()).toBe(1)
+    await expect.poll(() => usage.getByText('Balance', { exact: true }).count()).toBe(1)
+    await expect.poll(() => usage.getByText('¥1.00', { exact: true }).count(), { timeout: 30_000 }).toBe(1)
+    await expect.poll(() => usage.getByText('Used', { exact: true }).count()).toBe(1)
+    await expect.poll(() => usage.getByText('¥0.00', { exact: true }).count(), { timeout: 30_000 }).toBe(1)
+    const usageMeter = usage.getByRole('progressbar', { name: 'Share of balance used', exact: true })
+    await expect.poll(() => usageMeter.count(), { timeout: 30_000 }).toBe(1)
+    await expect.poll(() => usageMeter.getAttribute('aria-valuenow'), { timeout: 30_000 }).toBe('0')
     await page.getByRole('menuitem', { name: 'Settings', exact: true }).click()
     const settings = page.getByRole('dialog', { name: 'Settings', exact: true })
     const account = settings.getByRole('region', { name: 'Account', exact: true })

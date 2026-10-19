@@ -151,6 +151,10 @@ const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
  * frame, and scroll/resize; return null to skip placement for that frame.
  * @param props.footer - rows pinned below the scrolling items area, separated
  * by a hairline; they stay visible while the items above scroll.
+ * @param props.header - non-interactive content pinned above the scrolling items
+ * area, such as an account summary; it stays outside the row keyboard walk and
+ * the menu's accessible row set, so callers expose essential information through
+ * an accessible description elsewhere.
  * @param props.children - component rows rendered after `items` in the same
  * list, each a `role="menuitem"` button such as {@link MenuItemButton}; they
  * share the keyboard walk, the submenu exclusivity, and the post-selection
@@ -165,12 +169,13 @@ const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
  * document.body outside the owner's DOM subtree.
  * @returns anchor wrapper with the conditional list.
  */
-export function Menu({ open, anchor, items = [], children, selectedId, selectedIds, onSelect, onClose, align = 'start', side = 'bottom', portal = false, closeOnPointerLeave = false, dense = false, compact = false, autoFocus = false, selection = 'check', getAnchorRect, footer, className, listClassName }: {
+export function Menu({ open, anchor, items = [], children, selectedId, selectedIds, onSelect, onClose, align = 'start', side = 'bottom', portal = false, closeOnPointerLeave = false, dense = false, compact = false, autoFocus = false, selection = 'check', getAnchorRect, header, footer, className, listClassName }: {
   open: boolean
   autoFocus?: boolean
   anchor: ReactNode
   items?: readonly MenuEntry[]
   children?: ReactNode
+  header?: ReactNode
   footer?: readonly MenuEntry[]
   selectedId?: string | undefined
   selectedIds?: readonly string[] | undefined
@@ -534,6 +539,9 @@ export function Menu({ open, anchor, items = [], children, selectedId, selectedI
       onMouseOver={collapseSubmenuFrom}
       onFocus={collapseSubmenuFrom}
     >
+      {header !== undefined && (
+        <div className={css.header} role="presentation">{header}</div>
+      )}
       <div className={css.viewport} role="presentation">
         {items.map(renderEntry)}
         {children}

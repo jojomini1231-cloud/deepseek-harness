@@ -597,6 +597,41 @@ describe('Menu', () => {
     expect(onSelect).toHaveBeenCalledWith('new')
   })
 
+  it('pins header content above the scrolling items without adding a row', () => {
+    const rows = [
+      { id: 'a', label: 'Alpha' },
+      { id: 'b', label: 'Beta' },
+      { id: 'c', label: 'Gamma' },
+    ]
+    render(
+      <Menu
+        open
+        autoFocus
+        anchor={<span>trigger</span>}
+        header={<div>Account summary</div>}
+        items={rows}
+        onSelect={() => {}}
+        onClose={() => {}}
+      />)
+    const header = screen.getByText('Account summary')
+    expect(header.closest('div[class*="header"]')).not.toBeNull()
+    expect(header.closest('div[class*="viewport"]')).toBeNull()
+    const menuitems = screen.getAllByRole('menuitem')
+    expect(menuitems.map(item => item.textContent)).toEqual(['Alpha', 'Beta', 'Gamma'])
+    // The pinned header stays out of the row keyboard walk: opening focuses the
+    // first row, and the arrows move only between rows.
+    const [alpha, beta, gamma] = menuitems
+    expect(document.activeElement).toBe(alpha)
+    expect(document.activeElement).not.toBe(header)
+    fireEvent.keyDown(alpha!, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(beta)
+    fireEvent.keyDown(beta!, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(gamma)
+    fireEvent.keyDown(gamma!, { key: 'ArrowUp' })
+    expect(document.activeElement).toBe(beta)
+    expect(document.activeElement).not.toBe(header)
+  })
+
   it('caps the list height for internal scrolling unless a submenu row is present', () => {
     const { rerender } = render(
       <Menu open anchor={<span>trigger</span>} items={items} onSelect={() => {}} onClose={() => {}} />)

@@ -60,6 +60,8 @@ PlatformSession is a Host-only snapshot from getPlatformSession: origin names th
 
 AccountDetails.balance projects recharge wallets in value and promotional wallets in bonusWallets, with independent currency and decimal balance strings. Failed queries contain no wallet arrays.
 
+getUsage returns per-currency consumption over the provider's current-local-day window. The Host computes that day from the caller's full UTC offset and reports the offset's whole-hour form as Platform's bucketing zone; a failed read is a failed outcome rather than an empty total.
+
 Bonus notification queries return an AccountBonusBatch with the current Platform account id and eligible orders in server order. AccountBonusNotification retains the server message and expiry without projecting credentials. Acknowledgment carries the expected account id and order id; the Host refuses it after an account change. Both notification operations use the initiating UI language through x-client-locale, without a language query parameter.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
@@ -291,6 +293,15 @@ abstract getProfile(client: AccountClientMetadata): Promise<AccountDetails['prof
 abstract getBalance(client: AccountClientMetadata): Promise<AccountDetails['balance'] | null>
 
 /**
+ * Query the fixed-window usage totals for the caller's current local day.
+ * The provider derives the day from the client's full UTC offset and reports
+ * that offset's whole-hour form as Platform's bucketing zone.
+ * @param client - identity of the requesting UI for this call.
+ * @returns usage outcome, or null if signed out or the grant changed during the query.
+ */
+abstract getUsage(client: AccountClientMetadata): Promise<AccountUsageOutcome | null>
+
+/**
  * Query the granted bonuses Platform has not yet recorded as displayed.
  * @param client - identity of the requesting UI for this call; its language selects the server-authored message.
  * @returns bonuses with their account, or null if signed out or the grant changed during the query.
@@ -488,6 +499,6 @@ Local grant removal has completed.
 Source: [`packages/credentials/deepseek-account/src/index.ts`](../../packages/credentials/deepseek-account/src/index.ts)
 <!-- END GENERATED cordis-surface -->
 
-The account Service Definition exposes getState, getProfile, getBalance, getUnnotifiedBonuses, ackBonusNotified, startSignIn, cancelSignIn, signOut, watch, and Host-only resolveToken and getPlatformSession. The platform provider implements it with an AuthorizationFlow and a private GrantRecord. AccountView distinguishes stored presence from server validation; attempt IDs bind cancellation to one local flow. See [the account package](../../packages/credentials/deepseek-account/README.md).
+The account Service Definition exposes getState, getProfile, getBalance, getUsage, getUnnotifiedBonuses, ackBonusNotified, startSignIn, cancelSignIn, signOut, watch, and Host-only resolveToken and getPlatformSession. The platform provider implements it with an AuthorizationFlow and a private GrantRecord. AccountView distinguishes stored presence from server validation; attempt IDs bind cancellation to one local flow. See [the account package](../../packages/credentials/deepseek-account/README.md).
 
 `AccountClientMetadata` carries `version` from the caller’s `DSH_CLIENT_VERSION`, its active UI `locale`, and `timezoneOffsetSeconds` sampled when the operation begins. The offset is local time minus UTC in seconds: UTC+8 is `28800`. It contains no credentials. Login attempts retain their initiating metadata through exchange and cancellation; sign-out retains its metadata for revocation retries.

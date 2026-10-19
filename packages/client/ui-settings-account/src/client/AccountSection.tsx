@@ -2,7 +2,7 @@
 import { Big } from 'big.js'
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { Button, IconRightUpOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { AccountDetails, AccountView, SignInAttemptId } from '@deepseek-ai/dsh-deepseek-account/types'
+import type { AccountDetails, AccountUsageOutcome, AccountView, SignInAttemptId } from '@deepseek-ai/dsh-deepseek-account/types'
 import type { PropsRuntime, PropsLocale, InjectFace, HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { PlatformPage, PlatformPages } from './platform-pages.ts'
@@ -67,6 +67,11 @@ export interface AccountSectionInjected {
    * @returns after the account queries settle; image loading completes independently.
    */
   refreshAccount: () => Promise<void>
+  /**
+   * Read the account menu's fixed-window usage totals.
+   * @returns the usage outcome, or null when the Host is signed out or the credential changed during the read.
+   */
+  readUsage: () => Promise<AccountUsageOutcome | null>
   /** Open the external support questionnaire with the account, build and environment sampled by this click. */
   contactUs: () => void
   /** Open or dismiss the login dialog. */

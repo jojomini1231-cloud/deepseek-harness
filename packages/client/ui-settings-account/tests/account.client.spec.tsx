@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, act, within } from '@testing-librar
 import { useMemo, useSyncExternalStore } from 'react'
 import { afterEach, expect, it, onTestFinished, vi } from 'vitest'
 import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
-import type { AccountDetails, AccountView, SignInAttemptId } from '@deepseek-ai/dsh-deepseek-account/types'
+import type { AccountDetails, AccountUsageOutcome, AccountView, SignInAttemptId } from '@deepseek-ai/dsh-deepseek-account/types'
 import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { PlatformBridge } from '../src/client/PlatformOverlay.tsx'
 import { createPlatformPages, type PlatformPages } from '../src/client/platform-pages.ts'
@@ -39,6 +39,9 @@ function operationsOf(state: Omit<AccountView, 'links'>, details?: Partial<Accou
     contactUs: vi.fn(), showLogin: vi.fn(), setOnboarding: vi.fn(),
     bonusNoticeShown: vi.fn(), bonusNoticeDismissed: vi.fn(),
     refreshAccount: vi.fn(() => Promise.resolve()),
+    readUsage: vi.fn(async () => ({ status: 'ready' as const, value: {
+      cost: [{ currency: 'CNY' as const, amount: '11.94' }],
+    } })),
     avatarFailed: vi.fn(),
     start: vi.fn(() => Promise.resolve()), cancel: vi.fn(() => Promise.resolve()), signOut: vi.fn(() => Promise.resolve()),
   }
@@ -101,6 +104,15 @@ async function accountMenu(operations: AccountSectionInjected, snapshot: () => A
     openOnboarding={() => {}} openSettings={() => {}} t={key => en[key as AccountKey]} />
 }
 
+/** Render the launcher with one copy dictionary and the interface's shared account snapshot. */
+async function renderAccountMenu(operations: AccountSectionInjected, copy: typeof en | typeof zh) {
+  const { AccountMenu } = await import('../src/client/AccountMenu.tsx')
+  return render(<AccountMenu {...({} as GlobalStandardProps)} {...operations} settingsOpen={false}
+    useAccount={selector => selector(operations.hooks.account.getSnapshot())}
+    useTheme={selector => selector(operations.hooks.theme.getSnapshot())} wide
+    openOnboarding={() => {}} openSettings={() => {}} t={key => key in copy ? copy[key as AccountKey] : key} />)
+}
+
 it.each([en, zh])('renders account cards without inventing profile or balance data', async (copy) => {
   mount({ status: 'credential-stored', attempt: null }, copy)
   expect(screen.getByText(copy.signedIn)).toBeTruthy()
@@ -125,7 +137,9 @@ it('starts sign-in and disables cancellation during persistence', async () => {
 it.each([en, zh].flatMap(copy => ([false, true, 'unknown'] as const).map(running => ({ copy, running }))))('confirms sidebar sign-out with task impact $running', async ({ copy, running }) => {
   const signOut = vi.fn(() => Promise.resolve())
   const openSettings = vi.fn()
-  const operations = mount({ status: 'credential-stored', attempt: null }, copy)
+  const operations = mount({ status: 'credential-stored', attempt: null }, copy, {
+    balance: { status: 'ready', bonusWallets: [], value: [{ currency: 'CNY', balance: '82.17' }] },
+  })
   cleanup()
   const { AccountMenu } = await import('../src/client/AccountMenu.tsx')
   render(<AccountMenu {...({} as GlobalStandardProps)} {...operations} settingsOpen={false} signOut={signOut}
@@ -133,22 +147,134 @@ it.each([en, zh].flatMap(copy => ([false, true, 'unknown'] as const).map(running
     useAccount={selector => selector(operations.hooks.account.getSnapshot())}
     useTheme={selector => selector(operations.hooks.theme.getSnapshot())} wide openOnboarding={() => {}} openSettings={openSettings}
     t={key => key in copy ? copy[key as AccountKey] : key} />)
-  fireEvent.click(screen.getByRole('button', { name: copy.menu }))
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: copy.menu })) })
   expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([copy.settings, copy.contactUs, copy.signOut])
   await expect(`${screen.getByRole('menu').textContent}\n`).toMatchFileSnapshot(`./expected/menu-${copy === en ? 'en' : 'zh'}.txt`)
   fireEvent.click(screen.getByRole('menuitem', { name: copy.settings }))
   expect(openSettings).toHaveBeenCalledOnce()
-  fireEvent.click(screen.getByRole('button', { name: copy.menu }))
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: copy.menu })) })
   fireEvent.click(screen.getByRole('menuitem', { name: copy.contactUs }))
   expect(operations.contactUs).toHaveBeenCalledOnce()
   expect(screen.queryByRole('menu')).toBeNull()
-  fireEvent.click(screen.getByRole('button', { name: copy.menu }))
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: copy.menu })) })
   await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: copy.signOut })) })
   expect(signOut).not.toHaveBeenCalled()
   expect(screen.getByText(running === 'unknown' ? copy.signOutUnknownDescription : running ? copy.signOutRunningDescription : copy.signOutDescription)).toBeTruthy()
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: copy.signOut })) })
   expect(signOut).toHaveBeenCalledOnce()
   expect(screen.queryByRole('menu')).toBeNull()
+})
+
+it.each([en, zh])('shows the fixed-window quota and usage above the signed-in menu actions', async (copy) => {
+  const operations = operationsOf({ status: 'credential-stored', attempt: null }, {
+    balance: { status: 'ready', bonusWallets: [], value: [{ currency: 'CNY', balance: '82.17' }] },
+  })
+  await renderAccountMenu(operations, copy)
+  const trigger = screen.getByRole('button', { name: copy.menu })
+  await act(async () => { fireEvent.click(trigger) })
+  const summary = screen.getByRole('group', { name: copy.usageTitle })
+  expect(within(summary).getByText('¥82.17')).toBeTruthy()
+  expect(within(summary).getByText('¥11.94')).toBeTruthy()
+  const meter = within(summary).getByRole('progressbar', { name: copy.usageMeterLabel })
+  expect(meter.getAttribute('data-level')).toBe('success')
+  expect(meter.getAttribute('aria-valuenow')).toBe('14.5')
+  expect(meter.getAttribute('aria-valuetext')).toBe('14.5%')
+  // The header is not one of the menu's rows, so the trigger describes the same totals.
+  const description = document.getElementById(trigger.getAttribute('aria-describedby') ?? '')
+  expect(description?.textContent).toContain(`${copy.usageQuota} ¥82.17`)
+  expect(description?.textContent).toContain(`${copy.usageUsed} ¥11.94`)
+  expect(description?.textContent).toContain(`${copy.usageMeterLabel} 14.5%`)
+  expect(operations.readUsage).toHaveBeenCalledOnce()
+  expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([copy.settings, copy.contactUs, copy.signOut])
+})
+
+it.each(['rejects', 'returns null'] as const)('shows unavailable usage when the Host read %s', async (mode) => {
+  const operations = operationsOf({ status: 'credential-stored', attempt: null }, { balance: { status: 'failed' } })
+  operations.readUsage = mode === 'rejects'
+    ? vi.fn(async () => { throw new Error('usage unavailable') })
+    : vi.fn(async () => null)
+  await renderAccountMenu(operations, en)
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.menu })) })
+  const summary = screen.getByRole('group', { name: en.usageTitle })
+  expect(within(summary).getAllByText(en.usageUnavailable)).toHaveLength(2)
+  expect(screen.getByRole('menuitem', { name: en.settings })).toBeTruthy()
+})
+
+it('keeps loading rows until the usage read settles, then shows a bare zero without a known wallet currency', async () => {
+  const operations = operationsOf({ status: 'credential-stored', attempt: null })
+  const pending = Promise.withResolvers<AccountUsageOutcome | null>()
+  operations.readUsage = vi.fn(() => pending.promise)
+  await renderAccountMenu(operations, en)
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.menu })) })
+  const summary = screen.getByRole('group', { name: en.usageTitle })
+  expect(within(summary).getAllByText(en.loading)).toHaveLength(2)
+  await act(async () => {
+    pending.resolve({ status: 'ready', value: { cost: [] } })
+  })
+  // No wallet reported a currency, so the zero carries no symbol.
+  expect(within(summary).getByText('0.00')).toBeTruthy()
+  expect(within(summary).getByText(en.loading)).toBeTruthy()
+})
+
+it('shows the shared wallet amount and formats zero cost in its currency', async () => {
+  const operations = operationsOf({ status: 'credential-stored', attempt: null }, {
+    balance: { status: 'ready', bonusWallets: [], value: [{ currency: 'USD', balance: '6.78' }] },
+  })
+  operations.readUsage = vi.fn(async () => ({
+    status: 'ready' as const, value: { cost: [] },
+  }))
+  await renderAccountMenu(operations, en)
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.menu })) })
+  const summary = screen.getByRole('group', { name: en.usageTitle })
+  expect(within(summary).getByText('$6.78')).toBeTruthy()
+  expect(within(summary).getByText('$0.00')).toBeTruthy()
+})
+
+it.each(['resolves', 'rejects'] as const)('ignores a usage read that %s after the menu closes', async (outcome) => {
+  const operations = operationsOf({ status: 'credential-stored', attempt: null })
+  const first = Promise.withResolvers<AccountUsageOutcome | null>()
+  const second = Promise.withResolvers<AccountUsageOutcome | null>()
+  operations.readUsage = vi.fn()
+    .mockReturnValueOnce(first.promise)
+    .mockReturnValueOnce(second.promise)
+  await renderAccountMenu(operations, en)
+  const trigger = screen.getByRole('button', { name: en.menu })
+  await act(async () => { fireEvent.click(trigger) })
+  await act(async () => { fireEvent.click(trigger) })
+  await act(async () => {
+    if (outcome === 'resolves') first.resolve({
+      status: 'ready', value: { cost: [] },
+    })
+    else first.reject(new Error('late usage failure'))
+  })
+  await act(async () => { fireEvent.click(trigger) })
+  const summary = screen.getByRole('group', { name: en.usageTitle })
+  expect(within(summary).getAllByText(en.loading)).toHaveLength(2)
+  second.resolve(null)
+})
+
+it('restarts the read and shows loading on each open', async () => {
+  const operations = operationsOf({ status: 'credential-stored', attempt: null })
+  const first = Promise.withResolvers<AccountUsageOutcome | null>()
+  const second = Promise.withResolvers<AccountUsageOutcome | null>()
+  operations.readUsage = vi.fn()
+    .mockReturnValueOnce(first.promise)
+    .mockReturnValueOnce(second.promise)
+  await renderAccountMenu(operations, en)
+  const trigger = screen.getByRole('button', { name: en.menu })
+  await act(async () => { fireEvent.click(trigger) })
+  await act(async () => { first.resolve({ status: 'ready', value: { cost: [{ currency: 'CNY', amount: '11.94' }] } }) })
+  expect(within(screen.getByRole('group', { name: en.usageTitle })).getByText('¥11.94')).toBeTruthy()
+  await act(async () => { fireEvent.click(trigger) })
+  // Reopening drops the previous opening's totals before the new read settles.
+  await act(async () => { fireEvent.click(trigger) })
+  const reopened = screen.getByRole('group', { name: en.usageTitle })
+  expect(within(reopened).getAllByText(en.loading)).toHaveLength(2)
+  expect(within(reopened).queryByText('¥11.94')).toBeNull()
+  expect(operations.readUsage).toHaveBeenCalledTimes(2)
+  await act(async () => { second.resolve({ status: 'ready', value: { cost: [{ currency: 'CNY', amount: '7.00' }] } }) })
+  expect(within(reopened).getByText('¥7.00')).toBeTruthy()
+  expect(within(reopened).queryByText('¥11.94')).toBeNull()
 })
 
 it.each([en, zh])('updates the Settings menu keycaps and accessible combination from its owner', async (copy) => {
@@ -191,8 +317,11 @@ it.each([en, zh])('offers settings, contact and sign-in from the signed-out acco
   const trigger = screen.getByRole('button', { name: copy.menu })
   expect(trigger.textContent).toBe(copy.more)
   expect(trigger.querySelector('svg')).not.toBeNull()
+  // No retained usage summary or description survives a signed-out account.
+  expect(trigger.hasAttribute('aria-describedby')).toBe(false)
   fireEvent.click(trigger)
   expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([copy.settings, copy.contactUs, copy.signIn])
+  expect(screen.queryByRole('group', { name: copy.usageTitle })).toBeNull()
   await expect(`${screen.getByRole('menu').textContent}\n`).toMatchFileSnapshot(`./expected/menu-signed-out-${copy === en ? 'en' : 'zh'}.txt`)
   fireEvent.click(screen.getByRole('menuitem', { name: copy.settings }))
   expect(openSettings).toHaveBeenCalledOnce()
@@ -587,7 +716,7 @@ it('dismisses a collapsed menu and hands its login dialog to the API-key onboard
     t: (key: string) => en[key as AccountKey] }
   const view = render(<AccountMenu {...props} />)
   expect(screen.getByRole('button', { name: en.menu }).textContent).toBe('')
-  fireEvent.click(screen.getByRole('button', { name: en.menu }))
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: en.menu })) })
   fireEvent.keyDown(document, { key: 'Escape' })
   expect(screen.queryByRole('menu')).toBeNull()
   snapshot = { ...snapshot, view: { ...snapshot.view!, status: 'signed-out' }, loginVisible: true }

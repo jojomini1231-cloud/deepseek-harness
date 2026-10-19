@@ -934,6 +934,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'balance outcome, or null if signed out or the grant changed during the query.',
       },
       {
+        signature: 'abstract getUsage(client: AccountClientMetadata): Promise<AccountUsageOutcome | null>',
+        description: 'Query the fixed-window usage totals for the caller\'s current local day. The provider derives the day from the client\'s full UTC offset and reports that offset\'s whole-hour form as Platform\'s bucketing zone.',
+        parameters: [{ name: 'client', description: 'identity of the requesting UI for this call.' }],
+        returns: 'usage outcome, or null if signed out or the grant changed during the query.',
+      },
+      {
         signature: 'abstract getUnnotifiedBonuses(client: AccountClientMetadata): Promise<AccountBonusBatch | null>',
         description: 'Query the granted bonuses Platform has not yet recorded as displayed.',
         parameters: [{ name: 'client', description: 'identity of the requesting UI for this call; its language selects the server-authored message.' }],
@@ -4726,6 +4732,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'AccountProfile',
     declaration: 'export interface AccountProfile {\n    readonly id: AccountUserId | null;\n    readonly name: string | null;\n    readonly contact: string | null;\n    readonly avatarUrl?: string | null;\n}',
+  },
+  {
+    name: 'AccountUsage',
+    declaration: 'export interface AccountUsage {\n    readonly cost: readonly AccountUsageCost[];\n}',
+  },
+  {
+    name: 'AccountUsageCost',
+    declaration: 'export interface AccountUsageCost {\n    readonly currency: \'CNY\' | \'USD\';\n    readonly amount: string;\n}',
+  },
+  {
+    name: 'AccountUsageOutcome',
+    declaration: 'export type AccountUsageOutcome = {\n    readonly status: \'ready\';\n    readonly value: AccountUsage;\n} | {\n    readonly status: \'failed\';\n};',
   },
   {
     name: 'AccountUserId',

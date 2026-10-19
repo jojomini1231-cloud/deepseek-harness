@@ -1,7 +1,7 @@
 /** Account Remote delegation preserves provider results, failures, and stream lifetime. */
 import { Context } from '@deepseek-ai/cordis'
 import type { DeepSeekAccount } from '@deepseek-ai/dsh-deepseek-account'
-import type { AccountBonusBatch, AccountBonusOrderId, AccountClientMetadata, AccountUserId } from '@deepseek-ai/dsh-deepseek-account/types'
+import type { AccountBonusBatch, AccountBonusOrderId, AccountClientMetadata, AccountUsageOutcome, AccountUserId } from '@deepseek-ai/dsh-deepseek-account/types'
 import type { AccountView, SignInAttemptId } from '../src/types.ts'
 import { afterEach, expect, it, vi } from 'vitest'
 import AccountController from '../src/index.ts'
@@ -18,6 +18,7 @@ function fixture() {
     getState: vi.fn<DeepSeekAccount['getState']>().mockResolvedValue(state),
     getProfile: vi.fn<DeepSeekAccount['getProfile']>().mockResolvedValue({ status: 'failed' }),
     getBalance: vi.fn<DeepSeekAccount['getBalance']>().mockResolvedValue(null),
+    getUsage: vi.fn<DeepSeekAccount['getUsage']>().mockResolvedValue(null),
     getUnnotifiedBonuses: vi.fn<DeepSeekAccount['getUnnotifiedBonuses']>().mockResolvedValue(null),
     ackBonusNotified: vi.fn<DeepSeekAccount['ackBonusNotified']>().mockResolvedValue(false),
     startSignIn: vi.fn<DeepSeekAccount['startSignIn']>().mockResolvedValue(state),
@@ -45,6 +46,19 @@ it('delegates account operations without coupling profile and balance queries', 
   const failure = new Error('storage unavailable')
   provider.signOut.mockRejectedValueOnce(failure)
   await expect(controller.signOut(client)).rejects.toBe(failure)
+})
+
+it('delegates the fixed-window usage read without coupling balance', async () => {
+  const { provider, controller } = fixture()
+  const usage: AccountUsageOutcome = { status: 'ready', value: {
+    cost: [{ currency: 'CNY', amount: '11.94' }],
+  } }
+  provider.getUsage.mockResolvedValueOnce(usage)
+  expect(await controller.getUsage(client)).toBe(usage)
+  expect(provider.getUsage).toHaveBeenCalledExactlyOnceWith(client)
+  const failure = new Error('usage unavailable')
+  provider.getUsage.mockRejectedValueOnce(failure)
+  await expect(controller.getUsage(client)).rejects.toBe(failure)
 })
 
 it('delegates bonus reads and acknowledgements without altering their values', async () => {
