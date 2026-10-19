@@ -165,6 +165,22 @@ export const IconBranchOutlineMedium = (props: IconProps) => (
   <IconBranchOutlineArtwork {...props} strokeWidth={ICON_MEDIUM_STROKE} />
 )
 
+const IconBranchFillArtwork = ({ size = 16, className }: IconProps) => (
+  <svg width={size} height={size} className={className} viewBox="0 0 1024 1024" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M784 896c-79.6 0-144-64.4-144-144s64.4-144 144-144 144 64.4 144 144-64.4 144-144 144z m0-224c-44 0-80 36-80 80s36 80 80 80 80-36 80-80-36-80-80-80z" />
+    <path d="M784 672c-17.6 0-32-14.4-32-32v-160.4c0-42.8-16.8-83.2-47.2-113.2l-151.6-151.6c-12.4-12.4-12.4-32.8 0-45.2 12.4-12.4 32.8-12.4 45.2 0l151.6 151.6c42.4 42.4 65.6 98.8 65.6 158.4V640c0.4 17.6-14 32-31.6 32z" />
+    <path d="M576 384c-17.6 0-32-14.4-32-32V192c0-17.6 14.4-32 32-32h160c17.6 0 32 14.4 32 32s-14.4 32-32 32h-128v128c0 17.6-14.4 32-32 32zM240 416c-79.6 0-144-64.4-144-144s64.4-144 144-144 144 64.4 144 144-64.4 144-144 144z m0-224c-44 0-80 36-80 80s36 80 80 80 80-36 80-80-36-80-80-80z" />
+    <path d="M448 864c-8 0-16.4-3.2-22.8-9.2l-151.6-151.6C231.6 660.8 208 604.4 208 544.4V384c0-17.6 14.4-32 32-32s32 14.4 32 32v160.4c0 42.8 16.8 83.2 47.2 113.2l151.6 151.6c12.4 12.4 12.4 32.8 0 45.2-6.4 6.4-14.8 9.6-22.8 9.6z" />
+    <path d="M448 864H288c-17.6 0-32-14.4-32-32s14.4-32 32-32h128v-128c0-17.6 14.4-32 32-32s32 14.4 32 32v160c0 17.6-14.4 32-32 32z" />
+  </svg>
+)
+
+/** Regular IconBranchFill artwork; fill-only weights render identically. */
+export const IconBranchFillRegular = (props: IconProps) => <IconBranchFillArtwork {...props} />
+
+/** Medium IconBranchFill artwork; fill-only weights render identically. */
+export const IconBranchFillMedium = (props: IconProps) => <IconBranchFillArtwork {...props} />
+
 const IconChevronDownOutlineArtwork = ({ size = 14, className, strokeWidth }: WeightedIconProps) => (
   <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" strokeWidth={strokeWidth}>
     <path d="M4 6L7.29289 9.29289C7.68342 9.68342 8.31658 9.68342 8.70711 9.29289L12 6" stroke="currentColor" />

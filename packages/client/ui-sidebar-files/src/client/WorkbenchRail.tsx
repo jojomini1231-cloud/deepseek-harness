@@ -8,7 +8,7 @@
  */
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
-import { IconBranchOutlineRegular, IconFolderOpenOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconBranchFillRegular, IconFolderOpenOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from './locales.ts'
 import css from './FilesBody.module.css'
@@ -27,7 +27,7 @@ export interface RailItem {
 export const FILES_RAIL_ITEM: RailItem = { id: 'files', icon: <IconFolderOpenOutlineRegular />, label: 'rail.files' }
 
 /** The git container, offered only when the working directory is a repository. */
-export const GIT_RAIL_ITEM: RailItem = { id: 'git', icon: <IconBranchOutlineRegular />, label: 'rail.git' }
+export const GIT_RAIL_ITEM: RailItem = { id: 'git', icon: <IconBranchFillRegular />, label: 'rail.git' }
 
 /** The rail's props: the selected container and the gesture that selects one. */
 export interface WorkbenchRailProps {
