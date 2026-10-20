@@ -58,6 +58,13 @@ describe('filesFace', () => {
         status: undefined, loading: false, failure: false, selected: undefined, selectedFrom: undefined,
         scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: 0.58, groups: { changed: true, untracked: true },
       },
+      history: {
+        refs: undefined, refsLoading: false, refsFailure: false, ref: undefined,
+        commits: [], listEpoch: 0, hasMore: false, loading: false, failure: false,
+        selected: undefined, file: undefined, filesOpen: true,
+        detail: undefined, diff: undefined, diffMode: 'unified',
+        listScrollTop: 0, pageScrollTop: 0, ratio: 0.58, pageOpen: false,
+      },
     })
     await stream.deliver('ready')
     expect(list).toHaveBeenCalledWith(SESSION, ROOT, stream.signal)

@@ -21,7 +21,8 @@ import type { FilesBodyProps } from '../src/client/FilesBody.tsx'
 import { zh } from '../src/client/locales.ts'
 import { createFilesStore } from '../src/client/store.ts'
 import type {
-  WorkspaceFileDiff, WorkspaceGitDiffRequest, WorkspaceGitStatus,
+  WorkspaceFileDiff, WorkspaceGitCommitDetail, WorkspaceGitCommitDiffRequest, WorkspaceGitDiffRequest,
+  WorkspaceGitHistory, WorkspaceGitHistoryRequest, WorkspaceGitRef, WorkspaceGitStatus,
 } from '@deepseek-ai/dsh-workspace-changes/types'
 import { scriptedList } from './scripted-list.client.ts'
 import type { ScriptedList } from './scripted-list.client.ts'
@@ -55,6 +56,14 @@ export interface MountedGit {
   readonly diff?: WorkspaceFileDiff
 }
 
+/** Scripted answers for the history reads a mount should see. */
+export interface MountedHistory {
+  readonly refs?: readonly WorkspaceGitRef[]
+  readonly history?: WorkspaceGitHistory
+  readonly commit?: WorkspaceGitCommitDetail
+  readonly commitDiff?: WorkspaceFileDiff
+}
+
 /** What a spec holds after mounting: the rendered view and every hand on the tree. */
 export interface Mounted {
   readonly view: RenderResult
@@ -75,6 +84,20 @@ export interface Mounted {
   readonly gitDiff: Mock<(
     tabId: TabId, cwd: string, request: WorkspaceGitDiffRequest, signal: AbortSignal,
   ) => Promise<GitRead<WorkspaceFileDiff>>>
+  /** The scripted refs read the body sees. */
+  readonly historyRefs: Mock<(tabId: TabId, cwd: string, signal: AbortSignal) => Promise<GitRead<readonly WorkspaceGitRef[]>>>
+  /** The scripted history page read the body sees. */
+  readonly history: Mock<(
+    tabId: TabId, cwd: string, request: WorkspaceGitHistoryRequest, signal: AbortSignal,
+  ) => Promise<GitRead<WorkspaceGitHistory>>>
+  /** The scripted commit detail read the body sees. */
+  readonly commit: Mock<(
+    tabId: TabId, cwd: string, hash: string, signal: AbortSignal,
+  ) => Promise<GitRead<WorkspaceGitCommitDetail>>>
+  /** The scripted commit file comparison read the body sees. */
+  readonly commitDiff: Mock<(
+    tabId: TabId, cwd: string, request: WorkspaceGitCommitDiffRequest, signal: AbortSignal,
+  ) => Promise<GitRead<WorkspaceFileDiff>>>
 }
 
 /** One store instance, one face, one owner share. */
@@ -83,6 +106,7 @@ function harness(
   refreshShortcut?: ReturnType<FilesBodyProps['useTabInfo']>['tab']['refreshShortcut'],
   git?: MountedGit,
   panel?: { readonly expanded?: boolean; readonly visible?: boolean },
+  history?: MountedHistory,
 ) {
   const instance = createFilesStore().create()
   const script = scriptedList()
@@ -93,7 +117,16 @@ function harness(
   const gitDiff = vi.fn<FilesInjected['gitDiff']>(async () => ({ value: undefined, current: true }))
   if (git?.status !== undefined) gitStatus.mockResolvedValue({ value: git.status, current: true })
   if (git?.diff !== undefined) gitDiff.mockResolvedValue({ value: git.diff, current: true })
-  const face: FilesInjected = { ...real, gitStatus, gitDiff }
+  // The history reads go through the same Host routes; specs script them too.
+  const historyRefs = vi.fn<FilesInjected['historyRefs']>(async () => ({ value: undefined, current: true }))
+  const historyRead = vi.fn<FilesInjected['history']>(async () => ({ value: undefined, current: true }))
+  const commit = vi.fn<FilesInjected['commit']>(async () => ({ value: undefined, current: true }))
+  const commitDiff = vi.fn<FilesInjected['commitDiff']>(async () => ({ value: undefined, current: true }))
+  if (history?.refs !== undefined) historyRefs.mockResolvedValue({ value: history.refs, current: true })
+  if (history?.history !== undefined) historyRead.mockResolvedValue({ value: history.history, current: true })
+  if (history?.commit !== undefined) commit.mockResolvedValue({ value: history.commit, current: true })
+  if (history?.commitDiff !== undefined) commitDiff.mockResolvedValue({ value: history.commitDiff, current: true })
+  const face: FilesInjected = { ...real, gitStatus, gitDiff, historyRefs, history: historyRead, commit, commitDiff }
   const controller = new AbortController()
   onTestFinished(async () => {
     controller.abort()
@@ -139,7 +172,7 @@ function harness(
     ...face,
     t: makeTranslate(zh),
   }
-  return { instance, script, face, controller, tabActions, shared, gitStatus, gitDiff }
+  return { instance, script, face, controller, tabActions, shared, gitStatus, gitDiff, historyRefs, historyRead, commit, commitDiff }
 }
 
 /**
@@ -152,11 +185,13 @@ export function mountBody(
   refreshShortcut?: ReturnType<FilesBodyProps['useTabInfo']>['tab']['refreshShortcut'],
   git?: MountedGit,
   panel?: { readonly expanded?: boolean; readonly visible?: boolean },
+  history?: MountedHistory,
 ): Mounted {
-  const { shared, ...hands } = harness(cwd, refreshShortcut, git, panel)
+  const { shared, historyRead, ...hands } = harness(cwd, refreshShortcut, git, panel, history)
   const view = render(<FilesBody {...shared as unknown as FilesBodyProps} />)
   return {
-    ...hands, view, renderFactorySlot: shared.renderFactorySlot, renderSlot: shared.renderSlot,
+    ...hands, history: historyRead, view,
+    renderFactorySlot: shared.renderFactorySlot, renderSlot: shared.renderSlot,
     remount: () => render(<FilesBody {...shared as unknown as FilesBodyProps} />),
   }
 }

@@ -6,12 +6,7 @@
  * states each of them can be in and hands gestures back. The comparison is
  * rendered with the shared `DiffHunks`, the same diff surface the project's
  * change review uses.
- *
- * `LayoutControl` is its own two-button group rather than the shared
- * `SegmentedControl`: a segmented control is a tablist whose options select
- * panels, while here both buttons describe one comparison that stays on screen.
  */
-import { useCallback, useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import {
@@ -23,6 +18,8 @@ import type {} from './locales.ts'
 import type { GitTabState } from './store.ts'
 import css from './FilesBody.module.css'
 import { SplitView } from './SplitView.tsx'
+import { DiffModeControl } from './DiffModeControl.tsx'
+import { useScrollRestore } from './use-scroll-restore.ts'
 
 /** The panel's props: the git slice, the gestures, and translate. */
 export interface GitPanelProps {
@@ -114,15 +111,9 @@ function ChangeGroup({ group, label, entries, open, onToggle, onSelect, selected
 
 /** The list column: the panel header above the scrolling groups and their rows. */
 function ChangedPaths({ git, onSelect, onReload, onToggleGroup, onScrolled, t }: GitPanelProps): ReactNode {
-  const scrollTopRef = useRef(git.scrollTop)
-  const reportScrolled = useRef(onScrolled)
-  useEffect(() => { reportScrolled.current = onScrolled }, [onScrolled])
   // The panel unmounts when the reader switches containers, so the offset is
   // restored on mount and reported once on unmount rather than per scroll.
-  const listRef = useCallback((node: HTMLDivElement | null) => {
-    if (node !== null) node.scrollTop = scrollTopRef.current
-  }, [])
-  useEffect(() => () => { reportScrolled.current(scrollTopRef.current) }, [])
+  const { scrollRef: listRef, scrollTopRef } = useScrollRestore(git.scrollTop, onScrolled)
   const status = git.status
   const entries = status?.entries ?? []
   const changed = entries.filter(entry => entry.kind !== 'untracked')
@@ -195,30 +186,6 @@ function ChangedPaths({ git, onSelect, onReload, onToggleGroup, onScrolled, t }:
   )
 }
 
-/**
- * The layout control: one unified column, or both sides.
- * @param props - the shown layout and the pick gesture.
- * @returns the two segmented buttons.
- */
-function LayoutControl({ mode, onMode, t }: { mode: 'unified' | 'split'; onMode: (mode: 'unified' | 'split') => void } & { t: GitPanelProps['t'] }): ReactNode {
-  return (
-    <div className={css.gitMode} role="group" aria-label={t('diff.mode.aria')}>
-      {(['unified', 'split'] as const).map(choice => (
-        <button
-          key={choice}
-          type="button"
-          className={clsx(css.gitModeButton, choice === mode && css.gitModeActive)}
-          aria-pressed={choice === mode}
-          data-files-git-diff-mode={choice}
-          onClick={() => { onMode(choice) }}
-        >
-          {t(choice === 'unified' ? 'diff.mode.unified' : 'diff.mode.split')}
-        </button>
-      ))}
-    </div>
-  )
-}
-
 /** The diff column: the selected path's comparison in its states. */
 function Comparison(props: GitPanelProps): ReactNode {
   const { git, t, onMode, onRetryDiff } = props
@@ -243,7 +210,7 @@ function Comparison(props: GitPanelProps): ReactNode {
     <div className={css.gitDiff} data-files-git-diff={diff.path}>
       <div className={css.gitDiffHeader}>
         <span className={css.gitDiffPath}>{diff.display}</span>
-        <LayoutControl mode={git.diffMode} onMode={onMode} t={t} />
+        <DiffModeControl mode={git.diffMode} onMode={onMode} dataAttr="data-files-git-diff-mode" t={t} />
       </div>
       {diff.kind === 'binary'
         ? <p className={css.gitNote} data-files-git-diff-state="binary">{t('git.diff.binary')}</p>

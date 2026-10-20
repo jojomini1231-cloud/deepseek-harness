@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/subsystems/deliverables.md
 /deliverables:
-  en: a5ce6d07597594ec
-  zh: 72639c6033d66f41
+  en: b7befcf85fb59daf
+  zh: 0a90b9a627d43078
 /deliverables/presentedfile-one-declared-delivery:
   en: bf10a8aa233c61d9
   zh: fdab894f8448c843
@@ -29,9 +29,30 @@
 /deliverables/workspacegitdiffrequest-one-working-tree-comparison-request:
   en: 3903fdf10d69a54b
   zh: 390a62d5102ab81e
-/deliverables/workspacechanges-the-host-service-serving-summaries-comparisons-and-the-working-tree:
-  en: 2cf852000e2d2b6f
-  zh: b5153da91d825200
+/deliverables/workspacegitref-one-selectable-ref:
+  en: 15c26d86a2aa055e
+  zh: 267c9264c8284afa
+/deliverables/workspacegitcommit-one-commit:
+  en: 57843ce068b67dc9
+  zh: d144722a75b56d70
+/deliverables/workspacegithistory-one-history-page:
+  en: 4c344786e6ff64c0
+  zh: 651f76542559a7c7
+/deliverables/workspacegithistoryrequest-one-page-request:
+  en: 8923ac565d843b6c
+  zh: 981ba7f71a35aad7
+/deliverables/workspacegitcommitfile-one-changed-commit-file:
+  en: dd1c30270d3c10bf
+  zh: ea9c54f974b3929f
+/deliverables/workspacegitcommitdetail-one-commit-s-detail:
+  en: a2df5c681292c07e
+  zh: b00ac945b503799c
+/deliverables/workspacegitcommitdiffrequest-one-commit-file-comparison-request:
+  en: ec3d8c29c2e45222
+  zh: 2e8148ecb7ce1be8
+/deliverables/workspacechanges-the-host-service-serving-summaries-comparisons-the-working-tree-and-history:
+  en: 1e27405f094616c2
+  zh: d070a2cc2fa06e56
 /deliverables/durable-events-and-the-served-summary:
-  en: 138e4540efe09196
-  zh: 3c50c4e650b19194
+  en: 798fb96b5e5e7823
+  zh: 69234f3e56175952

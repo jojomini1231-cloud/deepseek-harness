@@ -107,6 +107,98 @@ export interface WorkspaceGitDiffRequest {
   from?: string
 }
 
+/** One ref in the Session working directory's repository, as the history filter offers it. */
+export interface WorkspaceGitRef {
+  /** Display name: a local branch such as `dev`, a remote branch such as `origin/dev`, or a tag. */
+  name: string
+  /**
+   * Full ref name, such as `refs/heads/dev`: the identity a history walk names.
+   * A branch and a tag may share a display name, and a bare name then resolves
+   * to the tag, so walks carry this spelling instead of the short one.
+   */
+  refname: string
+  /** What the ref names. */
+  kind: 'local' | 'remote' | 'tag'
+  /** Commit hash the ref points at; an annotated tag is peeled to its commit. */
+  hash: string
+  /** Present and true for the local branch `HEAD` is attached to. */
+  head?: true
+}
+
+/** One commit as the history list draws it. */
+export interface WorkspaceGitCommit {
+  /** Full commit hash. */
+  hash: string
+  /** Abbreviated hash git printed for the commit. */
+  short: string
+  /** Parent commit hashes in git's order; empty for the root commit. */
+  parents: readonly string[]
+  /** Author name. */
+  author: string
+  /** Author date in ISO 8601 with its offset. */
+  authoredAt: string
+  /** The message's first line. */
+  subject: string
+}
+
+/** One page of a repository's history. */
+export interface WorkspaceGitHistory {
+  /** Commits in git's topological order, newest first. */
+  commits: readonly WorkspaceGitCommit[]
+  /** Whether the ref has commits after this page. */
+  hasMore: boolean
+}
+
+/** Where one history page starts and how much it carries. */
+export interface WorkspaceGitHistoryRequest {
+  /** Full ref name to walk, such as `refs/heads/dev`; absent means the repository's `HEAD`. */
+  ref?: string
+  /** Commits to skip before the page, for paging. */
+  skip: number
+  /** Commits the page asks for; the Host caps it. */
+  limit: number
+}
+
+/** One file a commit changed, with the line counts git reports. */
+export interface WorkspaceGitCommitFile {
+  /** Path relative to the Session working directory, slash-separated. */
+  path: string
+  /** Sort key and label: the working-directory-relative path. */
+  display: string
+  /** What happened to the path. */
+  kind: 'added' | 'deleted' | 'modified' | 'renamed'
+  /** Original path of a rename, relative to the working directory. */
+  from?: string
+  /** Lines added; zero for a binary file. */
+  added: number
+  /** Lines deleted; zero for a binary file. */
+  deleted: number
+  /** Present when git reported the file as binary. */
+  binary?: true
+}
+
+/** One commit's message and changed files, as its page draws them. */
+export interface WorkspaceGitCommitDetail {
+  /** The commit itself. */
+  commit: WorkspaceGitCommit
+  /** The complete message, subject included, without git's trailing newline. */
+  message: string
+  /** Files the commit changed under the working directory, capped by the Host. */
+  files: readonly WorkspaceGitCommitFile[]
+  /** Complete changed-file count under the working directory, including files omitted by the cap. */
+  total: number
+}
+
+/** One commit file to compare with the commit's first parent. */
+export interface WorkspaceGitCommitDiffRequest {
+  /** Commit id to read, full or abbreviated; the answer describes the commit it resolves to. */
+  hash: string
+  /** Path relative to the Session working directory. */
+  path: string
+  /** Original path of a rename, relative to the working directory. */
+  from?: string
+}
+
 /** Serves the summaries and file comparisons the recorder keeps for live Sessions. */
 export interface WorkspaceChanges {
   /**
@@ -141,6 +233,43 @@ export interface WorkspaceChanges {
    * @returns the comparison, or undefined when a path leaves `cwd`, the path is gone, or git cannot answer.
    */
   workingDiff(cwd: string, request: WorkspaceGitDiffRequest, signal: AbortSignal): Promise<WorkspaceFileDiff | undefined>
+  /**
+   * List the refs the history view can walk.
+   * @param cwd - the Session working directory.
+   * @param signal - the request's cancellation.
+   * @returns local branches, remote branches, and tags; annotated tags are peeled to commits.
+   * @throws when git cannot answer.
+   */
+  historyRefs(cwd: string, signal: AbortSignal): Promise<readonly WorkspaceGitRef[]>
+  /**
+   * Read one page of a ref's history.
+   * @param cwd - the Session working directory.
+   * @param request - the ref to walk, the commits to skip, and the page size.
+   * @param signal - the request's cancellation.
+   * @returns the page, or an empty page when the repository has no commits yet.
+   * @throws when git cannot answer.
+   */
+  history(cwd: string, request: WorkspaceGitHistoryRequest, signal: AbortSignal): Promise<WorkspaceGitHistory>
+  /**
+   * Read one commit's message and changed files.
+   * @param cwd - the Session working directory.
+   * @param hash - the commit to read.
+   * @param signal - the request's cancellation.
+   * @returns the commit, or undefined when no commit has that hash.
+   * @throws when git cannot answer.
+   */
+  commit(cwd: string, hash: string, signal: AbortSignal): Promise<WorkspaceGitCommitDetail | undefined>
+  /**
+   * Compare one commit file with the commit's first parent.
+   * @param cwd - the Session working directory.
+   * @param request - the commit, the path to compare, and a rename origin.
+   * @param signal - the request's cancellation.
+   * @returns the comparison, or undefined when a path leaves `cwd` (directly or through a symbolic
+   *   link), the commit is unknown, or the path has nothing to compare; an oversized patch answers
+   *   `kind: 'oversized'` rather than undefined.
+   * @throws when git fails to produce the comparison.
+   */
+  commitDiff(cwd: string, request: WorkspaceGitCommitDiffRequest, signal: AbortSignal): Promise<WorkspaceFileDiff | undefined>
 }
 
 declare module '@deepseek-ai/dsh-session/types' {

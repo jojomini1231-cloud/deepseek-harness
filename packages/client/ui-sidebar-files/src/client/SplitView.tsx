@@ -32,6 +32,9 @@ function clamp(ratio: number): number {
   return Math.min(MAX_RATIO, Math.max(MIN_RATIO, ratio))
 }
 
+/** How far one arrow key moves a focused separator drag, as a share of the workbench. */
+const KEY_STEP = 0.02
+
 /**
  * Render one draggable divider between two columns.
  * @param props - the columns, the settled ratio, and the settle callback.
@@ -73,6 +76,15 @@ export function SplitView({ ratio, onRatio, content, tree, label }: SplitViewPro
     if (box === undefined || box.width === 0) return
     onRatio(clamp((event.clientX - box.left) / box.width))
   }, [onRatio])
+  // The divider is the only way to resize the columns, so it takes the
+  // keyboard too: arrows move the settled ratio by one step, and the role's
+  // value range states where the divider stands.
+  const onKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = event.key === 'ArrowLeft' ? -KEY_STEP : event.key === 'ArrowRight' ? KEY_STEP : undefined
+    if (step === undefined) return
+    event.preventDefault()
+    onRatio(clamp(applied + step))
+  }, [applied, onRatio])
 
   return (
     <div
@@ -89,11 +101,16 @@ export function SplitView({ ratio, onRatio, content, tree, label }: SplitViewPro
         role="separator"
         aria-orientation="vertical"
         aria-label={label}
+        aria-valuemin={Math.round(MIN_RATIO * 100)}
+        aria-valuemax={Math.round(MAX_RATIO * 100)}
+        aria-valuenow={Math.round(applied * 100)}
+        tabIndex={0}
         data-files-splitter
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={() => { setDragging(undefined) }}
+        onKeyDown={onKeyDown}
       />
       <div className={css.treeColumn} data-files-tree-column>
         {tree}

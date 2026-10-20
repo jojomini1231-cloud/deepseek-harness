@@ -1,6 +1,6 @@
 /** Numstat parsing. */
 import { describe, expect, it } from 'vitest'
-import { parseNumstat } from '../src/numstat.ts'
+import { parseNumstat, parseNumstatRecords } from '../src/numstat.ts'
 
 describe('parseNumstat', () => {
   it('reads plain, binary, and rename records', () => {
@@ -20,6 +20,20 @@ describe('parseNumstat', () => {
     expect(() => parseNumstat('1\t1\ta.txt')).toThrow('NUL-terminated')
     expect(() => parseNumstat('garbage\0')).toThrow('malformed numstat record')
     expect(() => parseNumstat('1\t0\t\0old.txt\0')).toThrow('rename')
+  })
+})
+
+describe('parseNumstatRecords', () => {
+  it('reads a section a combined listing already split', () => {
+    // The combined `--raw --numstat` command hands this parser the numstat
+    // section alone, with the listing's terminator already consumed.
+    expect(parseNumstatRecords(['1\t0\ta.txt', '2\t1\t', 'old.txt', 'new.txt'])).toEqual([
+      { path: 'a.txt', added: 1, deleted: 0, binary: false },
+      { path: 'new.txt', oldPath: 'old.txt', added: 2, deleted: 1, binary: false },
+    ])
+    expect(parseNumstatRecords([])).toEqual([])
+    expect(() => parseNumstatRecords(['garbage'])).toThrow('malformed numstat record')
+    expect(() => parseNumstatRecords(['1\t0\t'])).toThrow('rename')
   })
 })
 

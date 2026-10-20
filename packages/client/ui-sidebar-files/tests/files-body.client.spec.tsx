@@ -245,12 +245,15 @@ describe('FilesBody', () => {
     expect(rail.getAttribute('role')).toBe('toolbar')
     expect(rail.getAttribute('aria-label')).toBe(zh['rail.aria'])
     const items = [...rail.querySelectorAll<HTMLElement>('[data-files-rail-item]')]
-    // The failed working-tree probe keeps the git container's retry reachable.
-    expect(items.map(item => item.dataset.filesRailItem)).toEqual(['files', 'git'])
+    // The failed working-tree probe keeps the git and history containers'
+    // retries reachable.
+    expect(items.map(item => item.dataset.filesRailItem)).toEqual(['files', 'git', 'history'])
     expect(items[0]!.getAttribute('aria-label')).toBe(zh['rail.files'])
     expect(items[0]!.getAttribute('aria-current')).toBe('page')
     expect(items[1]!.getAttribute('aria-label')).toBe(zh['rail.git'])
     expect(items[1]!.getAttribute('aria-current')).toBeNull()
+    expect(items[2]!.getAttribute('aria-label')).toBe(zh['rail.history'])
+    expect(items[2]!.getAttribute('aria-current')).toBeNull()
     expect(items[0]!.textContent).toBe('')
     // It is the workbench's trailing edge: after both columns, not before them.
     const row = rail.parentElement!

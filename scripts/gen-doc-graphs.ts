@@ -338,9 +338,9 @@ const SERVICE_ROLES: ServiceRole[] = [
   {
     key: 'workspaceChanges',
     pkg: 'workspace-changes',
-    title: 'Host per-turn changed-file summaries',
+    title: 'Host changed-file summaries, working-tree git state, and repository history',
     mode: 'core',
-    note: 'Serves the summary each workspace/changes event announced and each listed file\'s turn-start and turn-end comparison, by Session and event sequence, until that Session is disposed; the log carries only the turn.',
+    note: 'Serves the summary each workspace/changes event announced and each listed file\'s turn-start and turn-end comparison, by Session and event sequence, until that Session is disposed; the log carries only the turn. Also reads the Session working directory\'s git state and per-path comparison for the Files workbench\'s git view, and the repository\'s refs, paged history, commit details, and first-parent commit-file comparisons for its history view; those reads are stateless and read-only.',
   },
   {
     key: 'terminalController',

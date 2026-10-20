@@ -1,0 +1,694 @@
+/* The history view: the navigator column with its commit list, and the commit
+   page leading it in the wide layout. Every size is layout; every color rides
+   a --dsw-alias-* theme token. */
+.panel {
+  display: flex;
+  flex: 1 1 auto;
+  /* --files-history-row-height is published here by the component, which draws
+     the graph gutter's geometry in the same unit. */
+  min-width: 0;
+  min-height: 0;
+}
+
+.navigator {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The navigator's top bar stays above its scroller, so a long list scrolls
+   under the title, filter, and refresh instead of carrying them away. */
+.navHeader {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: center;
+  box-sizing: border-box;
+  height: var(--files-row-height, 38px);
+  padding: 0 6px 0 12px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l3);
+}
+
+.navTitle {
+  flex: none;
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+.navSpacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The refs filter chip: a quiet capsule naming the walked ref. */
+.refsChip {
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+  max-width: 55%;
+  height: 24px;
+  padding: 0 7px;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  background: transparent;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+  cursor: pointer;
+}
+
+.refsChip:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.refsChipLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The refs popover: portalled to the body and fixed at the anchor's
+   coordinates, so the clipping columns never crop it. */
+.refsMenu {
+  position: fixed;
+  z-index: 100;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 280px;
+  max-width: calc(100vw - 32px);
+  max-height: min(440px, calc(100vh - 24px));
+  padding: 6px;
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+  box-shadow: var(--dsw-elevation-prominent);
+}
+
+/* The search box sits on the menu fill rather than the input's own layer. The
+   height and text size come from the primitive's compact form; only the fill
+   is this popover's, and the parent class outranks the wrapper's own styles
+   whichever stylesheet the bundle orders first. */
+.refsMenu .refsSearch {
+  flex: none;
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.refsGroups {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 2px 0;
+  overflow: auto;
+}
+
+.refOption {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  width: 100%;
+  height: 28px;
+  padding: 0 7px;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  text-align: start;
+  background: transparent;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  cursor: pointer;
+}
+
+.refOption:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.refOptionActive {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-active);
+}
+
+.refMark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.refName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.refsHint {
+  flex: none;
+  padding: 7px 7px 3px;
+  margin: 4px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.refsNote {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  padding: 8px 7px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+/* The commit list's one scroller. */
+.commitList {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 4px 0 16px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+/* One commit: the inline graph gutter and two lines of text on one row. The
+   row and the gutter share --files-history-row-height, published by the
+   component, so the drawing and its row cannot drift apart. */
+.commitRow {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--files-history-row-height, 44px);
+  padding: 0 8px 0 4px;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.commitRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.commitRowActive {
+  background: var(--dsw-alias-interactive-bg-active, var(--dsw-alias-interactive-bg-hover));
+}
+
+/* The inline commit graph: a narrow gutter, never its own column. Its height
+   is the row's, so the lanes end where the row does. */
+.graph {
+  flex: none;
+  align-self: center;
+  height: var(--files-history-row-height, 44px);
+  overflow: hidden;
+  color: var(--dsw-alias-state-business-primary);
+}
+
+/* Six categorical lane tints drawn from the brand and neutral ramps. The
+   status aliases mean health, so a decorative lane must not borrow them: a
+   red or amber line on an ordinary commit graph reads as an error state. */
+.lane0 { color: var(--dsw-alias-state-business-primary); }
+.lane1 { color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 70%, var(--dsw-alias-label-primary)); }
+.lane2 { color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 45%, var(--dsw-alias-label-secondary)); }
+.lane3 { color: var(--dsw-alias-label-secondary); }
+.lane4 { color: var(--dsw-alias-label-tertiary); }
+.lane5 { color: var(--dsw-alias-label-caption); }
+
+.commitMain {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  justify-content: center;
+  min-width: 0;
+}
+
+.commitLine1 {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  min-width: 0;
+}
+
+.refPills {
+  display: flex;
+  flex: none;
+  gap: 3px;
+  align-items: center;
+}
+
+/* The row's ref pills shrink before the subject does; a very long ref name
+   stops at the row's one-line width instead of pushing the subject out. The
+   ellipsis rides a child span because the tag itself is a flex container. */
+.refPill {
+  max-width: 120px;
+  overflow: hidden;
+}
+
+.refPillLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commitSubject {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.commitLine2 {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.commitHash {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}
+
+.commitAuthor {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  text-overflow: ellipsis;
+}
+
+.commitSep {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.commitTime {
+  flex: none;
+  margin-left: auto;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* The approved optional first row: the working tree's uncommitted changes,
+   which hands the reader to the existing git container. */
+.dirtyRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px 0 12px;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  text-align: start;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.dirtyRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dirtyDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  background: var(--dsw-alias-state-warn-primary);
+  border-radius: 50%;
+  corner-shape: round;
+}
+
+.dirtyCount {
+  margin-left: auto;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.loadMore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: calc(100% - 24px);
+  height: 32px;
+  margin: 4px 12px;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  background: transparent;
+  border: 1px dashed var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+  cursor: pointer;
+}
+
+.loadMore:hover:not(:disabled) {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.loadMore:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.note {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.noteRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+/* The commit page: everything above the comparison takes its own height and
+   the comparison takes what is left, so a short page fills the column. */
+.page {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 14px 20px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.page > :not(.diff, .diffFill) {
+  flex: none;
+}
+
+/* Narrow drill-down: the way back to the list. */
+.pageBack {
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+  align-self: flex-start;
+  height: 24px;
+  padding: 0 6px 0 2px;
+  margin: -2px 0 8px;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  cursor: pointer;
+}
+
+.pageBack:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.pageSubject {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.pageMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 5px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.pageHash {
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}
+
+.pageSep {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.pageMeta .refPills,
+.pagePills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  align-items: center;
+}
+
+/* The full-message disclosure follows the page's other disclosures: a quiet
+   secondary line that darkens on hover. It is not a link — pressing it folds
+   the page's own message — so it must not borrow the link tone. */
+.messageToggle {
+  display: inline-flex;
+  flex: none;
+  gap: 3px;
+  align-items: center;
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 0;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.messageToggle:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.message {
+  padding: 8px 10px;
+  margin: 7px 0 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--dsw-alias-bg-layer-2);
+  border-radius: var(--dsw-radius-sm);
+}
+
+/* The changed files fold into the commit page: the summary row stays, the rows
+   scroll inside a capped box, and folding hands the comparison their height. */
+.fileSection {
+  flex: none;
+  margin-top: 12px;
+  overflow: hidden;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+}
+
+.fileSummary {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  text-align: start;
+  white-space: nowrap;
+  background: var(--dsw-alias-bg-layer-1);
+  border: 0;
+  cursor: pointer;
+}
+
+.fileSummary > * {
+  flex: none;
+}
+
+.fileSummary:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.fileSummaryAdded {
+  color: var(--dsw-alias-state-success-primary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}
+
+.fileSummaryDeleted {
+  color: var(--dsw-alias-state-error-primary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}
+
+.fileSummaryCurrent {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  text-align: end;
+  text-overflow: ellipsis;
+}
+
+.fileRows {
+  max-height: 268px;
+  overflow: auto;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.fileRow {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  text-align: start;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.fileRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.fileRowActive {
+  background: var(--dsw-alias-interactive-bg-active, var(--dsw-alias-interactive-bg-hover));
+}
+
+.fileLetter {
+  flex: none;
+  width: 12px;
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.fileLetter_added { color: var(--dsw-alias-state-success-primary); }
+.fileLetter_deleted { color: var(--dsw-alias-state-error-primary); }
+.fileLetter_modified { color: var(--dsw-alias-state-warn-primary); }
+.fileLetter_renamed { color: var(--dsw-alias-label-secondary); }
+
+.filePath {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.fileCounts {
+  display: flex;
+  flex: none;
+  gap: 5px;
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}
+
+.fileCountsAdded { color: var(--dsw-alias-state-success-primary); }
+.fileCountsDeleted { color: var(--dsw-alias-state-error-primary); }
+
+.fileNote {
+  padding: 6px 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+/* The comparison fills the height the page leaves it, and scrolls inside. */
+.diff {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 220px;
+  margin-top: 12px;
+  overflow: hidden;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+}
+
+.diffHeader {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  align-items: center;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.diffPath {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.diffBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Filling states keep the comparison's box so the column does not jump when
+   the comparison arrives; the note sits at its top. */
+.diffFill {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 220px;
+  margin-top: 12px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-sm);
+}

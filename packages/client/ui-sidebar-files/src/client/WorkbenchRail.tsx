@@ -3,24 +3,25 @@
  * per view container, that selects what the body draws beside it.
  *
  * The rail owns no state. It draws the containers it is given and reports the
- * selected one back; the workbench offers the files container and, for a
- * repository, the git container.
+ * selected one back; the workbench offers the files container always and, for a
+ * repository, the git view and the history view.
  */
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
-import { IconBranchFillRegular, IconFolderOpenOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconBranchFillRegular, IconClockOutlineRegular, IconFolderOpenOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from './locales.ts'
+import type { WorkbenchContainer } from './store.ts'
 import css from './FilesBody.module.css'
 
 /** One view container the rail can select. */
 export interface RailItem {
   /** Stable container id. */
-  readonly id: string
+  readonly id: WorkbenchContainer
   /** The container's icon; the rail never draws text. */
   readonly icon: ReactNode
   /** Locale key naming the container, used for the tooltip and the accessible name. */
-  readonly label: 'rail.files' | 'rail.git'
+  readonly label: 'rail.files' | 'rail.git' | 'rail.history'
 }
 
 /** The file container, always offered: the workbench's own tree and preview. */
@@ -29,14 +30,17 @@ export const FILES_RAIL_ITEM: RailItem = { id: 'files', icon: <IconFolderOpenOut
 /** The git container, offered only when the working directory is a repository. */
 export const GIT_RAIL_ITEM: RailItem = { id: 'git', icon: <IconBranchFillRegular />, label: 'rail.git' }
 
+/** The history container, offered with the git container: it needs a repository too. */
+export const HISTORY_RAIL_ITEM: RailItem = { id: 'history', icon: <IconClockOutlineRegular />, label: 'rail.history' }
+
 /** The rail's props: the selected container and the gesture that selects one. */
 export interface WorkbenchRailProps {
   /** The containers this workbench offers, in rail order. */
   readonly items: readonly RailItem[]
   /** Id of the container the body is drawing. */
-  readonly selected: string
+  readonly selected: WorkbenchContainer
   /** Select a container. */
-  readonly onSelect: (id: string) => void
+  readonly onSelect: (id: WorkbenchContainer) => void
   readonly t: TranslateNS<'sidebarFiles'>
 }
 

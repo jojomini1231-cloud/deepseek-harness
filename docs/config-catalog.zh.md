@@ -809,7 +809,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-deepseek-account-platform`
 
 - `inject`: `credentials` · `authorization`
-- `source`: [`packages/credentials/deepseek-account-platform/src/index.ts:23`](../packages/credentials/deepseek-account-platform/src/index.ts)
+- `source`: [`packages/credentials/deepseek-account-platform/src/index.ts:24`](../packages/credentials/deepseek-account-platform/src/index.ts)
 
 ```ts config-catalog
 /** Deployment-specific platform and request deadlines. */
@@ -4570,7 +4570,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-workspace-changes`
 
 - `inject`: `subprocess` · `fs`
-- `source`: [`packages/deliverables/workspace-changes/src/index.ts:34`](../packages/deliverables/workspace-changes/src/index.ts)
+- `source`: [`packages/deliverables/workspace-changes/src/index.ts:39`](../packages/deliverables/workspace-changes/src/index.ts)
 
 ```ts config-catalog
 /** Snapshot, capture, and comparison bounds. Invalid values fail plugin load. */
@@ -4579,11 +4579,14 @@ export interface Config {
   timeoutMs: number
   /** Bytes of git output retained per command; a larger diff listing abandons the record. */
   outputMaxBytes: number
-  /** Maximum files carried by one summary; `total` still reports the complete count. */
+  /** Maximum files carried by one summary or one commit detail; `total` still reports the complete count. */
   maxFiles: number
+  /** Maximum commits carried by one history page; a larger page request is clamped to it. */
+  maxCommits: number
   /**
    * Bytes a file may hold to be captured around a file-tool edit or read from a snapshot for its comparison.
-   * A larger file gets no comparison; one captured around a file-tool edit is also listed without counts.
+   * A larger file gets no comparison; one captured around a file-tool edit is also listed without counts, and a
+   * larger commit patch is reported oversized.
    */
   maxFileBytes: number
   /** Milliseconds a line comparison may run before it degrades to whole-file replacement. */
@@ -4649,7 +4652,7 @@ export interface Config {
 | `@deepseek-ai/dsh-client-ui-shortcuts` | — | [`packages/client/ui-shortcuts/src/index.ts`](../packages/client/ui-shortcuts/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-sidebar` | — | [`packages/client/ui-sidebar/src/index.ts`](../packages/client/ui-sidebar/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-sidebar-browser` | — | [`packages/client/ui-sidebar-browser/src/index.ts`](../packages/client/ui-sidebar-browser/src/index.ts) |
-| `@deepseek-ai/dsh-client-ui-sidebar-files` | — | [`packages/client/ui-sidebar-files/src/index.ts`](../packages/client/ui-sidebar-files/src/index.ts) |
+| `@deepseek-ai/dsh-client-ui-sidebar-files` | `connection` · `sessions` · `workspaceChanges` | [`packages/client/ui-sidebar-files/src/index.ts`](../packages/client/ui-sidebar-files/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-sidebar-right` | — | [`packages/client/ui-sidebar-right/src/index.ts`](../packages/client/ui-sidebar-right/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-sidebar-terminal` | — | [`packages/client/ui-sidebar-terminal/src/index.ts`](../packages/client/ui-sidebar-terminal/src/index.ts) |
 | `@deepseek-ai/dsh-client-ui-skill` | — | [`packages/client/ui-skill/src/index.ts`](../packages/client/ui-skill/src/index.ts) |

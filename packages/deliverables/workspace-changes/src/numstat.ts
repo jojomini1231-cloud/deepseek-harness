@@ -18,12 +18,24 @@ export interface NumstatEntry {
  * @throws when a record is malformed, which indicates truncated output.
  */
 export function parseNumstat(output: string): NumstatEntry[] {
-  const queue = output.split('\0')
-  if (queue.at(-1) !== '') throw new Error('numstat output is not NUL-terminated')
-  queue.pop()
+  const records = output.split('\0')
+  if (records.at(-1) !== '') throw new Error('numstat output is not NUL-terminated')
+  records.pop()
+  return parseNumstatRecords(records)
+}
+
+/**
+ * Parse the records of a NUL-split numstat listing, without its final empty
+ * field, so a listing that also carries a raw block can pass its own slice.
+ * @param records - the listing's fields, terminator removed.
+ * @returns records in git's output order.
+ * @throws when a record is malformed, which indicates truncated output.
+ */
+export function parseNumstatRecords(records: readonly string[]): NumstatEntry[] {
   const entries: NumstatEntry[] = []
-  while (queue.length > 0) {
-    const record = queue.shift() as string
+  let at = 0
+  while (at < records.length) {
+    const record = records[at++] as string
     // Only the first two tabs separate fields; a file name keeps its own tabs.
     const first = record.indexOf('\t')
     const second = first < 0 ? -1 : record.indexOf('\t', first + 1)
@@ -34,8 +46,8 @@ export function parseNumstat(output: string): NumstatEntry[] {
     let target = path
     let oldPath: string | undefined
     if (target === '') {
-      oldPath = queue.shift()
-      const renamed = queue.shift()
+      oldPath = records[at++]
+      const renamed = records[at++]
       if (oldPath === undefined || renamed === undefined) throw new Error('malformed numstat rename record')
       target = renamed
     }

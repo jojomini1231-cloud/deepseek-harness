@@ -2,7 +2,7 @@
 
 English | [中文](deliverables.zh.md)
 
-What a turn hands to the user, owned by the [deliverables package group](../../packages/deliverables/README.md): the files the model declared through the `present` tool, recorded in a log-only Session event, and the files the turn changed, summarized from git working-tree snapshots taken at turn start and turn end plus whole-file captures around each file-tool edit for the paths git does not cover, announced by a log-only event and served by a Host service while the Session lives together with each listed file's turn-start and turn-end comparison. Only clients read them; the Web [deliverables plugin](../../packages/client/ui-deliverables/README.md) renders both at the end of the turn. Tool behavior, snapshot mechanics, and configuration are on the package READMEs for [`tool-present`](../../packages/deliverables/tool-present/README.md) and [`workspace-changes`](../../packages/deliverables/workspace-changes/README.md).
+What a turn hands to the user, owned by the [deliverables package group](../../packages/deliverables/README.md): the files the model declared through the `present` tool, recorded in a log-only Session event, and the files the turn changed, summarized from git working-tree snapshots taken at turn start and turn end plus whole-file captures around each file-tool edit for the paths git does not cover, announced by a log-only event and served by a Host service while the Session lives together with each listed file's turn-start and turn-end comparison. The same service serves the read-only repository history the Files workbench's history view reads. Only clients read them; the Web [deliverables plugin](../../packages/client/ui-deliverables/README.md) renders both at the end of the turn. Tool behavior, snapshot mechanics, and configuration are on the package READMEs for [`tool-present`](../../packages/deliverables/tool-present/README.md) and [`workspace-changes`](../../packages/deliverables/workspace-changes/README.md).
 
 Sources: [`packages/deliverables/tool-present/src/types.ts`](../../packages/deliverables/tool-present/src/types.ts), [`packages/deliverables/workspace-changes/src/types.ts`](../../packages/deliverables/workspace-changes/src/types.ts)
 
@@ -152,9 +152,129 @@ interface WorkspaceGitDiffRequest {
 }
 ```
 
-## `WorkspaceChanges` — the Host service serving summaries, comparisons, and the working tree
+## `WorkspaceGitRef` — one selectable ref
 
-`workingTree` and `workingDiff` serve the Files workbench's git view from the Session working directory; the earlier methods serve one recorded turn.
+```ts type-equiv
+/** One ref in the Session working directory's repository, as the history filter offers it. */
+interface WorkspaceGitRef {
+  /** Display name: a local branch such as `dev`, a remote branch such as `origin/dev`, or a tag. */
+  name: string
+  /**
+   * Full ref name, such as `refs/heads/dev`: the identity a history walk names.
+   * A branch and a tag may share a display name, and a bare name then resolves
+   * to the tag, so walks carry this spelling instead of the short one.
+   */
+  refname: string
+  /** What the ref names. */
+  kind: 'local' | 'remote' | 'tag'
+  /** Commit hash the ref points at; an annotated tag is peeled to its commit. */
+  hash: string
+  /** Present and true for the local branch `HEAD` is attached to. */
+  head?: true
+}
+```
+
+## `WorkspaceGitCommit` — one commit
+
+```ts type-equiv
+/** One commit as the history list draws it. */
+interface WorkspaceGitCommit {
+  /** Full commit hash. */
+  hash: string
+  /** Abbreviated hash git printed for the commit. */
+  short: string
+  /** Parent commit hashes in git's order; empty for the root commit. */
+  parents: readonly string[]
+  /** Author name. */
+  author: string
+  /** Author date in ISO 8601 with its offset. */
+  authoredAt: string
+  /** The message's first line. */
+  subject: string
+}
+```
+
+## `WorkspaceGitHistory` — one history page
+
+```ts type-equiv
+/** One page of a repository's history. */
+interface WorkspaceGitHistory {
+  /** Commits in git's topological order, newest first. */
+  commits: readonly WorkspaceGitCommit[]
+  /** Whether the ref has commits after this page. */
+  hasMore: boolean
+}
+```
+
+## `WorkspaceGitHistoryRequest` — one page request
+
+```ts type-equiv
+/** Where one history page starts and how much it carries. */
+interface WorkspaceGitHistoryRequest {
+  /** Full ref name to walk, such as `refs/heads/dev`; absent means the repository's `HEAD`. */
+  ref?: string
+  /** Commits to skip before the page, for paging. */
+  skip: number
+  /** Commits the page asks for; the Host caps it. */
+  limit: number
+}
+```
+
+## `WorkspaceGitCommitFile` — one changed commit file
+
+```ts type-equiv
+/** One file a commit changed, with the line counts git reports. */
+interface WorkspaceGitCommitFile {
+  /** Path relative to the Session working directory, slash-separated. */
+  path: string
+  /** Sort key and label: the working-directory-relative path. */
+  display: string
+  /** What happened to the path. */
+  kind: 'added' | 'deleted' | 'modified' | 'renamed'
+  /** Original path of a rename, relative to the working directory. */
+  from?: string
+  /** Lines added; zero for a binary file. */
+  added: number
+  /** Lines deleted; zero for a binary file. */
+  deleted: number
+  /** Present when git reported the file as binary. */
+  binary?: true
+}
+```
+
+## `WorkspaceGitCommitDetail` — one commit's detail
+
+```ts type-equiv
+/** One commit's message and changed files, as its page draws them. */
+interface WorkspaceGitCommitDetail {
+  /** The commit itself. */
+  commit: WorkspaceGitCommit
+  /** The complete message, subject included, without git's trailing newline. */
+  message: string
+  /** Files the commit changed under the working directory, capped by the Host. */
+  files: readonly WorkspaceGitCommitFile[]
+  /** Complete changed-file count under the working directory, including files omitted by the cap. */
+  total: number
+}
+```
+
+## `WorkspaceGitCommitDiffRequest` — one commit-file comparison request
+
+```ts type-equiv
+/** One commit file to compare with the commit's first parent. */
+interface WorkspaceGitCommitDiffRequest {
+  /** Commit id to read, full or abbreviated; the answer describes the commit it resolves to. */
+  hash: string
+  /** Path relative to the Session working directory. */
+  path: string
+  /** Original path of a rename, relative to the working directory. */
+  from?: string
+}
+```
+
+## `WorkspaceChanges` — the Host service serving summaries, comparisons, the working tree, and history
+
+`workingTree` and `workingDiff` serve the Files workbench's git view from the Session working directory; `historyRefs`, `history`, `commit`, and `commitDiff` serve its history view from the repository; the earlier methods serve one recorded turn.
 
 ```ts type-equiv
 /** Serves the summaries and file comparisons the recorder keeps for live Sessions. */
@@ -191,12 +311,49 @@ interface WorkspaceChanges {
    * @returns the comparison, or undefined when a path leaves `cwd`, the path is gone, or git cannot answer.
    */
   workingDiff(cwd: string, request: WorkspaceGitDiffRequest, signal: AbortSignal): Promise<WorkspaceFileDiff | undefined>
+  /**
+   * List the refs the history view can walk.
+   * @param cwd - the Session working directory.
+   * @param signal - the request's cancellation.
+   * @returns local branches, remote branches, and tags; annotated tags are peeled to commits.
+   * @throws when git cannot answer.
+   */
+  historyRefs(cwd: string, signal: AbortSignal): Promise<readonly WorkspaceGitRef[]>
+  /**
+   * Read one page of a ref's history.
+   * @param cwd - the Session working directory.
+   * @param request - the ref to walk, the commits to skip, and the page size.
+   * @param signal - the request's cancellation.
+   * @returns the page, or an empty page when the repository has no commits yet.
+   * @throws when git cannot answer.
+   */
+  history(cwd: string, request: WorkspaceGitHistoryRequest, signal: AbortSignal): Promise<WorkspaceGitHistory>
+  /**
+   * Read one commit's message and changed files.
+   * @param cwd - the Session working directory.
+   * @param hash - the commit to read.
+   * @param signal - the request's cancellation.
+   * @returns the commit, or undefined when no commit has that hash.
+   * @throws when git cannot answer.
+   */
+  commit(cwd: string, hash: string, signal: AbortSignal): Promise<WorkspaceGitCommitDetail | undefined>
+  /**
+   * Compare one commit file with the commit's first parent.
+   * @param cwd - the Session working directory.
+   * @param request - the commit, the path to compare, and a rename origin.
+   * @param signal - the request's cancellation.
+   * @returns the comparison, or undefined when a path leaves `cwd` (directly or through a symbolic
+   *   link), the commit is unknown, or the path has nothing to compare; an oversized patch answers
+   *   `kind: 'oversized'` rather than undefined.
+   * @throws when git fails to produce the comparison.
+   */
+  commitDiff(cwd: string, request: WorkspaceGitCommitDiffRequest, signal: AbortSignal): Promise<WorkspaceFileDiff | undefined>
 }
 ```
 
 ## Durable events and the served summary
 
-`tool-present` declaration-merges `deliverables/presented: { turn; callId; files: PresentedFile[] }` into `SessionEventMap`, appended once per successful final `present` result. `workspace-changes` merges `workspace/changes: { turn }`, appended when a top-level turn stops; the summary that event announced is not in the log but is returned by `workspaceChanges.summary(sessionId, seq)` for the event's sequence until the Session is disposed, so a conversation reopened after a Host restart has no changed-files card for its earlier turns. `workspaceChanges.diff(sessionId, seq, index, signal)` compares one listed file on the same terms. A later event for the same turn replaces the earlier one, so a client keeps only the latest. The generated [persistence catalog](../persistence-catalog.md#deliverablespresented--log-only) records both declaration sites. Neither event reaches the model.
+`tool-present` declaration-merges `deliverables/presented: { turn; callId; files: PresentedFile[] }` into `SessionEventMap`, appended once per successful final `present` result. `workspace-changes` merges `workspace/changes: { turn }`, appended when a top-level turn stops; the summary that event announced is not in the log but is returned by `workspaceChanges.summary(sessionId, seq)` for the event's sequence until the Session is disposed, so a conversation reopened after a Host restart has no changed-files card for its earlier turns. `workspaceChanges.diff(sessionId, seq, index, signal)` compares one listed file on the same terms. A later event for the same turn replaces the earlier one, so a client keeps only the latest. The generated [persistence catalog](../persistence-catalog.md#deliverablespresented--log-only) records both declaration sites. The history methods read the repository directly, append no event, and keep nothing in the log; their refs, pages, commit details, and comparisons are served on demand. Neither event reaches the model.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -248,6 +405,47 @@ workingTree(cwd: string, signal: AbortSignal): Promise<WorkspaceGitStatus>
  * @returns the comparison, or undefined when a path leaves `cwd`, the path is gone, or git cannot answer.
  */
 workingDiff(cwd: string, request: WorkspaceGitDiffRequest, signal: AbortSignal): Promise<WorkspaceFileDiff | undefined>
+
+/**
+ * List the refs the history view can walk.
+ * @param cwd - the Session working directory.
+ * @param signal - the request's cancellation.
+ * @returns local branches, remote branches, and tags; annotated tags are peeled to commits.
+ * @throws when git cannot answer.
+ */
+historyRefs(cwd: string, signal: AbortSignal): Promise<readonly WorkspaceGitRef[]>
+
+/**
+ * Read one page of a ref's history.
+ * @param cwd - the Session working directory.
+ * @param request - the ref to walk, the commits to skip, and the page size.
+ * @param signal - the request's cancellation.
+ * @returns the page, or an empty page when the repository has no commits yet.
+ * @throws when git cannot answer.
+ */
+history(cwd: string, request: WorkspaceGitHistoryRequest, signal: AbortSignal): Promise<WorkspaceGitHistory>
+
+/**
+ * Read one commit's message and changed files.
+ * @param cwd - the Session working directory.
+ * @param hash - the commit to read.
+ * @param signal - the request's cancellation.
+ * @returns the commit, or undefined when no commit has that hash.
+ * @throws when git cannot answer.
+ */
+commit(cwd: string, hash: string, signal: AbortSignal): Promise<WorkspaceGitCommitDetail | undefined>
+
+/**
+ * Compare one commit file with the commit's first parent.
+ * @param cwd - the Session working directory.
+ * @param request - the commit, the path to compare, and a rename origin.
+ * @param signal - the request's cancellation.
+ * @returns the comparison, or undefined when a path leaves `cwd` (directly or through a symbolic
+ *   link), the commit is unknown, or the path has nothing to compare; an oversized patch answers
+ *   `kind: 'oversized'` rather than undefined.
+ * @throws when git fails to produce the comparison.
+ */
+commitDiff(cwd: string, request: WorkspaceGitCommitDiffRequest, signal: AbortSignal): Promise<WorkspaceFileDiff | undefined>
 ```
 
 Types: [SessionId](core.md)

@@ -1,0 +1,28 @@
+/* Two segments choosing the comparison layout, the chosen one filled. */
+.mode {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  border-radius: var(--dsw-radius-sm);
+}
+
+.button {
+  padding: 2px 8px;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  cursor: pointer;
+}
+
+.button:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.active {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-active);
+}

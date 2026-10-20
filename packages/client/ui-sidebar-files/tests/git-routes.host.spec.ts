@@ -1,6 +1,6 @@
 /**
- * The Files workbench's host half: the working-tree git routes it registers and
- * the checks they run before reading anything.
+ * The Files workbench's host half: the git routes it registers and the checks
+ * they run before reading anything.
  */
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
@@ -84,7 +84,7 @@ describe('ui-sidebar-files host half', () => {
     expect(routes.size).toBe(0)
   })
 
-  it('registers the working-tree git routes and removes them with the plugin', async () => {
+  it('registers every git route in order and removes them with the plugin', async () => {
     const ctx = new Context()
     const paths: string[] = []
     const disposers: Array<() => void> = []
@@ -104,13 +104,149 @@ describe('ui-sidebar-files host half', () => {
     ctx.provide('workspaceChanges', {
       workingTree: async () => ({ kind: 'repository', entries: [], total: 0 }),
       workingDiff: async () => undefined,
+      historyRefs: async () => [],
+      history: async () => ({ commits: [], hasMore: false }),
+      commit: async () => undefined,
+      commitDiff: async () => undefined,
     } as never)
     apply(ctx)
-    expect(paths).toEqual(['/api/git.status', '/api/git.diff'])
+    expect(paths).toEqual([
+      '/api/git.status', '/api/git.diff', '/api/git.refs', '/api/git.history', '/api/git.commit', '/api/git.commit-diff',
+    ])
     // Disposing the plugin aborts the lifetime its route reads share.
     await ctx.fiber.dispose()
     for (const off of disposers) off()
     expect(paths).toEqual([])
   })
 
+  it('serves the history routes with validated coordinates and parameters', async () => {
+    const ctx = new Context()
+    const routes = new Map<string, (request: Request) => Promise<Response>>()
+    const disposers: Array<() => void> = []
+    ctx.provide('connection', {
+      fetch: {
+        register: (options: { path: string; fetch: (request: Request) => Promise<Response> }) => {
+          routes.set(options.path, options.fetch)
+          const off = (): void => { routes.delete(options.path) }
+          disposers.push(off)
+          return off
+        },
+      },
+    } as never)
+    ctx.provide('sessions', { get: (id: string) => id === 's-1' ? { header: { id, cwd: '/work/app' } } : undefined } as never)
+    ctx.provide('sessionPersistence', { stat: async () => undefined } as never)
+    const refs = [{ name: 'main', kind: 'local', hash: 'a'.repeat(40), head: true }]
+    const page = { commits: [], hasMore: false }
+    const detail = {
+      commit: {
+        hash: 'a'.repeat(40), short: 'aaaaaaa', parents: [], author: 't',
+        authoredAt: '2026-01-01T00:00:00+00:00', subject: 'one',
+      },
+      message: 'one',
+      files: [],
+      total: 0,
+    }
+    const historyRefs = vi.fn(async () => refs)
+    const history = vi.fn(async () => page)
+    const commit = vi.fn(async () => detail)
+    const commitDiff = vi.fn(async () => ({ kind: 'binary', path: 'a.bin', display: 'a.bin' }))
+    ctx.provide('workspaceChanges', { historyRefs, history, commit, commitDiff } as never)
+    apply(ctx)
+    const call = (path: string, query: string): Promise<Response> =>
+      routes.get(path)!(new Request(`http://localhost${path}?${query}`))
+    const coordinates = 'sessionId=s-1&cwd=%2Fwork%2Fapp'
+    // The Session and working-directory checks guard every history route too.
+    for (const [path, extra] of [
+      ['/api/git.refs', ''],
+      ['/api/git.history', ''],
+      ['/api/git.commit', 'hash=abcdef'],
+      ['/api/git.commit-diff', 'hash=abcdef&path=a.bin'],
+    ] as const) {
+      expect((await call(path, '')).status).toBe(400)
+      expect((await call(path, 'sessionId=s-2&cwd=%2Fwork%2Fapp')).status).toBe(404)
+      expect((await call(path, `sessionId=s-1&cwd=%2Felsewhere&${extra}`)).status).toBe(409)
+    }
+
+    // The refs route serves what the service lists.
+    const refsAnswer = await call('/api/git.refs', coordinates)
+    expect(refsAnswer.status).toBe(200)
+    expect(refsAnswer.headers.get('cache-control')).toBe('no-store')
+    expect(await refsAnswer.json()).toEqual(refs)
+    expect(historyRefs).toHaveBeenCalledWith('/work/app', expect.anything())
+    historyRefs.mockRejectedValueOnce(new Error('git failed'))
+    const refsFailure = await call('/api/git.refs', coordinates)
+    expect(refsFailure.status).toBe(503)
+    expect(refsFailure.headers.get('cache-control')).toBe('no-store')
+
+    // A history page defaults to the first fifty commits without a ref.
+    expect((await call('/api/git.history', coordinates)).status).toBe(200)
+    expect(history).toHaveBeenLastCalledWith('/work/app', { skip: 0, limit: 50 }, expect.anything())
+    expect(await (await call('/api/git.history', `${coordinates}&skip=2&limit=3`)).json()).toEqual(page)
+    expect(history).toHaveBeenLastCalledWith('/work/app', { skip: 2, limit: 3 }, expect.anything())
+    expect((await call('/api/git.history', `${coordinates}&ref=refs%2Fremotes%2Forigin%2Fdev`)).status).toBe(200)
+    expect(history).toHaveBeenLastCalledWith(
+      '/work/app', { ref: 'refs/remotes/origin/dev', skip: 0, limit: 50 }, expect.anything(),
+    )
+    // A page size above any default reaches the service unchanged: the service
+    // clamps it to its configured `maxCommits`, so the route holds no ceiling of
+    // its own that an operator's larger setting could contradict.
+    expect((await call('/api/git.history', `${coordinates}&ref=refs%2Ftags%2Fv1.0.0&skip=0&limit=5000`)).status)
+      .toBe(200)
+    expect(history).toHaveBeenLastCalledWith(
+      '/work/app', { ref: 'refs/tags/v1.0.0', skip: 0, limit: 5000 }, expect.anything(),
+    )
+    // A full ref spelling never begins with `-`, so a legal ref such as
+    // `refs/heads/-h` is walkable rather than read as an option.
+    expect((await call('/api/git.history', `${coordinates}&ref=refs%2Fheads%2F-h`)).status).toBe(200)
+    for (const query of [
+      'skip=abc', 'skip=-1', 'skip=', 'skip=1.5', 'skip=01', 'skip=2147483648', 'skip=99999999999999999999',
+      'limit=0', 'limit=abc', 'limit=', 'limit=99999999999999999999',
+      // A ref is named by its full spelling: a bare display name, an unknown
+      // namespace, an option-like name, and bad grammar are all refused.
+      'ref=', 'ref=dev', 'ref=-h', 'ref=refs%2Fheads%2Fwith%20space', 'ref=refs%2Fheads%2F..%2Fescape',
+      'ref=refs%2Fheads%2Fat%40%7Bbrace', 'ref=refs%2Fnotes%2Fn', 'ref=refs%2Fheads%2F', `ref=refs%2Fheads%2F${'a'.repeat(1024)}`,
+      'ref=%00',
+    ]) {
+      const refused = await call('/api/git.history', `${coordinates}&${query}`)
+      expect(refused.status, query).toBe(400)
+      expect(refused.headers.get('cache-control')).toBe('no-store')
+    }
+    history.mockRejectedValueOnce(new Error('git failed'))
+    expect((await call('/api/git.history', coordinates)).status).toBe(503)
+
+    // One commit detail answers 404 when the service knows no such commit.
+    const commitAnswer = await call('/api/git.commit', `${coordinates}&hash=${'a'.repeat(40)}`)
+    expect(commitAnswer.status).toBe(200)
+    expect(await commitAnswer.json()).toEqual(detail)
+    expect(commit).toHaveBeenLastCalledWith('/work/app', 'a'.repeat(40), expect.anything())
+    expect((await call('/api/git.commit', `${coordinates}&hash=abcdef`)).status).toBe(200)
+    for (const query of ['', 'hash=', 'hash=ABC', 'hash=abc', 'hash=zzzz', `hash=${'a'.repeat(65)}`]) {
+      expect((await call('/api/git.commit', `${coordinates}&${query}`)).status, query).toBe(400)
+    }
+    commit.mockResolvedValueOnce(undefined as never)
+    expect((await call('/api/git.commit', `${coordinates}&hash=${'a'.repeat(40)}`)).status).toBe(404)
+    commit.mockRejectedValueOnce(new Error('git failed'))
+    expect((await call('/api/git.commit', `${coordinates}&hash=${'a'.repeat(40)}`)).status).toBe(503)
+
+    // A commit file comparison pairs a rename's paths and keeps both inside the working directory.
+    const diffAnswer = await call('/api/git.commit-diff', `${coordinates}&hash=abcdef&path=a.bin&from=old.bin`)
+    expect(diffAnswer.status).toBe(200)
+    expect(await diffAnswer.json()).toEqual({ kind: 'binary', path: 'a.bin', display: 'a.bin' })
+    expect(commitDiff).toHaveBeenLastCalledWith(
+      '/work/app', { hash: 'abcdef', path: 'a.bin', from: 'old.bin' }, expect.anything(),
+    )
+    for (const query of [
+      '', 'hash=abcdef', 'path=a.bin', 'hash=zzzz&path=a.bin', 'hash=abcdef&path=..%2Fescape',
+      'hash=abcdef&path=%2Fetc%2Fpasswd', 'hash=abcdef&path=.', 'hash=abcdef&path=a.bin&from=',
+      'hash=abcdef&path=a.bin&from=..%2Fescape', 'hash=abcdef&path=a.bin&from=%2Fetc%2Fpasswd',
+    ]) {
+      expect((await call('/api/git.commit-diff', `${coordinates}&${query}`)).status, query).toBe(400)
+    }
+    commitDiff.mockResolvedValueOnce(undefined as never)
+    expect((await call('/api/git.commit-diff', `${coordinates}&hash=abcdef&path=a.bin`)).status).toBe(404)
+    commitDiff.mockRejectedValueOnce(new Error('git failed'))
+    expect((await call('/api/git.commit-diff', `${coordinates}&hash=abcdef&path=a.bin`)).status).toBe(503)
+    for (const off of disposers) off()
+    expect(routes.size).toBe(0)
+  })
 })

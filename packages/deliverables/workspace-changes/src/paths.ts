@@ -74,6 +74,17 @@ export function isTemporaryPath(path: string, roots: readonly string[]): boolean
 }
 
 /**
+ * One repository-relative path in the Session working directory's terms.
+ * @param path - repository-relative path from a git listing.
+ * @param prefix - the working directory's repository-relative prefix with a trailing slash, or empty at the root.
+ * @returns the path relative to the working directory, or undefined for a path outside it.
+ */
+export function underPrefix(path: string, prefix: string): string | undefined {
+  if (prefix === '') return path
+  return path.startsWith(prefix) ? path.slice(prefix.length) : undefined
+}
+
+/**
  * Sort key and label of a changed file; see `WorkspaceChangedFile.display`.
  * @param absolute - canonical absolute file path.
  * @param cwd - canonical Session working directory.

@@ -7,7 +7,8 @@ import { MenuItemButton } from '@deepseek-ai/dsh-client-ui-primitives'
 import { FileTabs } from '../src/client/FileTabs.tsx'
 import type { FileTabsProps } from '../src/client/FileTabs.tsx'
 import { SplitView } from '../src/client/SplitView.tsx'
-import { FILES_RAIL_ITEM, GIT_RAIL_ITEM, WorkbenchRail } from '../src/client/WorkbenchRail.tsx'
+import { MAX_RATIO } from '../src/client/store.ts'
+import { FILES_RAIL_ITEM, GIT_RAIL_ITEM, HISTORY_RAIL_ITEM, WorkbenchRail } from '../src/client/WorkbenchRail.tsx'
 import { en as enCopy, zh } from '../src/client/locales.ts'
 
 afterEach(() => { cleanup() })
@@ -266,17 +267,19 @@ describe('FileTabs', () => {
 describe('WorkbenchRail', () => {
   it('marks the selected container and reports a press', () => {
     const onSelect = vi.fn()
-    const { container, rerender } = render(<WorkbenchRail items={[FILES_RAIL_ITEM, GIT_RAIL_ITEM]} selected="files" onSelect={onSelect} t={t} />)
+    const { container, rerender } = render(<WorkbenchRail items={[FILES_RAIL_ITEM, GIT_RAIL_ITEM, HISTORY_RAIL_ITEM]} selected="files" onSelect={onSelect} t={t} />)
     const item = container.querySelector<HTMLElement>('[data-files-rail-item="files"]')!
     expect(item.getAttribute('aria-current')).toBe('page')
     fireEvent.click(item)
     expect(onSelect).toHaveBeenCalledWith('files')
-    // A container that is not selected draws no current mark, and the git item
-    // appears only when the body offers it.
+    // A container that is not selected draws no current mark, and the git and
+    // history items appear only when the body offers them.
     expect(container.querySelector('[data-files-rail-item="git"]')).not.toBeNull()
-    rerender(<WorkbenchRail items={[FILES_RAIL_ITEM]} selected="search" onSelect={onSelect} t={t} />)
+    expect(container.querySelector('[data-files-rail-item="history"]')).not.toBeNull()
+    rerender(<WorkbenchRail items={[FILES_RAIL_ITEM]} selected="git" onSelect={onSelect} t={t} />)
     expect(container.querySelector('[data-files-rail-item="files"]')?.getAttribute('aria-current')).toBeNull()
     expect(container.querySelector('[data-files-rail-item="git"]')).toBeNull()
+    expect(container.querySelector('[data-files-rail-item="history"]')).toBeNull()
   })
 })
 
@@ -309,16 +312,34 @@ describe('SplitView', () => {
   it('shows the given ratio and reports one settled value per drag', () => {
     const { container, onRatio, splitter } = mount(0.6)
     expect(container.querySelector<HTMLElement>('[data-files-content-column]')!.style.flexBasis).toBe('60%')
-    // The separator is pointer-only: no value attributes are promised, because
-    // keyboard resizing is future work the current control does not deliver.
+    // The separator states where the divider stands and takes the keyboard, so
+    // the columns are resizable without a pointer.
     expect(splitter.getAttribute('role')).toBe('separator')
-    expect(splitter.getAttribute('aria-valuenow')).toBeNull()
+    expect(splitter.getAttribute('aria-valuenow')).toBe('60')
     fireEvent.pointerDown(splitter, { pointerId: 7, button: 0, clientX: 500 })
     fireEvent.pointerMove(splitter, { pointerId: 7, clientX: 700 })
     expect(container.querySelector<HTMLElement>('[data-files-content-column]')!.style.flexBasis).toBe('70%')
     expect(onRatio).not.toHaveBeenCalled()
     fireEvent.pointerUp(splitter, { pointerId: 7, clientX: 700 })
     expect(onRatio).toHaveBeenCalledExactlyOnceWith(0.7)
+  })
+
+  it('moves the divider by one step from the keyboard and clamps at the range', () => {
+    const { container, onRatio, splitter } = mount(0.6)
+    fireEvent.keyDown(splitter, { key: 'ArrowRight' })
+    expect(onRatio).toHaveBeenLastCalledWith(0.62)
+    fireEvent.keyDown(splitter, { key: 'ArrowLeft' })
+    expect(onRatio).toHaveBeenLastCalledWith(0.58)
+    // Other keys leave the divider alone.
+    onRatio.mockClear()
+    fireEvent.keyDown(splitter, { key: 'ArrowUp' })
+    fireEvent.keyDown(splitter, { key: 'Enter' })
+    expect(onRatio).not.toHaveBeenCalled()
+    // The step never leaves the draggable range.
+    const edge = mount(MAX_RATIO)
+    fireEvent.keyDown(edge.splitter, { key: 'ArrowRight' })
+    expect(edge.onRatio).toHaveBeenLastCalledWith(MAX_RATIO)
+    expect(container.querySelector<HTMLElement>('[data-files-content-column]')).not.toBeNull()
   })
 
   it('ignores a press without the primary button or without width, and a move after release', () => {

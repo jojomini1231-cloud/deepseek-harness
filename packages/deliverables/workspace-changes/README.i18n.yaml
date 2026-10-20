@@ -3,26 +3,26 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/deliverables/workspace-changes/README.md
 /:
-  en: 961e566f4c0c9b31
-  zh: 368dabdd8c4d53ec
+  en: cbb1328d3399e40f
+  zh: 51da42e0229f942b
 /deepseek-ai-dsh-workspace-changes:
   en: d328861923e51a10
   zh: 7725513f609601a0
 /deepseek-ai-dsh-workspace-changes/summary:
-  en: 61639e7f0185b4d9
-  zh: 7c559b2863f073f9
+  en: 832fcf65d31e2e0f
+  zh: 5d77f527a016f4ed
 /deepseek-ai-dsh-workspace-changes/table-of-contents:
   en: d152484eb41ac6b4
   zh: 09388d293f9be9cb
 /deepseek-ai-dsh-workspace-changes/use-this-package:
-  en: 3e2f852a03c703d9
-  zh: 5fcb424ca7cdf2fa
+  en: d78bb68d19f94428
+  zh: e37b444749a2369a
 /deepseek-ai-dsh-workspace-changes/understand-the-implementation:
-  en: 80189ba9ccef8a92
-  zh: 3d16718bb0b135ac
+  en: 3e9f78dbbb875620
+  zh: c1b527b2c82af6e8
 /deepseek-ai-dsh-workspace-changes/further-exploration:
-  en: 240df7d8b2e80059
-  zh: 214cebb4d18ca4d8
+  en: 5a8500f4326fba43
+  zh: 8428f172d369949a
 /deepseek-ai-dsh-workspace-changes/model-experience:
   en: aa413c0bfaa815a8
   zh: eea730976cf916e6
@@ -30,8 +30,8 @@
   en: e7ba08477bf22c4e
   zh: f365439c69beb722
 /deepseek-ai-dsh-workspace-changes/known-limitations-and-deferred-work:
-  en: 3b4da3e530916a72
-  zh: 2ac8955dab9b649e
+  en: 8d1004e8c2a73f04
+  zh: de99b9b3210fc169
 /deepseek-ai-dsh-workspace-changes/known-limitations-and-deferred-work/dev-note:
   en: e67f633dc6fe7773
   zh: 3bb0c20c93f16f98

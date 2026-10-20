@@ -17,13 +17,16 @@ import type {} from '@deepseek-ai/dsh-subprocess'
 import type {} from '@deepseek-ai/dsh-tools'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
 import { GitRunner } from './git.ts'
+import * as historyReads from './history.ts'
 import { worktreeDiff, worktreeStatus } from './worktree.ts'
 import { TurnRecorder } from './recorder.ts'
 import type { WorkspaceChanges } from './types.ts'
 
 export type {
   WorkspaceChangedFile, WorkspaceChanges, WorkspaceChangesSummary, WorkspaceDiffHunk, WorkspaceFileDiff,
-  WorkspaceGitDiffRequest, WorkspaceGitEntry, WorkspaceGitStatus,
+  WorkspaceGitCommit, WorkspaceGitCommitDetail, WorkspaceGitCommitDiffRequest, WorkspaceGitCommitFile,
+  WorkspaceGitDiffRequest, WorkspaceGitEntry, WorkspaceGitHistory, WorkspaceGitHistoryRequest,
+  WorkspaceGitRef, WorkspaceGitStatus,
 } from './types.ts'
 
 /** Stable Loader identity. */
@@ -32,17 +35,20 @@ export const name = 'workspace-changes'
 /** Services used to run git, resolve mutation targets, and observe turns. */
 export const inject = ['subprocess', 'fs']
 
-/** Snapshot, capture, and comparison bounds. Invalid values fail plugin load. */
+/** Snapshot, capture, comparison, and history bounds. Invalid values fail plugin load. */
 export interface Config {
-  /** Milliseconds one git command may run before the turn's record is abandoned. */
+  /** Milliseconds one git command may run before the turn's record or the history read is abandoned. */
   timeoutMs: number
-  /** Bytes of git output retained per command; a larger diff listing abandons the record. */
+  /** Bytes of git output retained per command; a larger diff listing abandons the record and a larger history output fails the read. */
   outputMaxBytes: number
-  /** Maximum files carried by one summary; `total` still reports the complete count. */
+  /** Maximum files carried by one summary or one commit detail; `total` still reports the complete count. */
   maxFiles: number
+  /** Maximum commits carried by one history page; a larger page request is clamped to it. */
+  maxCommits: number
   /**
    * Bytes a file may hold to be captured around a file-tool edit or read from a snapshot for its comparison.
-   * A larger file gets no comparison; one captured around a file-tool edit is also listed without counts.
+   * A larger file gets no comparison; one captured around a file-tool edit is also listed without counts, and a
+   * larger commit patch is reported oversized.
    */
   maxFileBytes: number
   /** Milliseconds a line comparison may run before it degrades to whole-file replacement. */
@@ -54,6 +60,7 @@ export const Config: z<Config> = z.object({
   timeoutMs: z.number().default(30_000),
   outputMaxBytes: z.number().default(8 * 1024 * 1024),
   maxFiles: z.number().default(500),
+  maxCommits: z.number().default(100),
   maxFileBytes: z.number().default(2 * 1024 * 1024),
   diffTimeoutMs: z.number().default(100),
 })
@@ -97,7 +104,7 @@ async function resolveGit(ctx: Context, signal: AbortSignal): Promise<string | n
 export function apply(ctx: Context, config: Config): void {
   for (const [field, value] of [
     ['timeoutMs', config.timeoutMs], ['outputMaxBytes', config.outputMaxBytes], ['maxFiles', config.maxFiles],
-    ['maxFileBytes', config.maxFileBytes], ['diffTimeoutMs', config.diffTimeoutMs],
+    ['maxCommits', config.maxCommits], ['maxFileBytes', config.maxFileBytes], ['diffTimeoutMs', config.diffTimeoutMs],
   ] as const) {
     if (!Number.isSafeInteger(value) || value < 1) throw new Error(`workspace-changes requires a positive integer ${field}`)
   }
@@ -118,6 +125,7 @@ export function apply(ctx: Context, config: Config): void {
   const worktreeLimits = {
     maxFiles: config.maxFiles, maxFileBytes: config.maxFileBytes, outputMaxBytes: config.outputMaxBytes,
   }
+  const historyLimits = { ...worktreeLimits, maxCommits: config.maxCommits }
   const service: WorkspaceChanges = {
     summary: (sessionId, seq) => byId.get(sessionId)?.summary(seq),
     diff: (sessionId, seq, index, signal) => byId.get(sessionId)?.diff(seq, index, signal) ?? Promise.resolve(undefined),
@@ -131,6 +139,12 @@ export function apply(ctx: Context, config: Config): void {
       const git = await gitRunner()
       return git === null ? undefined : worktreeDiff(git, ctx.fs, cwd, request, signal, worktreeLimits).catch(() => undefined)
     },
+    // History reads report repository failures by throwing; each route turns
+    // that into a 503, while an absent commit or path stays an undefined answer.
+    historyRefs: async (cwd, signal) => historyReads.historyRefs(await requireGit(), cwd, signal),
+    history: async (cwd, request, signal) => historyReads.history(await requireGit(), cwd, request, signal, historyLimits),
+    commit: async (cwd, hash, signal) => historyReads.commit(await requireGit(), cwd, hash, signal, historyLimits),
+    commitDiff: async (cwd, request, signal) => historyReads.commitDiff(await requireGit(), cwd, request, signal, historyLimits),
   }
   ctx.provide('workspaceChanges', service)
   let runner: Promise<GitRunner | null> | undefined
@@ -152,6 +166,11 @@ export function apply(ctx: Context, config: Config): void {
       /* v8 ignore stop */
     }
     return runner
+  }
+  const requireGit = async (): Promise<GitRunner> => {
+    const git = await gitRunner()
+    if (git === null) throw new Error('workspace-changes: git is unavailable')
+    return git
   }
   const recorderFor = (session: Session, cwd: string): TurnRecorder => {
     let recorder = recorders.get(session)

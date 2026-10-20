@@ -361,35 +361,6 @@
   white-space: nowrap;
 }
 
-/* Two segments choosing the comparison layout, the chosen one filled. */
-.gitMode {
-  display: flex;
-  flex: none;
-  gap: 2px;
-  padding: 2px;
-  background: var(--dsw-alias-interactive-bg-hover);
-  border-radius: var(--dsw-radius-sm);
-}
-
-.gitModeButton {
-  padding: 2px 8px;
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  background: transparent;
-  border: 0;
-  border-radius: var(--dsw-radius-sm);
-  cursor: pointer;
-}
-
-.gitModeButton:hover {
-  color: var(--dsw-alias-label-primary);
-}
-
-.gitModeActive {
-  color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-interactive-bg-active);
-}
-
 .gitNote {
   margin: 0;
   padding: 12px 10px;
@@ -551,6 +522,13 @@
 .workbench[data-files-dragging] .splitter::before,
 .splitter:hover::before {
   background: var(--dsw-alias-border-l4);
+}
+
+/* The divider draws at zero width, so its focus ring would otherwise be the
+   only thing telling a keyboard user where the columns divide. */
+.splitter:focus-visible {
+  outline-offset: 0;
+  border-radius: var(--dsw-radius-sm);
 }
 
 /* The open files' chips: one row above the document, scrolled on the wheel

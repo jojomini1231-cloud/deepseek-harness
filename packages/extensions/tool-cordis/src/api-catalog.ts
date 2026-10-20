@@ -3824,6 +3824,34 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'cwd', description: 'the Session working directory.' }, { name: 'request', description: 'the path to compare and, for a rename or copy, its original path.' }, { name: 'signal', description: 'the request\'s cancellation.' }],
         returns: 'the comparison, or undefined when a path leaves `cwd`, the path is gone, or git cannot answer.',
       },
+      {
+        signature: 'historyRefs(cwd: string, signal: AbortSignal): Promise<readonly WorkspaceGitRef[]>',
+        description: 'List the refs the history view can walk.',
+        parameters: [{ name: 'cwd', description: 'the Session working directory.' }, { name: 'signal', description: 'the request\'s cancellation.' }],
+        returns: 'local branches, remote branches, and tags; annotated tags are peeled to commits.',
+        throws: ['when git cannot answer.'],
+      },
+      {
+        signature: 'history(cwd: string, request: WorkspaceGitHistoryRequest, signal: AbortSignal): Promise<WorkspaceGitHistory>',
+        description: 'Read one page of a ref\'s history.',
+        parameters: [{ name: 'cwd', description: 'the Session working directory.' }, { name: 'request', description: 'the ref to walk, the commits to skip, and the page size.' }, { name: 'signal', description: 'the request\'s cancellation.' }],
+        returns: 'the page, or an empty page when the repository has no commits yet.',
+        throws: ['when git cannot answer.'],
+      },
+      {
+        signature: 'commit(cwd: string, hash: string, signal: AbortSignal): Promise<WorkspaceGitCommitDetail | undefined>',
+        description: 'Read one commit\'s message and changed files.',
+        parameters: [{ name: 'cwd', description: 'the Session working directory.' }, { name: 'hash', description: 'the commit to read.' }, { name: 'signal', description: 'the request\'s cancellation.' }],
+        returns: 'the commit, or undefined when no commit has that hash.',
+        throws: ['when git cannot answer.'],
+      },
+      {
+        signature: 'commitDiff(cwd: string, request: WorkspaceGitCommitDiffRequest, signal: AbortSignal): Promise<WorkspaceFileDiff | undefined>',
+        description: 'Compare one commit file with the commit\'s first parent.',
+        parameters: [{ name: 'cwd', description: 'the Session working directory.' }, { name: 'request', description: 'the commit, the path to compare, and a rename origin.' }, { name: 'signal', description: 'the request\'s cancellation.' }],
+        returns: 'the comparison, or undefined when a path leaves `cwd` (directly or through a symbolic link), the commit is unknown, or the path has nothing to compare; an oversized patch answers `kind: \'oversized\'` rather than undefined.',
+        throws: ['when git fails to produce the comparison.'],
+      },
     ],
   },
   {
@@ -8902,12 +8930,40 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type WorkspaceFollowIncrement = {\n    readonly type: \'replace\';\n    readonly value: WorkspaceBaseline;\n} | {\n    readonly type: \'upsert\';\n    readonly workspace: WorkspaceView;\n} | {\n    readonly type: \'remove\';\n    readonly workspaceId: WorkspaceId;\n} | {\n    readonly type: \'order\';\n    readonly workspaceIds: readonly WorkspaceId[];\n} | {\n    readonly type: \'archived\';\n    readonly archivedSessionIds: readonly SessionId[];\n} | {\n    readonly type: \'pinned\';\n    readonly pinnedSessionIds: readonly SessionId[];\n} | {\n    readonly type: \'temporary\';\n    readonly temporarySessionIds: readonly SessionId[];\n};',
   },
   {
+    name: 'WorkspaceGitCommit',
+    declaration: 'export interface WorkspaceGitCommit {\n    hash: string;\n    short: string;\n    parents: readonly string[];\n    author: string;\n    authoredAt: string;\n    subject: string;\n}',
+  },
+  {
+    name: 'WorkspaceGitCommitDetail',
+    declaration: 'export interface WorkspaceGitCommitDetail {\n    commit: WorkspaceGitCommit;\n    message: string;\n    files: readonly WorkspaceGitCommitFile[];\n    total: number;\n}',
+  },
+  {
+    name: 'WorkspaceGitCommitDiffRequest',
+    declaration: 'export interface WorkspaceGitCommitDiffRequest {\n    hash: string;\n    path: string;\n    from?: string;\n}',
+  },
+  {
+    name: 'WorkspaceGitCommitFile',
+    declaration: 'export interface WorkspaceGitCommitFile {\n    path: string;\n    display: string;\n    kind: \'added\' | \'deleted\' | \'modified\' | \'renamed\';\n    from?: string;\n    added: number;\n    deleted: number;\n    binary?: true;\n}',
+  },
+  {
     name: 'WorkspaceGitDiffRequest',
     declaration: 'export interface WorkspaceGitDiffRequest {\n    path: string;\n    from?: string;\n}',
   },
   {
     name: 'WorkspaceGitEntry',
     declaration: 'export interface WorkspaceGitEntry {\n    path: string;\n    display: string;\n    kind: \'modified\' | \'added\' | \'deleted\' | \'renamed\' | \'untracked\';\n    from?: string;\n}',
+  },
+  {
+    name: 'WorkspaceGitHistory',
+    declaration: 'export interface WorkspaceGitHistory {\n    commits: readonly WorkspaceGitCommit[];\n    hasMore: boolean;\n}',
+  },
+  {
+    name: 'WorkspaceGitHistoryRequest',
+    declaration: 'export interface WorkspaceGitHistoryRequest {\n    ref?: string;\n    skip: number;\n    limit: number;\n}',
+  },
+  {
+    name: 'WorkspaceGitRef',
+    declaration: 'export interface WorkspaceGitRef {\n    name: string;\n    refname: string;\n    kind: \'local\' | \'remote\' | \'tag\';\n    hash: string;\n    head?: true;\n}',
   },
   {
     name: 'WorkspaceGitStatus',

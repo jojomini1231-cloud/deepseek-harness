@@ -31,9 +31,13 @@ import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { DirLevel, createFilesStore } from './store.ts'
 import type {
-  WorkspaceFileDiff, WorkspaceGitDiffRequest, WorkspaceGitStatus,
+  WorkspaceFileDiff, WorkspaceGitCommitDetail, WorkspaceGitCommitDiffRequest, WorkspaceGitDiffRequest,
+  WorkspaceGitHistory, WorkspaceGitHistoryRequest, WorkspaceGitRef, WorkspaceGitStatus,
 } from '@deepseek-ai/dsh-workspace-changes/types'
-import { gitDiffUrl, gitStatusUrl, isFileDiff, isGitStatus } from '../git.ts'
+import {
+  gitCommitDiffUrl, gitCommitUrl, gitDiffUrl, gitHistoryUrl, gitRefsUrl, gitStatusUrl,
+  isFileDiff, isGitCommitDetail, isGitHistory, isGitRefs, isGitStatus,
+} from '../git.ts'
 import type { WorkspaceFileWatchFrame } from '@deepseek-ai/dsh-api-workspace-files/types'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import { DirectoryNode } from './directory-node.ts'
@@ -197,6 +201,47 @@ export interface FilesInjected {
   readonly gitDiff: (
     tabId: TabId, cwd: string, request: WorkspaceGitDiffRequest, signal: AbortSignal,
   ) => Promise<GitRead<WorkspaceFileDiff>>
+  /**
+   * Read the refs the history filter offers.
+   * @param tabId - the tab asking.
+   * @param cwd - the Session working directory.
+   * @param signal - the request's cancellation.
+   * @returns the refs, or undefined when the Host refused or answered with something else.
+   */
+  readonly historyRefs: (tabId: TabId, cwd: string, signal: AbortSignal) => Promise<GitRead<readonly WorkspaceGitRef[]>>
+  /**
+   * Read one page of a ref's history.
+   * @param tabId - the tab asking.
+   * @param cwd - the Session working directory.
+   * @param request - the ref to walk, the commits to skip, and the page size.
+   * @param signal - the request's cancellation.
+   * @returns the page, or undefined when the Host refused or answered with something else.
+   */
+  readonly history: (
+    tabId: TabId, cwd: string, request: WorkspaceGitHistoryRequest, signal: AbortSignal,
+  ) => Promise<GitRead<WorkspaceGitHistory>>
+  /**
+   * Read one commit's message and changed files.
+   * @param tabId - the tab asking.
+   * @param cwd - the Session working directory.
+   * @param hash - the commit to read.
+   * @param signal - the request's cancellation.
+   * @returns the detail, or undefined when the Host refused or answered for another commit.
+   */
+  readonly commit: (
+    tabId: TabId, cwd: string, hash: string, signal: AbortSignal,
+  ) => Promise<GitRead<WorkspaceGitCommitDetail>>
+  /**
+   * Read one commit file's comparison with the commit's first parent.
+   * @param tabId - the tab asking.
+   * @param cwd - the Session working directory.
+   * @param request - the commit, the path to compare, and a rename origin.
+   * @param signal - the request's cancellation.
+   * @returns the comparison, or undefined when the Host refused, has none, or answered for another path.
+   */
+  readonly commitDiff: (
+    tabId: TabId, cwd: string, request: WorkspaceGitCommitDiffRequest, signal: AbortSignal,
+  ) => Promise<GitRead<WorkspaceFileDiff>>
 }
 
 /** One settled git read and whether a newer read of its kind has started since. */
@@ -223,8 +268,14 @@ export function filesFace(
   ): FilesInjected => {
     /** Per tab, per absolute path: the listing generation a settlement must match; the latest request wins. */
     const generations = new Map<TabId, Map<string, number>>()
-    /** Per tab: the latest git read of each kind, so a slow answer never overwrites a newer one. */
-    const gitReads = new Map<TabId, { status: number; diff: number }>()
+    /**
+     * Per tab, per read name (`git.status`, `history.list`, ...): the token of
+     * the latest read, so a slow answer never overwrites a newer one. The token
+     * is the read's own object rather than a counter: a tab id reused after
+     * `forget` starts a new tab, and its first read must not match a settlement
+     * still in flight from the one before it.
+     */
+    const readsByTab = new Map<TabId, Map<string, object>>()
     const roots = new Map<TabId, DirectoryNode>()
     // One controller per open chip, owned here because the body unmounts while
     // the tab lives: the preview's first read arms its cleanup on this signal,
@@ -237,14 +288,15 @@ export function filesFace(
       byPath.set(path, generation)
       return generation
     }
-    const nextGitRead = (tabId: TabId, kind: 'status' | 'diff'): number => {
-      const reads = gitReads.get(tabId) ?? { status: 0, diff: 0 }
-      gitReads.set(tabId, reads)
-      reads[kind] += 1
-      return reads[kind]
+    const nextRead = (tabId: TabId, kind: string): object => {
+      const reads = readsByTab.get(tabId) ?? new Map<string, object>()
+      readsByTab.set(tabId, reads)
+      const token = {}
+      reads.set(kind, token)
+      return token
     }
-    const currentGitRead = (tabId: TabId, kind: 'status' | 'diff', generation: number): boolean =>
-      gitReads.get(tabId)?.[kind] === generation
+    const currentRead = (tabId: TabId, kind: string, token: object): boolean =>
+      readsByTab.get(tabId)?.get(kind) === token
     const load = async (tabId: TabId, path: string, signal: AbortSignal): Promise<DirLevel | undefined> => {
       if (signal.aborted) return
       const generation = nextGeneration(tabId, path)
@@ -258,31 +310,56 @@ export function filesFace(
         return result.ok ? result.value : undefined
       })
     }
-    const readGitStatus = async (cwd: string, signal: AbortSignal): Promise<WorkspaceGitStatus | undefined> => {
+    /**
+     * Fetch one authenticated route and accept its decoded JSON through a
+     * validator; a refusal, a malformed answer, an interruption, or a failed
+     * read is `undefined` for the caller's failed state.
+     */
+    const readJson = async <T>(
+      url: string, signal: AbortSignal, accept: (value: unknown) => value is T,
+    ): Promise<T | undefined> => {
       try {
-        const response = await fetch(gitStatusUrl(sessionId, cwd), { signal })
+        const response = await fetch(url, { signal })
         if (!response.ok) return undefined
         const value: unknown = await response.json()
-        return isGitStatus(value) ? value : undefined
+        return accept(value) ? value : undefined
       } catch {
         // A refused or interrupted read is the panel's failed state, not a throw.
         return undefined
       }
     }
+    const readGitStatus = (cwd: string, signal: AbortSignal): Promise<WorkspaceGitStatus | undefined> =>
+      readJson(gitStatusUrl(sessionId, cwd), signal, isGitStatus)
     const readGitDiff = async (
       cwd: string, request: WorkspaceGitDiffRequest, signal: AbortSignal,
     ): Promise<WorkspaceFileDiff | undefined> => {
-      try {
-        const response = await fetch(gitDiffUrl(sessionId, cwd, request), { signal })
-        if (!response.ok) return undefined
-        const value: unknown = await response.json()
-        // The answer must describe the path that was asked for, or it is not this
-        // selection's comparison.
-        return isFileDiff(value) && value.path === request.path ? value : undefined
-      } catch {
-        // A refused or interrupted read is the panel's failed comparison, not a throw.
-        return undefined
-      }
+      const diff = await readJson(gitDiffUrl(sessionId, cwd, request), signal, isFileDiff)
+      // The answer must describe the path that was asked for, or it is not this
+      // selection's comparison.
+      return diff !== undefined && diff.path === request.path ? diff : undefined
+    }
+    const readHistoryRefs = (cwd: string, signal: AbortSignal): Promise<readonly WorkspaceGitRef[] | undefined> =>
+      readJson(gitRefsUrl(sessionId, cwd), signal, isGitRefs)
+    const readHistory = (
+      cwd: string, request: WorkspaceGitHistoryRequest, signal: AbortSignal,
+    ): Promise<WorkspaceGitHistory | undefined> =>
+      readJson(gitHistoryUrl(sessionId, cwd, request), signal, isGitHistory)
+    const readCommit = async (
+      cwd: string, hash: string, signal: AbortSignal,
+    ): Promise<WorkspaceGitCommitDetail | undefined> => {
+      const detail = await readJson(gitCommitUrl(sessionId, cwd, hash), signal, isGitCommitDetail)
+      // The answer must describe the commit that was asked for, or it is not
+      // this selection's page. The route accepts an abbreviated id and always
+      // answers the full hash, so the request names a prefix of the answer.
+      return detail !== undefined && detail.commit.hash.startsWith(hash) ? detail : undefined
+    }
+    const readCommitDiff = async (
+      cwd: string, request: WorkspaceGitCommitDiffRequest, signal: AbortSignal,
+    ): Promise<WorkspaceFileDiff | undefined> => {
+      const diff = await readJson(gitCommitDiffUrl(sessionId, cwd, request), signal, isFileDiff)
+      // The answer must describe the path that was asked for, or it is not this
+      // file's comparison.
+      return diff !== undefined && diff.path === request.path ? diff : undefined
     }
     return {
       refresh: (tabId) => { void roots.get(tabId)?.refreshTree() },
@@ -296,7 +373,7 @@ export function filesFace(
           void roots.get(tabId)?.close()
           roots.delete(tabId)
           generations.delete(tabId)
-          gitReads.delete(tabId)
+          readsByTab.delete(tabId)
           const chips = chipSignals.get(tabId)
           chipSignals.delete(tabId)
           for (const { controller } of chips?.values() ?? []) controller.abort()
@@ -332,14 +409,34 @@ export function filesFace(
         }
       },
       async gitStatus(tabId, cwd, signal) {
-        const generation = nextGitRead(tabId, 'status')
+        const token = nextRead(tabId, 'git.status')
         const value = await readGitStatus(cwd, signal)
-        return { value, current: currentGitRead(tabId, 'status', generation) }
+        return { value, current: currentRead(tabId, 'git.status', token) }
       },
       async gitDiff(tabId, cwd, request, signal) {
-        const generation = nextGitRead(tabId, 'diff')
+        const token = nextRead(tabId, 'git.diff')
         const value = await readGitDiff(cwd, request, signal)
-        return { value, current: currentGitRead(tabId, 'diff', generation) }
+        return { value, current: currentRead(tabId, 'git.diff', token) }
+      },
+      async historyRefs(tabId, cwd, signal) {
+        const token = nextRead(tabId, 'history.refs')
+        const value = await readHistoryRefs(cwd, signal)
+        return { value, current: currentRead(tabId, 'history.refs', token) }
+      },
+      async history(tabId, cwd, request, signal) {
+        const token = nextRead(tabId, 'history.list')
+        const value = await readHistory(cwd, request, signal)
+        return { value, current: currentRead(tabId, 'history.list', token) }
+      },
+      async commit(tabId, cwd, hash, signal) {
+        const token = nextRead(tabId, 'history.commit')
+        const value = await readCommit(cwd, hash, signal)
+        return { value, current: currentRead(tabId, 'history.commit', token) }
+      },
+      async commitDiff(tabId, cwd, request, signal) {
+        const token = nextRead(tabId, 'history.diff')
+        const value = await readCommitDiff(cwd, request, signal)
+        return { value, current: currentRead(tabId, 'history.diff', token) }
       },
       collapseAll(tabId, signal) {
         if (signal.aborted) return

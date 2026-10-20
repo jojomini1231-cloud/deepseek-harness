@@ -21,7 +21,7 @@ import { dirname, resolve } from 'node:path'
 import type { FileSystem } from '@deepseek-ai/dsh-fs'
 import type { GitRunner } from './git.ts'
 import { parsePatch } from './patch.ts'
-import { canonicalPath, compareDisplay, displayPathOf, isInside, toPosix } from './paths.ts'
+import { canonicalPath, compareDisplay, displayPathOf, isInside, toPosix, underPrefix } from './paths.ts'
 import type {
   WorkspaceFileDiff, WorkspaceGitDiffRequest, WorkspaceGitEntry, WorkspaceGitStatus,
 } from './types.ts'
@@ -45,19 +45,6 @@ const STATUS_KIND: Readonly<Record<string, WorkspaceGitEntry['kind']>> = {
   R: 'renamed',
   T: 'modified',
   U: 'modified',
-}
-
-/**
- * One status path in the working directory's own terms: git reports paths
- * relative to the repository root, and the prefix is the directory's path
- * inside it.
- * @param path - repository-relative path from the status record.
- * @param prefix - the working directory's repository-relative prefix, with a trailing slash, or empty at the root.
- * @returns the path relative to the working directory, or undefined for a path outside it.
- */
-function underPrefix(path: string, prefix: string): string | undefined {
-  if (prefix === '') return path
-  return path.startsWith(prefix) ? path.slice(prefix.length) : undefined
 }
 
 /**

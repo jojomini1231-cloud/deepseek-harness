@@ -1,0 +1,58 @@
+# Agent Note: The Files workbench's git history view
+
+Status: implemented
+
+English | [中文](2026-10-19-files-workbench-git-history.zh.md)
+
+## Problem
+
+The Files workbench showed the working tree, not the repository's history: a reader could see uncommitted changes against `HEAD` but not earlier commits, refs, or what a commit changed. The obvious external reference — a desktop Git client — uses three columns: a refs tree, a commit graph, and the selected commit's changed files and patch. That cannot fit the right Sidebar, which is 300px to about 70% of the viewport and already spends a 48px activity rail plus two draggable columns on the workbench's own navigator and content. Three columns would leave each around 100–150px and push the diff below a readable width. The product had no second surface to spend a wider window on, and a history reader still needs the conversation beside it.
+
+## Decision
+
+The workbench's activity rail offers a third view container, `history`, beside `files` and `git`, under the same repository condition as the git view. The view reuses the workbench's two-column grammar instead of adding columns: the commit page leads, the history navigator trails, and the existing draggable `SplitView` divides them at a per-tab history ratio. When the measured history panel is narrower than 560px, the view becomes one column: the navigator, or the selected commit's page with a back control. The width is measured with a `ResizeObserver` on the view, not the window, because the Sidebar is resizable and the same window holds both layouts.
+
+Three layers of the reference layout fold into two. Refs become a filter rather than a column: the navigator header carries a chip whose popover groups local branches, remotes, and tags behind a search field, with an "all refs" arm that walks `HEAD`. Selecting a ref only restarts the visible history; it never switches branches. Commits draw ref pills from the advertised ref tips, preferring the checked-out branch and then locals, remotes, and tags. Changed files fold into the commit page, so only the commit list and the selected commit's contents stay side by side.
+
+The inline graph is a gutter in each row, not a column. `layoutGraph` computes lanes in one pass over the loaded commits, keeps a lane's colour for its lifetime, caps the drawn gutter at six lanes while still tracking hidden lanes so a later merge lands on the right lane, and recomputes over the whole loaded list so appending a page keeps the graph continuous. A commit row is two lines — subject, then short hash, author, and relative time — with `aria-current` on the shown commit.
+
+The commit page is a vertical flex column: subject, meta, ref pills, foldable message, and changed-file section take their own height; the comparison takes the remaining height with `flex: 1`, a 220px floor, and its own scroll, so a short diff fills the column instead of leaving half of it empty, and folding the file list gives the comparison more room. The file section lists status letters, paths, and line counts, caps its own box, and states when the Host's `maxFiles` cap truncated the list. The comparison is drawn by the shared `DiffHunks` with the unified/split control that moved out of `GitPanel` into `DiffModeControl`, so both views keep one renderer and one control.
+
+Pagination is explicit. The first page asks for 50 commits; "Load more" appends by the loaded count, which also works when a deployment's `maxCommits` clamp returns a shorter page with `hasMore` true. There is no polling: refresh re-reads the refs, the first page, and the shown commit and file comparison. The list leads with a row for the working tree's uncommitted changes when there are any; pressing it switches to the existing git container. The view is read-only: it stages nothing, commits nothing, and switches no branch.
+
+The Host side is one capability, not a second git stack. `workspaceChanges` gains `historyRefs`, `history`, `commit`, and `commitDiff`, all read-only and bounded by the existing runner limits plus a new `maxCommits` (default 100). `historyRefs` reads local, remote, and tag refs, skips a remote's symbolic `HEAD`, peels annotated tags to commits, and marks the checked-out branch. `history` validates the requested ref against that list, pages with `--skip` and `--max-count`, returns topological order, and answers an empty page for a repository that has no commits. `commit` resolves the hash to a commit, reads metadata and the complete message, diffs against the first parent (or the empty tree for the root commit), maps rename, binary, and status facts from git's raw and numstat records, and filters files to the Session working directory's prefix with working-directory-relative paths. `commitDiff` compares one file with the commit's first parent with external diff drivers, textconv, notes, and signature display disabled, reuses `parsePatch`, and reports a binary or oversized comparison rather than serving unfiltered output.
+
+The workbench's Host half registers `/api/git.refs`, `/api/git.history`, `/api/git.commit`, and `/api/git.commit-diff` inside the connection fence. All reuse the Session and working-directory check, answer `no-store`, validate the ref, hash, page, and path parameters, and answer 400/404/409/503 the way the existing working-tree routes do. The reads are stateless routes rather than a Remote because their payloads are view state, not session-transport state.
+
+## Alternatives considered
+
+**Three columns.** The reference layout, and the one the reader asked not to copy. **Rejected**: at the docked panel widths it leaves each column around 100–150px, so neither the commit list nor the diff is readable, and the existing workbench already owns the two-column grammar.
+
+**A separate history plugin package.** The cleanest "one UI feature, one package" reading, but the history view is a container of this workbench, and a separate package would need a rail-slot seam (items plus container rendering) that no second consumer needs yet. **Rejected** for the larger surface.
+
+**A refs tree container.** A third rail destination for refs. **Rejected**: refs are a filter over one history, not a destination; a refs container would take a whole column or a whole view to answer a question the popover answers in place.
+
+**A graph column.** **Rejected**: the inline gutter carries the same topology; a column would take another quarter of the panel and leave the list and diff unreadable at docked widths.
+
+**Reading git in the browser.** **Rejected**: the client has no command execution, and parsing `.git/index` or object files in the browser is not worth owning; the Host already has the bounded runner.
+
+**Reusing the working-tree status route.** **Rejected**: status answers the current tree, not commits; history needs `log`, `diff-tree`, ref listing, and per-commit comparisons.
+
+**Auto-loading the next page on scroll.** **Rejected**: the list can be long, it makes refresh and ref changes race a load, and the approved prototype uses an explicit "Load more".
+
+**Polling the history.** **Rejected**: there is no live tree signal to poll, and a `git log` every few seconds costs more than it answers; refresh is explicit.
+
+## Consequences
+
+The view is read-only: staging, committing, branch switching, commit search, path filtering, and comparing two arbitrary commits are not built. Merge commits show their first-parent diff, matching the file list's definition. A Session whose working directory is a subdirectory of the repository drops changed files outside that subdirectory from commit lists, because paths and comparisons stay inside the workspace the Session owns. The changed-file list is capped by `maxFiles` with the complete `total`; the comparison is capped by the output limits and reports `oversized` instead of truncating silently. Refresh re-reads only the first page, so commits loaded by "Load more" drop until it is pressed again; the shown commit and comparison are re-read independently and survive. The graph draws at most six lanes; commits in further lanes still track their topology but draw their dot in the last visible lane.
+
+The history view is another container of the existing Files tab rather than another tab type, so the tab keeps its identity and its per-tab state, and the three containers share the same rail. The package remains two-faced, and its Host half grows by four routes; the workspace-changes package grows by one capability and one Config field. Every read is independent and stateless, so nothing new needs Session disposal or persistence. The commit page's comparison height rule is deliberately the prototype's: the comparison box is the flexible element, so a short commit fills the column instead of ending halfway.
+
+## Testing
+
+Unit coverage: `ui-sidebar-files` covers the pure lane layout (linear, merge, root, multiple lanes, the six-lane cap, appended-page continuity), the ref-pill and preferred-file helpers, the store's history slice, the navigator and commit page states, the refs menu, the face's URL and validator handling, and the body's seeding, chained list→commit→file reads, refresh, dirty-row switch, and narrow back; `workspace-changes` covers refs, paging, empty repositories, merge and root commits, renames, binary files, subdirectory path filtering, comparison truncation, and the real-git-repo behavior behind the four service methods; the route tests cover registration, parameter validation, the session/working-directory fence, and the 400/404/409/503 answers. Browser coverage in `apps/web/tests/git-history.e2e.ts` drives the real workbench against a prepared repository: it opens the history container, walks the commit page (message fold, changed-file chain, unified and split comparison), filters refs by branch and back to all refs, refreshes, appends the next page and opens a root commit with a binary file, and shrinks the panel to exercise the measured narrow drill-down and its back control, asserting no page errors.
+
+## Related
+
+- [The working-tree git view and the shared comparison renderer](2026-10-17-files-workbench-git-view.md) — the container, `SplitView`, and `DiffHunks` this view extends.
+- [Workspace files workbench and the reusable document preview](2026-10-16-workspace-files-workbench.md) — the workbench and activity rail this view adds a container to.

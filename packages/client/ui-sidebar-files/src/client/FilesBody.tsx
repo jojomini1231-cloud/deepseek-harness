@@ -26,13 +26,16 @@ import type {
 import { fileAddressFor, pathPartsOf } from '@deepseek-ai/dsh-util-workspace-path'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client'
 import type { WorkspaceGitEntry } from '@deepseek-ai/dsh-workspace-changes/types'
+import { HISTORY_PAGE_SIZE } from '../git.ts'
 import type { FilesInjected } from './face.ts'
 import { FileTabs } from './FileTabs.tsx'
 import type {} from './locales.ts'
 import { SplitView } from './SplitView.tsx'
-import { FILES_RAIL_ITEM, GIT_RAIL_ITEM, WorkbenchRail } from './WorkbenchRail.tsx'
+import { FILES_RAIL_ITEM, GIT_RAIL_ITEM, HISTORY_RAIL_ITEM, WorkbenchRail } from './WorkbenchRail.tsx'
 import { GitPanel } from './GitPanel.tsx'
-import type { createFilesStore, OpenFile } from './store.ts'
+import { HistoryPanel } from './HistoryPanel.tsx'
+import { pickHistoryFile, renameOrigin } from './history.ts'
+import type { createFilesStore, HistoryTabState, OpenFile } from './store.ts'
 import { TreeList } from './tree.tsx'
 import type { TreeContext } from './tree.tsx'
 import css from './FilesBody.module.css'
@@ -63,7 +66,8 @@ const GIT_SILENT_REFRESH_MS = 3_000
 /** The files workbench: the workspace root and whatever the reader has open under it. */
 export function FilesBody({
   useTabInfo, sessionId, useSessions, useStore, actions, renderSlot, renderFactorySlot,
-  start, refresh, setAutoRefresh, toggle, collapseAll, chipSignal, chipsClosed, gitStatus, gitDiff, t,
+  start, refresh, setAutoRefresh, toggle, collapseAll, chipSignal, chipsClosed,
+  gitStatus, gitDiff, historyRefs, history: readHistory, commit, commitDiff, t,
 }: FilesBodyProps): ReactNode {
   const { tab, sidebar } = useTabInfo()
   useEffect(() => tab.actions.bindCommands({ refresh: () => { refresh(tab.id) } }), [tab.actions, tab.id, refresh])
@@ -76,27 +80,53 @@ export function FilesBody({
   // one still in flight, and the face drops whichever settles out of order.
   const gitProbe = useRef<AbortController | undefined>(undefined)
   const gitCompare = useRef<{ controller: AbortController; path: string } | undefined>(undefined)
+  // The history reads: the refs, the list pages, and the two reads of the
+  // shown commit (its detail and the selected file's comparison). A gesture
+  // aborts the read it supersedes; a container switch abandons none of them,
+  // because the slice belongs to the tab rather than to the visible panel.
+  const historyRefsRead = useRef<AbortController | undefined>(undefined)
+  const historyListRead = useRef<AbortController | undefined>(undefined)
+  const historyDetailRead = useRef<AbortController | undefined>(undefined)
+  const historyDiffRead = useRef<AbortController | undefined>(undefined)
   // The selection the latest committed render shows. A status read settles
   // after a gesture may have moved it, so its settlement reads the current one.
   const gitSelection = useRef<{ path: string; from: string | undefined } | undefined>(undefined)
   gitSelection.current = state?.git.selected === undefined
     ? undefined
     : { path: state.git.selected, from: state.git.selectedFrom }
+  // The latest committed history slice: a read settles after a gesture may
+  // have moved the selection, so its settlement reads the current one.
+  const historyState = useRef<HistoryTabState | undefined>(undefined)
+  historyState.current = state?.history
+  // A working directory outside a repository has no git or history view; an
+  // unavailable or failed status read keeps both so their retries stay reachable.
+  const worktreeView = state !== undefined
+    && (state.git.status?.kind === 'repository' || state.git.status?.kind === 'unavailable' || state.git.failure)
+  const gitContainer = worktreeView && state.container === 'git'
+  const historyContainer = worktreeView && state.container === 'history'
+  // The history slice belongs to the tab, not to the container: a read that
+  // lands after the reader left still fills it, and returning shows what
+  // arrived meanwhile, so a container switch abandons no read. The one read it
+  // defers is the page a refs settlement owes: starting it for a view nobody is
+  // looking at would be wasted work, and dropping it would show an empty list
+  // on return, so it waits in `historyPageOwed` until the container is back.
+  const historyOpen = useRef(false)
+  historyOpen.current = historyContainer
+  const historyPageOwed = useRef<{ root: string; ref: string | undefined } | undefined>(undefined)
+  const filesContainer = state !== undefined && state.container === 'files'
   // Come back where the reader was: loaded levels outlive the body in the
   // store, so a remounted tree lays out at its full height before this runs
-  // and the stored offset re-lands exactly. Switching to the git container
+  // and the stored offset re-lands exactly. Switching to another container
   // unmounts the tree without writing the store, so the live offset kept in
   // the ref wins over the stored one.
   const seeded = state !== undefined
-  const gitContainer = state !== undefined && state.container === 'git'
-    && (state.git.status?.kind === 'repository' || state.git.status?.kind === 'unavailable' || state.git.failure)
   useLayoutEffect(() => {
     const body = bodyRef.current
     if (seeded && body !== null) {
       body.scrollTop = scrollTopRef.current || state.scrollTop
       scrollTopRef.current = body.scrollTop
     }
-  }, [seeded, gitContainer, state?.scrollTop])
+  }, [seeded, filesContainer, state?.scrollTop])
   // Scrolling only moves the ref; the store hears about it once, on unmount,
   // so a scroll neither re-renders the tree nor writes after the owner's
   // abort has forgotten the bucket.
@@ -194,6 +224,208 @@ export function FilesBody({
     actions.gitDiffReloading(tab.id)
     requestDiff(state.root, state.git.selected, state.git.selectedFrom)
   }
+  // The history view's reads follow the same rule as the git view's: gestures
+  // start them, each read aborts the one it supersedes, and a settlement writes
+  // only while its answer is the current one. The commit page chains from the
+  // list (its first commit) and from the detail (its first changed file).
+  const requestCommit = (root: string, hash: string): void => {
+    historyDetailRead.current?.abort()
+    const controller = new AbortController()
+    historyDetailRead.current = controller
+    const read = AbortSignal.any([signal, controller.signal])
+    void commit(tab.id, root, hash, read).then((answer) => {
+      if (historyDetailRead.current === controller) historyDetailRead.current = undefined
+      if (signal.aborted || controller.signal.aborted || !answer.current) return
+      if (answer.value === undefined) actions.historyDetailFailed(tab.id, hash)
+      else actions.historyDetailLoaded(tab.id, hash, answer.value)
+    })
+  }
+  const requestCommitDiff = (root: string, hash: string, path: string, from: string | undefined): void => {
+    historyDiffRead.current?.abort()
+    const controller = new AbortController()
+    historyDiffRead.current = controller
+    const read = AbortSignal.any([signal, controller.signal])
+    void commitDiff(tab.id, root, from === undefined ? { hash, path } : { hash, path, from }, read).then((answer) => {
+      if (historyDiffRead.current === controller) historyDiffRead.current = undefined
+      if (signal.aborted || controller.signal.aborted || !answer.current) return
+      if (answer.value === undefined) actions.historyDiffFailed(tab.id, hash, path)
+      else actions.historyDiffLoaded(tab.id, hash, path, answer.value)
+    })
+  }
+  const requestHistoryPage = (root: string, skip: number, ref: string | undefined): void => {
+    historyListRead.current?.abort()
+    const controller = new AbortController()
+    historyListRead.current = controller
+    actions.historyLoading(tab.id)
+    // The list this read continues, as it stands now: a page that lands after
+    // the list was restarted is not an answer to it, however the ref and the
+    // offset compare by then.
+    const epoch = historyState.current?.listEpoch ?? 0
+    const read = AbortSignal.any([signal, controller.signal])
+    const request = ref === undefined
+      ? { skip, limit: HISTORY_PAGE_SIZE }
+      : { ref, skip, limit: HISTORY_PAGE_SIZE }
+    void readHistory(tab.id, root, request, read).then((answer) => {
+      if (historyListRead.current === controller) historyListRead.current = undefined
+      if (signal.aborted || controller.signal.aborted || !answer.current) return
+      if (answer.value === undefined) actions.historyFailed(tab.id)
+      else actions.historyLoaded(tab.id, ref, skip, epoch, answer.value)
+    })
+  }
+  const requestHistoryRefs = (root: string): void => {
+    historyRefsRead.current?.abort()
+    const controller = new AbortController()
+    historyRefsRead.current = controller
+    actions.historyRefsLoading(tab.id)
+    const read = AbortSignal.any([signal, controller.signal])
+    void historyRefs(tab.id, root, read).then((answer) => {
+      if (historyRefsRead.current === controller) historyRefsRead.current = undefined
+      if (signal.aborted || controller.signal.aborted || !answer.current) return
+      if (answer.value === undefined) {
+        actions.historyRefsFailed(tab.id)
+        return
+      }
+      // The ref the list walks once this answer is applied: the picked one
+      // while the repository still reports it, `HEAD` otherwise. A pick made
+      // while the refs were being read started its own page read, and an
+      // unchanged ref keeps that read instead of aborting it.
+      const picked = historyState.current?.ref
+      const walked = picked !== undefined && answer.value.some(ref => ref.refname === picked)
+        ? picked
+        : undefined
+      actions.historyRefsLoaded(tab.id, answer.value)
+      if (walked === picked && historyListRead.current !== undefined) return
+      if (!historyOpen.current) {
+        // The slice states the page it owes, so returning to the container
+        // shows the list's loading state rather than an empty one.
+        actions.historyLoading(tab.id)
+        historyPageOwed.current = { root, ref: walked }
+        return
+      }
+      requestHistoryPage(root, 0, walked)
+    })
+  }
+  const selectHistoryRef = (ref: string | undefined): void => {
+    /* v8 ignore next -- the filter that reports the pick only renders with a seeded state. */
+    if (state === undefined) return
+    actions.historyRefSelected(tab.id, ref)
+    requestHistoryPage(state.root, 0, ref)
+  }
+  const selectHistoryCommit = (hash: string): void => {
+    /* v8 ignore next -- the row that reports the pick only renders with a seeded state. */
+    if (state === undefined) return
+    const current = historyState.current
+    actions.historyCommitSelected(tab.id, hash)
+    // A repeated pick keeps the settled page; one that failed opens it again.
+    if (current?.selected === hash && current.detail !== undefined && current.detail !== 'failed') return
+    requestCommit(state.root, hash)
+  }
+  const selectHistoryFile = (path: string): void => {
+    /* v8 ignore next -- the row that reports the pick only renders with a seeded state. */
+    if (state === undefined) return
+    const current = historyState.current
+    const detail = current?.detail
+    /* v8 ignore next -- the row that reports the pick only renders with a loaded detail. */
+    if (current?.selected === undefined || typeof detail !== 'object') return
+    const file = detail.files.find(value => value.path === path)
+    /* v8 ignore next -- the rows only carry the detail's own files. */
+    if (file === undefined) return
+    actions.historyFileSelected(tab.id, path)
+    requestCommitDiff(state.root, current.selected, path, file.from)
+  }
+  const retryHistoryList = (): void => {
+    /* v8 ignore next -- the note that reports the gesture only renders with a seeded state. */
+    if (state === undefined) return
+    requestHistoryPage(state.root, 0, historyState.current?.ref)
+  }
+  const refreshHistory = (): void => {
+    /* v8 ignore next -- the header that reports the gesture only renders with a seeded state. */
+    if (state === undefined) return
+    const current = historyState.current
+    requestHistoryRefs(state.root)
+    if (current?.selected === undefined) return
+    actions.historyDetailLoading(tab.id, current.selected)
+    requestCommit(state.root, current.selected)
+    if (current.file === undefined) return
+    actions.historyDiffLoading(tab.id, current.selected, current.file)
+    requestCommitDiff(state.root, current.selected, current.file, renameOrigin(current.detail, current.file))
+  }
+  const retryHistoryDetail = (): void => {
+    /* v8 ignore next -- the note that reports the gesture only renders with a seeded state. */
+    if (state === undefined || historyState.current?.selected === undefined) return
+    const hash = historyState.current.selected
+    actions.historyDetailLoading(tab.id, hash)
+    requestCommit(state.root, hash)
+  }
+  const retryHistoryDiff = (): void => {
+    /* v8 ignore next -- the note that reports the gesture only renders with a seeded state. */
+    if (state === undefined) return
+    const current = historyState.current
+    /* v8 ignore next -- the note that reports the gesture only renders with a shown file. */
+    if (current?.selected === undefined || current.file === undefined) return
+    actions.historyDiffLoading(tab.id, current.selected, current.file)
+    requestCommitDiff(state.root, current.selected, current.file, renameOrigin(current.detail, current.file))
+  }
+  const loadMoreHistory = (): void => {
+    /* v8 ignore next -- the button that reports the gesture only renders with a seeded state. */
+    if (state === undefined) return
+    const current = historyState.current
+    /* v8 ignore next -- the button only renders with more pages and an idle read. */
+    if (current === undefined || !current.hasMore || current.loading) return
+    requestHistoryPage(state.root, current.commits.length, current.ref)
+  }
+  // Selecting the history container seeds its reads once per tab: the refs
+  // first, then the first page of the ref the filter walks. A failed refs read
+  // offers its retry instead of looping, so the seed is not re-armed by it.
+  const historySeedRoot = historyContainer && state.history.refs === undefined
+    && !state.history.refsLoading && !state.history.refsFailure
+    ? state.root
+    : undefined
+  const seedHistory = useRef(requestHistoryRefs)
+  useEffect(() => { seedHistory.current = requestHistoryRefs })
+  useEffect(() => {
+    if (historySeedRoot === undefined || signal.aborted) return
+    seedHistory.current(historySeedRoot)
+    // One seed per tab and container selection, not per store write.
+  }, [historySeedRoot])
+  // The page a refs read settled on while the reader was elsewhere: the
+  // container's return starts it, so the list is filled rather than empty.
+  useEffect(() => {
+    const owed = historyPageOwed.current
+    if (!historyContainer || owed === undefined) return
+    historyPageOwed.current = undefined
+    requestHistoryPage(owed.root, 0, owed.ref)
+  }, [historyContainer])
+  // A loaded page picks its first commit, and a loaded commit detail picks its
+  // first changed file, so the wide layout opens on content without a gesture.
+  // The effects depend on the primitive fields, not on the fresh object a
+  // render builds: every store write re-renders the body, and an object
+  // dependency would re-enter the read on each of them.
+  const historyAutoCommit = historyContainer && !state.history.loading
+    && state.history.refs !== undefined && state.history.selected === undefined && state.history.commits.length > 0
+    ? { root: state.root, hash: state.history.commits[0]?.hash }
+    : undefined
+  const autoCommitRoot = historyAutoCommit?.root
+  const autoCommitHash = historyAutoCommit?.hash
+  useEffect(() => {
+    if (autoCommitRoot === undefined || autoCommitHash === undefined) return
+    actions.historyCommitSelected(tab.id, autoCommitHash)
+    requestCommit(autoCommitRoot, autoCommitHash)
+  }, [autoCommitRoot, autoCommitHash])
+  const historyDetail = state?.history.detail
+  const historyAutoFile = historyContainer && typeof historyDetail === 'object' && historyDetail.files.length > 0
+    && (state.history.file === undefined || !historyDetail.files.some(file => file.path === state.history.file))
+    ? { root: state.root, hash: historyDetail.commit.hash, file: pickHistoryFile(historyDetail.files) }
+    : undefined
+  const autoFileRoot = historyAutoFile?.root
+  const autoFileHash = historyAutoFile?.hash
+  const autoFilePath = historyAutoFile?.file?.path
+  const autoFileFrom = historyAutoFile?.file?.from
+  useEffect(() => {
+    if (autoFileRoot === undefined || autoFileHash === undefined || autoFilePath === undefined) return
+    actions.historyFileSelected(tab.id, autoFilePath)
+    requestCommitDiff(autoFileRoot, autoFileHash, autoFilePath, autoFileFrom)
+  }, [autoFileRoot, autoFileHash, autoFilePath, autoFileFrom])
   const tree = useMemo((): TreeContext | undefined => state === undefined ? undefined : {
     state,
     onToggle: (parent, path) => { toggle(tab.id, parent, path, state.expanded, signal) },
@@ -376,6 +608,32 @@ export function FilesBody({
             onToggleGroup={(group) => { actions.gitGroupToggled(tab.id, group) }}
             t={t}
           />
+        ) : historyContainer ? (
+          <HistoryPanel
+            history={state.history}
+            dirtyCount={state.git.status?.kind === 'repository' ? state.git.status.total : 0}
+            onSelectRef={selectHistoryRef}
+            onRefresh={refreshHistory}
+            onRetryRefs={() => { requestHistoryRefs(state.root) }}
+            onLoadMore={loadMoreHistory}
+            onRetryList={retryHistoryList}
+            onSelectCommit={selectHistoryCommit}
+            onDrillDown={() => { actions.historyPageOpened(tab.id, true) }}
+            onDirty={() => { actions.containerSelected(tab.id, 'git') }}
+            onSelectFile={selectHistoryFile}
+            onToggleFiles={() => { actions.historyFilesToggled(tab.id) }}
+            onRetryDetail={retryHistoryDetail}
+            onRetryDiff={retryHistoryDiff}
+            onDiffMode={(mode) => { actions.historyDiffModeSelected(tab.id, mode) }}
+            onRatio={(ratio) => { actions.historyRatioChanged(tab.id, ratio) }}
+            onBack={() => { actions.historyPageOpened(tab.id, false) }}
+            // The abort forgets the bucket before the unmount reports an offset.
+            onListScrolled={(scrollTop) => { if (!signal.aborted) actions.historyListScrolled(tab.id, scrollTop) }}
+            onPageScrolled={(hash, scrollTop) => {
+              if (!signal.aborted) actions.historyPageScrolled(tab.id, hash, scrollTop)
+            }}
+            t={t}
+          />
         ) : (
           <SplitView
             ratio={state.ratio}
@@ -386,10 +644,8 @@ export function FilesBody({
           />
         )}
         <WorkbenchRail
-          items={state.git.failure
-            || state.git.status?.kind === 'repository'
-            || state.git.status?.kind === 'unavailable'
-            ? [FILES_RAIL_ITEM, GIT_RAIL_ITEM]
+          items={worktreeView
+            ? [FILES_RAIL_ITEM, GIT_RAIL_ITEM, HISTORY_RAIL_ITEM]
             : [FILES_RAIL_ITEM]}
           selected={state.container}
           onSelect={(id) => { actions.containerSelected(tab.id, id) }}

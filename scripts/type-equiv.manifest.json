@@ -2444,6 +2444,41 @@
     },
     {
       "doc": "docs/subsystems/deliverables.md",
+      "symbol": "WorkspaceGitRef",
+      "source": "packages/deliverables/workspace-changes/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/deliverables.md",
+      "symbol": "WorkspaceGitCommit",
+      "source": "packages/deliverables/workspace-changes/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/deliverables.md",
+      "symbol": "WorkspaceGitHistory",
+      "source": "packages/deliverables/workspace-changes/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/deliverables.md",
+      "symbol": "WorkspaceGitHistoryRequest",
+      "source": "packages/deliverables/workspace-changes/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/deliverables.md",
+      "symbol": "WorkspaceGitCommitFile",
+      "source": "packages/deliverables/workspace-changes/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/deliverables.md",
+      "symbol": "WorkspaceGitCommitDetail",
+      "source": "packages/deliverables/workspace-changes/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/deliverables.md",
+      "symbol": "WorkspaceGitCommitDiffRequest",
+      "source": "packages/deliverables/workspace-changes/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/deliverables.md",
       "symbol": "WorkspaceChanges",
       "source": "packages/deliverables/workspace-changes/src/types.ts"
     },
