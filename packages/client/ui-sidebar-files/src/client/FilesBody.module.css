@@ -36,6 +36,38 @@
   margin-right: 12px;
 }
 
+/* The narrow files layout's way back to the tree: a compact labelled control
+   leading the workbench header, so the preview keeps the whole column. */
+.filesBack {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  align-items: center;
+  box-sizing: border-box;
+  height: 24px;
+  padding: 0 7px 0 5px;
+  margin-right: 4px;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  cursor: pointer;
+}
+
+.filesBack svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+
+.filesBack:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
 .body {
   flex: 1 1 auto;
   min-height: 0;
@@ -236,6 +268,9 @@
 }
 
 .gitGroupTitle {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   gap: 6px;
   align-items: center;
@@ -246,7 +281,7 @@
   font: inherit;
   font-weight: 500;
   text-align: start;
-  background: transparent;
+  background: var(--dsw-alias-bg-base);
   border: 0;
   cursor: pointer;
 }
@@ -296,14 +331,17 @@
   text-align: center;
 }
 
-/* One color per change kind, carried by the whole row so the status letter and
-   the file name read as one fact. The containing directory keeps the row's
-   quiet ink, so only the name and its letter take the status color. */
-.gitRow_modified { color: var(--dsw-alias-state-warn-primary); }
+/* File-status colors follow IntelliJ's reading: modified files are blue, added
+   files green, and a new file that is still untracked is red-brown. The color
+   is carried by the whole row so the status letter and the file name read as
+   one fact; the containing directory keeps the row's quiet ink. */
+.gitRow_modified { color: var(--dsw-alias-state-business-primary); }
 .gitRow_added { color: var(--dsw-alias-state-success-primary); }
-/* Untracked content is new but not yet part of the index: the brand accent keeps
-   it distinct from the staged addition that shares its green. */
-.gitRow_untracked { color: var(--dsw-alias-state-business-primary); }
+/* Untracked is not the same news as added: no index entry exists yet, so it
+   borrows the error red and the amber-brown it sits beside. */
+.gitRow_untracked {
+  color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 45%, var(--dsw-alias-state-warn-label));
+}
 .gitRow_deleted { color: var(--dsw-alias-state-error-primary); }
 .gitRow_renamed { color: var(--dsw-alias-label-secondary); }
 
@@ -331,7 +369,7 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   padding: 8px;
 }
 
@@ -387,6 +425,25 @@
   min-width: 0;
 }
 
+/* The measured container area beside the rail: every workbench container's
+   narrow switch reads this box's own width. */
+.containerHost {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* One workbench container alone in a narrow panel: the tree or the preview
+   fills the column the rail leaves. */
+.narrowPane {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
 /* A narrow icon-only rail (the product's 48-80px band): one item per view
    container, the selected one filled. */
 .rail {
@@ -432,8 +489,8 @@
   background: var(--dsw-alias-interactive-bg-active, var(--dsw-alias-interactive-bg-hover));
 }
 
-/* The tree panel's header: its icon actions at the inline start and the panel
-   title at the end, on the row above the tree's own scroller. */
+/* The tree panel's header: the panel title at the inline start and its icon
+   actions at the end, on the row above the tree's own scroller. */
 .treeHeader {
   display: flex;
   flex: 0 0 auto;
@@ -458,7 +515,7 @@
   overflow: hidden;
   color: var(--dsw-alias-label-secondary);
   font-weight: 500;
-  text-align: end;
+  text-align: start;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

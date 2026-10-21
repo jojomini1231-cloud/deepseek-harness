@@ -1,0 +1,194 @@
+/* The git changes container's narrow layout, its summary strip, and the
+   clean/failed states. The comparison and list columns keep their shared
+   sheet (`FilesBody.module.css`); this sheet owns only the new structure. */
+
+.panel {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.singlePane {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The narrow comparison drill-down's way back to the changed-path list. */
+.backBar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  box-sizing: border-box;
+  height: var(--files-row-height, 38px);
+  padding: 0 8px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l3);
+}
+
+.back {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  box-sizing: border-box;
+  height: 24px;
+  padding: 0 7px 0 5px;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  cursor: pointer;
+}
+
+.back svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+
+.back:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* The branch chip beside the view title. */
+.branchChip {
+  display: inline-flex;
+  flex: 0 1 auto;
+  gap: 3px;
+  align-items: center;
+  box-sizing: border-box;
+  max-width: 45%;
+  height: 22px;
+  min-width: 0;
+  padding: 0 7px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: 999px;
+  corner-shape: round;
+}
+
+.branchChip svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.branchName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.headerSpacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The summary line under the header: file count and sync state. */
+.summary {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  align-items: center;
+  box-sizing: border-box;
+  height: 24px;
+  padding: 0 12px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11.5px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.sync {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  margin-left: auto;
+  color: var(--dsw-alias-label-caption, var(--dsw-alias-label-tertiary));
+  font-size: 10.5px;
+}
+
+.syncDot {
+  width: 5px;
+  height: 5px;
+  background: var(--dsw-alias-state-success-primary);
+  border-radius: 50%;
+  corner-shape: round;
+}
+
+.syncFailed {
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+.syncFailed .syncDot {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+/* A failed status read keeps the stale list and states the failure above it. */
+.banner {
+  margin: 4px 6px;
+  padding: 7px 9px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  border-radius: var(--dsw-radius-sm);
+}
+
+.bannerIcon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--dsw-alias-state-warn-primary);
+}
+
+/* The clean state fills whichever column draws it. */
+.fill {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+}
+
+.cleanState {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  padding: 24px;
+  text-align: center;
+}
+
+.cleanIcon {
+  width: 28px;
+  height: 28px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.cleanTitle {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+}
+
+.cleanDetail {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11.5px;
+}
+
+/* The compared file's category sheet in the comparison header. */
+.diffIcon {
+  flex: none;
+}

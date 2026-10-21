@@ -29,10 +29,10 @@ describe('createFilesStore', () => {
     actions.start(TAB, ROOT)
     expect(getSnapshot().byTab[TAB]).toEqual({
       root: ROOT, levels: {}, expanded: [ROOT], scrollTop: 0, autoRefresh: true,
-      open: [], active: undefined, ratio: DEFAULT_RATIO, container: 'files',
+      open: [], active: undefined, ratio: DEFAULT_RATIO, pageOpen: false, container: 'files',
       git: {
         status: undefined, loading: false, failure: false, selected: undefined, selectedFrom: undefined,
-        scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: 0.58, groups: { changed: true, untracked: true },
+        scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: 0.58, pageOpen: false, groups: { changed: true, untracked: true },
       },
       history: {
         refs: undefined, refsLoading: false, refsFailure: false, ref: undefined,
@@ -188,6 +188,22 @@ describe('createFilesStore', () => {
     expect(store.getSnapshot().byTab[TAB]?.container).toBe('history')
   })
 
+  it('records each container\'s narrow drill-down and closes it with the last file', () => {
+    const store = createFilesStore().create()
+    const { actions } = store
+    const file = { path: `${ROOT}/a.md`, address: `dsh-resource://file/session/s${ROOT}/a.md`, name: 'a.md' }
+    actions.start(TAB, ROOT)
+    actions.filesPageOpened(TAB, true)
+    expect(store.getSnapshot().byTab[TAB]?.pageOpen).toBe(true)
+    actions.fileOpened(TAB, file)
+    actions.filesClosedAll(TAB)
+    expect(store.getSnapshot().byTab[TAB]?.pageOpen).toBe(false)
+    actions.gitPageOpened(TAB, true)
+    expect(store.getSnapshot().byTab[TAB]?.git.pageOpen).toBe(true)
+    actions.gitPageOpened(TAB, false)
+    expect(store.getSnapshot().byTab[TAB]?.git.pageOpen).toBe(false)
+  })
+
   it('keeps a divider drag inside its range', () => {
     const store = createFilesStore().create()
     const { actions } = store
@@ -214,10 +230,10 @@ describe('createFilesStore', () => {
     actions.reset(TAB)
     expect(getSnapshot().byTab[TAB]).toEqual({
       root: ROOT, levels: {}, expanded: [ROOT, child], scrollTop: 120, autoRefresh: false,
-      open: [], active: undefined, ratio: DEFAULT_RATIO, container: 'files',
+      open: [], active: undefined, ratio: DEFAULT_RATIO, pageOpen: false, container: 'files',
       git: {
         status: undefined, loading: false, failure: false, selected: undefined, selectedFrom: undefined,
-        scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: 0.58, groups: { changed: true, untracked: true },
+        scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: 0.58, pageOpen: false, groups: { changed: true, untracked: true },
       },
       history: {
         refs: undefined, refsLoading: false, refsFailure: false, ref: undefined,

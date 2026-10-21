@@ -90,6 +90,8 @@ export interface FilesTabState {
   active: string | undefined
   /** The content column's share of the workbench, between `MIN_RATIO` and `MAX_RATIO`. */
   ratio: number
+  /** Whether the narrow layout's file-preview drill-down is open. */
+  pageOpen: boolean
   /** Id of the view container the activity rail has selected. */
   container: WorkbenchContainer
   /** The working tree's git view. */
@@ -121,6 +123,8 @@ export interface GitTabState {
   diffMode: 'unified' | 'split'
   /** The comparison column's share of the git view, between `MIN_RATIO` and `MAX_RATIO`. */
   ratio: number
+  /** Whether the narrow layout's comparison drill-down is open. */
+  pageOpen: boolean
   /** Which changed-path groups are open; both start expanded. */
   groups: { changed: boolean; untracked: boolean }
 }
@@ -232,6 +236,7 @@ type FilesActions = {
   filesClosedBefore: (draft: FilesState, tabId: TabId, path: string) => void
   filesClosedAfter: (draft: FilesState, tabId: TabId, path: string) => void
   ratioChanged: (draft: FilesState, tabId: TabId, ratio: number) => void
+  filesPageOpened: (draft: FilesState, tabId: TabId, open: boolean) => void
   collapsed: (draft: FilesState, tabId: TabId) => void
   containerSelected: (draft: FilesState, tabId: TabId, container: WorkbenchContainer) => void
   gitLoading: (draft: FilesState, tabId: TabId) => void
@@ -244,6 +249,7 @@ type FilesActions = {
   gitListScrolled: (draft: FilesState, tabId: TabId, scrollTop: number) => void
   gitDiffModeSelected: (draft: FilesState, tabId: TabId, mode: 'unified' | 'split') => void
   gitRatioChanged: (draft: FilesState, tabId: TabId, ratio: number) => void
+  gitPageOpened: (draft: FilesState, tabId: TabId, open: boolean) => void
   gitGroupToggled: (draft: FilesState, tabId: TabId, group: 'changed' | 'untracked') => void
   historyRefsLoading: (draft: FilesState, tabId: TabId) => void
   historyRefsLoaded: (draft: FilesState, tabId: TabId, refs: readonly WorkspaceGitRef[]) => void
@@ -291,10 +297,10 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
       start: (d, tabId: TabId, root: string) => {
         d.byTab[tabId] = {
           root, levels: {}, expanded: [root], scrollTop: 0, autoRefresh: true,
-          open: [], active: undefined, ratio: DEFAULT_RATIO, container: 'files',
+          open: [], active: undefined, ratio: DEFAULT_RATIO, pageOpen: false, container: 'files',
           git: {
             status: undefined, loading: false, failure: false, selected: undefined, selectedFrom: undefined,
-            scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: DEFAULT_GIT_RATIO,
+            scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: DEFAULT_GIT_RATIO, pageOpen: false,
             groups: { changed: true, untracked: true },
           },
           history: {
@@ -402,6 +408,7 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
         state.open = remaining
         if (state.active !== path) return
         state.active = remaining[Math.min(at, remaining.length - 1)]?.path
+        if (state.active === undefined) state.pageOpen = false
       },
       /**
        * Show one open file without changing the chip order.
@@ -435,6 +442,7 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
         const state = bucket(d, tabId)
         state.open = []
         state.active = undefined
+        state.pageOpen = false
       },
       /**
        * Close the files whose chips sit before one chip; that chip and the ones
@@ -472,6 +480,16 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
        */
       ratioChanged: (d, tabId: TabId, ratio: number) => {
         bucket(d, tabId).ratio = Math.min(MAX_RATIO, Math.max(MIN_RATIO, ratio))
+      },
+      /**
+       * Open or leave the narrow layout's file-preview drill-down. A preview
+       * shown in the wide layout keeps both columns.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param open - whether the preview is the one on screen.
+       */
+      filesPageOpened: (d, tabId: TabId, open: boolean) => {
+        bucket(d, tabId).pageOpen = open
       },
       /**
        * Record the activity rail's selected view container.
@@ -520,6 +538,7 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
           git.selected = undefined
           git.selectedFrom = undefined
           git.diff = undefined
+          git.pageOpen = false
         } else {
           git.selectedFrom = entry.from
         }
@@ -609,6 +628,16 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
        */
       gitRatioChanged: (d, tabId: TabId, ratio: number) => {
         bucket(d, tabId).git.ratio = Math.min(MAX_RATIO, Math.max(MIN_RATIO, ratio))
+      },
+      /**
+       * Open or leave the narrow layout's comparison drill-down. A comparison
+       * shown in the wide layout keeps both columns.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param open - whether the comparison is the one on screen.
+       */
+      gitPageOpened: (d, tabId: TabId, open: boolean) => {
+        bucket(d, tabId).git.pageOpen = open
       },
       /**
        * Open or fold one changed-path group.

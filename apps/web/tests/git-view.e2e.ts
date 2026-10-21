@@ -30,6 +30,25 @@ function git(cwd: string, ...args: readonly string[]): string {
   })
 }
 
+/**
+ * Drag the frame's right-panel resize handle; a positive `dx` narrows the panel
+ * because the handle sits on its leading edge.
+ * @param page - the page under test.
+ * @param dx - horizontal pointer distance, positive toward the frame's trailing edge.
+ */
+async function dragRightbar(page: Page, dx: number): Promise<void> {
+  const handle = page.locator('[data-side="rightbar"]')
+  const box = (await handle.boundingBox())!
+  const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  await page.mouse.move(center.x, center.y)
+  await page.mouse.down()
+  try {
+    await page.mouse.move(center.x + dx, center.y, { steps: 8 })
+  } finally {
+    await page.mouse.up()
+  }
+}
+
 describe('web e2e: the working-tree git view', () => {
   let scaffold: WebScaffold
   let browser: Browser
@@ -78,6 +97,10 @@ describe('web e2e: the working-tree git view', () => {
     await gitItem.click()
     const panel = column.locator('[data-files-git-panel]')
     await panel.waitFor({ timeout: 15_000 })
+    await expect.poll(async () => await column.locator('[data-files-git-summary]').textContent(), { timeout: 15_000 })
+      .toContain('2 files')
+    expect(await column.locator('[data-files-git-sync]').getAttribute('data-files-git-sync')).toBe('synced')
+    expect(await column.locator('[data-files-git-branch]').textContent()).toBe('main')
     // The branch and both groups come from the Host's status read.
     await expect.poll(async () => await column.locator('[data-files-git-branch]').textContent()).toBe('main')
     const groups = await column.locator('[data-files-git-group]').evaluateAll(nodes => nodes.map(node => (
@@ -128,6 +151,10 @@ describe('web e2e: the working-tree git view', () => {
     }
     const panel = column.locator('[data-files-git-panel]')
     await panel.waitFor({ timeout: 15_000 })
+    await expect.poll(async () => await column.locator('[data-files-git-summary]').textContent(), { timeout: 15_000 })
+      .toContain('2 files')
+    expect(await column.locator('[data-files-git-sync]').getAttribute('data-files-git-sync')).toBe('synced')
+    expect(await column.locator('[data-files-git-branch]').textContent()).toBe('main')
     await column.locator('[data-files-git-refresh]').click()
     // One modified path and the 41 untracked ones, more than the column shows.
     await expect.poll(async () => await column.locator('[data-files-git-entry]').count(), { timeout: 15_000 })
@@ -146,5 +173,38 @@ describe('web e2e: the working-tree git view', () => {
     expect(after.y).toBeGreaterThanOrEqual(panelBox.y)
     expect(after.y + after.height).toBeLessThanOrEqual(panelBox.y + panelBox.height)
     expect(tripwire.pageErrors).toEqual([])
+  })
+
+  it('drops both the files and git containers to measured one-column layouts', async () => {
+    const column = page.locator('[data-rightbar-col]')
+    // Start from the files container: the tree stands alone, a file opens the
+    // preview as a drill-down, and back returns to the tree.
+    await column.locator('[data-files-rail-item="files"]').click()
+    const host = column.locator('[data-files-container-host]')
+    await expect.poll(async () => (await host.boundingBox())!.width, { timeout: 15_000 }).toBeGreaterThan(600)
+    await dragRightbar(page, 260)
+    await expect.poll(async () => await host.getAttribute('data-files-files-layout'), { timeout: 15_000 }).toBe('narrow')
+    expect(await host.getAttribute('data-files-files-page')).toBe('list')
+    await column.locator('[data-files-entry="file"] > button').first().click()
+    await expect.poll(async () => await host.getAttribute('data-files-files-page')).toBe('open')
+    await column.locator('[data-files-files-back]').click()
+    await expect.poll(async () => await host.getAttribute('data-files-files-page')).toBe('list')
+    // The git container narrows the same way: the changed-path list stands
+    // alone, a row opens its comparison, and the back control returns.
+    await column.locator('[data-files-rail-item="git"]').click()
+    await expect.poll(async () => await column.locator('[data-files-git-panel]').getAttribute('data-files-git-layout'), { timeout: 15_000 })
+      .toBe('narrow')
+    expect(await column.locator('[data-files-git-panel]').getAttribute('data-files-git-page-open')).toBe('false')
+    await column.locator('[data-files-git-entry="change.md"]').click()
+    await expect.poll(async () => await column.locator('[data-files-git-panel]').getAttribute('data-files-git-page-open')).toBe('true')
+    await column.locator('[data-files-git-back]').click()
+    await expect.poll(async () => await column.locator('[data-files-git-panel]').getAttribute('data-files-git-page-open')).toBe('false')
+    // Widening restores the two-pane layout.
+    await dragRightbar(page, -260)
+    await expect.poll(async () => await column.locator('[data-files-git-panel]').getAttribute('data-files-git-layout'), { timeout: 15_000 })
+      .toBe('wide')
+    expect(await column.locator('[data-files-splitter]').count()).toBe(1)
+    expect(tripwire.pageErrors).toEqual([])
+    expect(tripwire.warnings).toEqual([])
   })
 })

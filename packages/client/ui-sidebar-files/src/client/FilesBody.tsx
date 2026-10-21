@@ -17,8 +17,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import {
-  IconChevronsInwardOutlineRegular, IconChevronsUpDownOutlineRegular, IconPauseOutlineRegular, IconPlayOutlineRegular,
-  IconRefreshOutlineRegular, PathLabel, Tooltip,
+  IconChevronLeftOutlineRegular, IconChevronsInwardOutlineRegular, IconChevronsUpDownOutlineRegular,
+  IconPauseOutlineRegular, IconPlayOutlineRegular, IconRefreshOutlineRegular, PathLabel, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   PropsLocale, PropsRenderFactories, PropsRenderSlots, PropsRuntime, PropsStore,
@@ -27,6 +27,7 @@ import { fileAddressFor, pathPartsOf } from '@deepseek-ai/dsh-util-workspace-pat
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client'
 import type { WorkspaceGitEntry } from '@deepseek-ai/dsh-workspace-changes/types'
 import { HISTORY_PAGE_SIZE } from '../git.ts'
+import { useNarrowLayout } from './layout.ts'
 import type { FilesInjected } from './face.ts'
 import { FileTabs } from './FileTabs.tsx'
 import type {} from './locales.ts'
@@ -74,6 +75,9 @@ export function FilesBody({
   const { signal } = tab
   const cwd = useSessions(sessions => sessions.byId[sessionId]?.cwd)
   const state = useStore(store => store.byTab[tab.id])
+  // The workbench's own measured width decides every container's one-column
+  // fallback, not a window media query: the Sidebar is resizable.
+  const { setRoot: setContainerHost, narrow } = useNarrowLayout()
   const bodyRef = useRef<HTMLDivElement>(null)
   const scrollTopRef = useRef(0)
   // The reads each gesture supersedes; a newer probe or comparison aborts the
@@ -260,6 +264,7 @@ export function FilesBody({
     // The list this read continues, as it stands now: a page that lands after
     // the list was restarted is not an answer to it, however the ref and the
     // offset compare by then.
+    /* v8 ignore next -- the history bucket exists whenever a page is requested; zero is a defensive default. */
     const epoch = historyState.current?.listEpoch ?? 0
     const read = AbortSignal.any([signal, controller.signal])
     const request = ref === undefined
@@ -294,6 +299,7 @@ export function FilesBody({
         ? picked
         : undefined
       actions.historyRefsLoaded(tab.id, answer.value)
+      /* v8 ignore next 2 -- the picked ref's own page read replaces the old one; the guard covers that race. */
       if (walked === picked && historyListRead.current !== undefined) return
       if (!historyOpen.current) {
         // The slice states the page it owes, so returning to the container
@@ -429,9 +435,14 @@ export function FilesBody({
   const tree = useMemo((): TreeContext | undefined => state === undefined ? undefined : {
     state,
     onToggle: (parent, path) => { toggle(tab.id, parent, path, state.expanded, signal) },
-    onOpen: (path) => { actions.fileOpened(tab.id, openFileFor(sessionId, state.root, path)) },
+    onOpen: (path) => {
+      actions.fileOpened(tab.id, openFileFor(sessionId, state.root, path))
+      // A narrow pick is the preview drill-down; the wide layout draws the
+      // preview beside the tree and records nothing here.
+      if (narrow) actions.filesPageOpened(tab.id, true)
+    },
     t,
-  }, [state, tab.id, sessionId, toggle, actions, signal, t])
+  }, [state, tab.id, sessionId, toggle, actions, signal, t, narrow])
   // The two columns are memoized so a divider drag re-renders neither the tree
   // nor the document behind it. The chip lifetimes are minted at memo time:
   // `chipSignal` hands back the same composed signal for a chip already open,
@@ -512,6 +523,7 @@ export function FilesBody({
     }
     const treeHeader = (
       <div className={css.treeHeader} data-files-tree-header>
+        <span className={css.treeTitle} data-files-tree-title>{t('tree.title')}</span>
         <div className={css.treeActions} role="toolbar" aria-label={t('tree.actions.aria')}>
           <Tooltip label={t('tree.expand')} side="bottom" delayMs={300}>
             <button
@@ -536,7 +548,6 @@ export function FilesBody({
             </button>
           </Tooltip>
         </div>
-        <span className={css.treeTitle} data-files-tree-title>{t('tree.title')}</span>
       </div>
     )
     return (
@@ -565,9 +576,26 @@ export function FilesBody({
   const reload = (): void => {
     refresh(tab.id)
   }
+  // A narrow pick opens the preview drill-down; it only exists while a file is
+  // shown, so closing the last chip returns to the tree.
+  const filesPreviewOpen = state.container === 'files' && narrow && state.pageOpen && state.active !== undefined
   return (
     <div className={css.root} data-files-state="tree" data-files-root={state.root}>
       <div className={css.header}>
+        {filesPreviewOpen && (
+          <Tooltip label={t('files.back.aria')} side="bottom" delayMs={300}>
+            <button
+              type="button"
+              className={css.filesBack}
+              aria-label={t('files.back.aria')}
+              data-files-files-back
+              onClick={() => { actions.filesPageOpened(tab.id, false) }}
+            >
+              <IconChevronLeftOutlineRegular />
+              <span>{t('files.back')}</span>
+            </button>
+          </Tooltip>
+        )}
         <PathLabel path={state.root} className={css.path} data-files-path />
         <span hidden>
           <button type="button" className={css.tool} aria-label={t('autoRefresh')}
@@ -594,55 +622,71 @@ export function FilesBody({
         })}
       </div>
       <div className={css.railRow}>
-        {gitContainer ? (
-          <GitPanel
-            git={state.git}
-            onSelect={selectGitEntry}
-            onReload={() => { probeGit(state.root) }}
-            onRetryDiff={retryGitDiff}
-            onMode={(mode) => { actions.gitDiffModeSelected(tab.id, mode) }}
-            onRatio={(ratio) => { actions.gitRatioChanged(tab.id, ratio) }}
-            // The abort forgets the bucket before the unmount reports the offset.
-            onScrolled={(scrollTop) => { if (!signal.aborted) actions.gitListScrolled(tab.id, scrollTop) }}
-            ratio={state.git.ratio}
-            onToggleGroup={(group) => { actions.gitGroupToggled(tab.id, group) }}
-            t={t}
-          />
-        ) : historyContainer ? (
-          <HistoryPanel
-            history={state.history}
-            dirtyCount={state.git.status?.kind === 'repository' ? state.git.status.total : 0}
-            onSelectRef={selectHistoryRef}
-            onRefresh={refreshHistory}
-            onRetryRefs={() => { requestHistoryRefs(state.root) }}
-            onLoadMore={loadMoreHistory}
-            onRetryList={retryHistoryList}
-            onSelectCommit={selectHistoryCommit}
-            onDrillDown={() => { actions.historyPageOpened(tab.id, true) }}
-            onDirty={() => { actions.containerSelected(tab.id, 'git') }}
-            onSelectFile={selectHistoryFile}
-            onToggleFiles={() => { actions.historyFilesToggled(tab.id) }}
-            onRetryDetail={retryHistoryDetail}
-            onRetryDiff={retryHistoryDiff}
-            onDiffMode={(mode) => { actions.historyDiffModeSelected(tab.id, mode) }}
-            onRatio={(ratio) => { actions.historyRatioChanged(tab.id, ratio) }}
-            onBack={() => { actions.historyPageOpened(tab.id, false) }}
-            // The abort forgets the bucket before the unmount reports an offset.
-            onListScrolled={(scrollTop) => { if (!signal.aborted) actions.historyListScrolled(tab.id, scrollTop) }}
-            onPageScrolled={(hash, scrollTop) => {
-              if (!signal.aborted) actions.historyPageScrolled(tab.id, hash, scrollTop)
-            }}
-            t={t}
-          />
-        ) : (
-          <SplitView
-            ratio={state.ratio}
-            onRatio={(ratio) => { actions.ratioChanged(tab.id, ratio) }}
-            content={contentColumn}
-            tree={treeColumn}
-            label={t('splitter.aria')}
-          />
-        )}
+        <div
+          ref={setContainerHost}
+          className={css.containerHost}
+          data-files-container-host
+          data-files-layout={narrow ? 'narrow' : 'wide'}
+          data-files-files-layout={state.container === 'files' ? (narrow ? 'narrow' : 'wide') : undefined}
+          data-files-files-page={state.container === 'files' ? (filesPreviewOpen ? 'open' : 'list') : undefined}
+        >
+          {gitContainer ? (
+            <GitPanel
+              git={state.git}
+              narrow={narrow}
+              onSelect={selectGitEntry}
+              onDrillDown={() => { actions.gitPageOpened(tab.id, true) }}
+              onBack={() => { actions.gitPageOpened(tab.id, false) }}
+              onReload={() => { probeGit(state.root) }}
+              onRetryDiff={retryGitDiff}
+              onMode={(mode) => { actions.gitDiffModeSelected(tab.id, mode) }}
+              onRatio={(ratio) => { actions.gitRatioChanged(tab.id, ratio) }}
+              // The abort forgets the bucket before the unmount reports the offset.
+              onScrolled={(scrollTop) => { if (!signal.aborted) actions.gitListScrolled(tab.id, scrollTop) }}
+              ratio={state.git.ratio}
+              onToggleGroup={(group) => { actions.gitGroupToggled(tab.id, group) }}
+              t={t}
+            />
+          ) : historyContainer ? (
+            <HistoryPanel
+              history={state.history}
+              dirtyCount={state.git.status?.kind === 'repository' ? state.git.status.total : 0}
+              onSelectRef={selectHistoryRef}
+              onRefresh={refreshHistory}
+              onRetryRefs={() => { requestHistoryRefs(state.root) }}
+              onLoadMore={loadMoreHistory}
+              onRetryList={retryHistoryList}
+              onSelectCommit={selectHistoryCommit}
+              onDrillDown={() => { actions.historyPageOpened(tab.id, true) }}
+              onDirty={() => { actions.containerSelected(tab.id, 'git') }}
+              onSelectFile={selectHistoryFile}
+              onToggleFiles={() => { actions.historyFilesToggled(tab.id) }}
+              onRetryDetail={retryHistoryDetail}
+              onRetryDiff={retryHistoryDiff}
+              onDiffMode={(mode) => { actions.historyDiffModeSelected(tab.id, mode) }}
+              onRatio={(ratio) => { actions.historyRatioChanged(tab.id, ratio) }}
+              onBack={() => { actions.historyPageOpened(tab.id, false) }}
+              // The abort forgets the bucket before the unmount reports an offset.
+              onListScrolled={(scrollTop) => { if (!signal.aborted) actions.historyListScrolled(tab.id, scrollTop) }}
+              onPageScrolled={(hash, scrollTop) => {
+                if (!signal.aborted) actions.historyPageScrolled(tab.id, hash, scrollTop)
+              }}
+              t={t}
+            />
+          ) : narrow ? (
+            <div className={css.narrowPane} data-files-narrow-pane={filesPreviewOpen ? 'preview' : 'tree'}>
+              {filesPreviewOpen ? contentColumn : treeColumn}
+            </div>
+          ) : (
+            <SplitView
+              ratio={state.ratio}
+              onRatio={(ratio) => { actions.ratioChanged(tab.id, ratio) }}
+              content={contentColumn}
+              tree={treeColumn}
+              label={t('splitter.aria')}
+            />
+          )}
+        </div>
         <WorkbenchRail
           items={worktreeView
             ? [FILES_RAIL_ITEM, GIT_RAIL_ITEM, HISTORY_RAIL_ITEM]

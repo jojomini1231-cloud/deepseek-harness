@@ -53,10 +53,10 @@ describe('filesFace', () => {
     expect(list).not.toHaveBeenCalled()
     expect(snapshot()).toEqual({
       root: ROOT, levels: {}, expanded: [ROOT], scrollTop: 0, autoRefresh: true,
-      open: [], active: undefined, ratio: DEFAULT_RATIO, container: 'files',
+      open: [], active: undefined, ratio: DEFAULT_RATIO, pageOpen: false, container: 'files',
       git: {
         status: undefined, loading: false, failure: false, selected: undefined, selectedFrom: undefined,
-        scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: 0.58, groups: { changed: true, untracked: true },
+        scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: 0.58, pageOpen: false, groups: { changed: true, untracked: true },
       },
       history: {
         refs: undefined, refsLoading: false, refsFailure: false, ref: undefined,

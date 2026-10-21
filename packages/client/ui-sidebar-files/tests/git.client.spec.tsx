@@ -43,7 +43,8 @@ const DIFF: WorkspaceFileDiff = {
 function gitState(overrides: Partial<GitTabState> = {}): GitTabState {
   return {
     status: undefined, loading: false, failure: false, selected: undefined, selectedFrom: undefined,
-    scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: 0.58, groups: { changed: true, untracked: true },
+    scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: 0.58, pageOpen: false,
+    groups: { changed: true, untracked: true },
     ...overrides,
   }
 }
@@ -57,12 +58,17 @@ function panel(overrides: Partial<GitTabState> = {}, hands: {
   readonly onRatio?: (ratio: number) => void
   readonly onScrolled?: (scrollTop: number) => void
   readonly onToggleGroup?: (group: 'changed' | 'untracked') => void
-} = {}) {
+  readonly onDrillDown?: () => void
+  readonly onBack?: () => void
+} = {}, narrow = false) {
   const git = gitState(overrides)
   return render(
     <GitPanel
       git={git}
+      narrow={narrow}
       onSelect={hands.onSelect ?? vi.fn()}
+      onDrillDown={hands.onDrillDown ?? vi.fn()}
+      onBack={hands.onBack ?? vi.fn()}
       onReload={hands.onReload ?? vi.fn()}
       onRetryDiff={hands.onRetryDiff ?? vi.fn()}
       onMode={hands.onMode ?? vi.fn()}
@@ -234,6 +240,8 @@ describe('GitPanel', () => {
     const { container } = panel({ status: REPOSITORY }, { onSelect })
     expect(container.querySelector('[data-files-git-title]')?.textContent).toBe(zh['git.title'])
     expect(container.querySelector('[data-files-git-branch]')?.textContent).toBe('main')
+    expect(container.querySelector('[data-files-git-summary]')?.textContent).toContain('3 个文件')
+    expect(container.querySelector('[data-files-git-sync]')?.getAttribute('data-files-git-sync')).toBe('synced')
     const groups = [...container.querySelectorAll('[data-files-git-group]')].map(group => group.getAttribute('data-files-git-group'))
     expect(groups).toEqual(['changed', 'untracked'])
     // The comparison leads and the changed-path list trails, with the workbench's
@@ -272,7 +280,8 @@ describe('GitPanel', () => {
   it('folds and reopens a group, both starting expanded', () => {
     const onToggleGroup = vi.fn()
     const { container, rerender } = render(
-      <GitPanel git={gitState({ status: REPOSITORY })} onSelect={vi.fn()} onReload={vi.fn()} onRetryDiff={vi.fn()}
+      <GitPanel git={gitState({ status: REPOSITORY })} onSelect={vi.fn()} narrow={false}
+        onDrillDown={vi.fn()} onBack={vi.fn()} onReload={vi.fn()} onRetryDiff={vi.fn()}
         onMode={vi.fn()} onRatio={vi.fn()} onScrolled={vi.fn()} onToggleGroup={onToggleGroup} ratio={0.58} t={t} />,
     )
     const header = container.querySelector<HTMLButtonElement>('[data-files-git-group-toggle="changed"]')!
@@ -284,14 +293,16 @@ describe('GitPanel', () => {
     expect(onToggleGroup).toHaveBeenLastCalledWith('untracked')
     // A folded group keeps its header and count and hides its rows.
     rerender(
-      <GitPanel git={gitState({ status: REPOSITORY, groups: { changed: false, untracked: true } })} onSelect={vi.fn()}
+      <GitPanel git={gitState({ status: REPOSITORY, groups: { changed: false, untracked: true } })}
+        onSelect={vi.fn()} narrow={false} onDrillDown={vi.fn()} onBack={vi.fn()}
         onReload={vi.fn()} onRetryDiff={vi.fn()} onMode={vi.fn()} onRatio={vi.fn()} onScrolled={vi.fn()}
         onToggleGroup={onToggleGroup} ratio={0.58} t={t} />,
     )
     expect(container.querySelector('[data-files-git-group-toggle="changed"]')?.getAttribute('aria-expanded')).toBe('false')
     expect(container.querySelectorAll('[data-files-git-entry]')).toHaveLength(1)
     rerender(
-      <GitPanel git={gitState({ status: REPOSITORY, groups: { changed: true, untracked: false } })} onSelect={vi.fn()}
+      <GitPanel git={gitState({ status: REPOSITORY, groups: { changed: true, untracked: false } })}
+        onSelect={vi.fn()} narrow={false} onDrillDown={vi.fn()} onBack={vi.fn()}
         onReload={vi.fn()} onRetryDiff={vi.fn()} onMode={vi.fn()} onRatio={vi.fn()} onScrolled={vi.fn()}
         onToggleGroup={onToggleGroup} ratio={0.58} t={t} />,
     )
@@ -346,6 +357,10 @@ describe('GitPanel', () => {
     expect(panel({ status: { kind: 'repository', entries: [], total: 0 } })
       .container.querySelector('[data-files-git-state="clean"]')).not.toBeNull()
     cleanup()
+    // The narrow list carries the filled clean state instead of the wide note.
+    expect(panel({ status: { kind: 'repository', entries: [], total: 0 } }, {}, true)
+      .container.querySelector('[data-files-git-state="clean"]')).not.toBeNull()
+    cleanup()
     // A non-repository answer draws no list at all.
     expect(panel({ status: { kind: 'not-a-repository', entries: [], total: 0 } })
       .container.querySelector('[data-files-git-state]')).toBeNull()
@@ -381,8 +396,8 @@ describe('GitPanel', () => {
       panel(overrides).container.querySelector('[data-files-git-diff-state]')?.getAttribute('data-files-git-diff-state') ?? null
     expect(states({ status: REPOSITORY })).toBe('none')
     cleanup()
-    // A clean repository states it once, in the list.
-    expect(states({ status: { kind: 'repository', entries: [], total: 0 } })).toBeNull()
+    // A clean repository states it in the comparison too.
+    expect(states({ status: { kind: 'repository', entries: [], total: 0 } })).toBe('clean')
     cleanup()
     expect(states({ status: REPOSITORY, selected: 'src/a.ts', diff: 'loading' })).toBe('loading')
     cleanup()
@@ -397,6 +412,54 @@ describe('GitPanel', () => {
     const drawn = panel({ status: REPOSITORY, selected: 'src/a.ts', diff: DIFF })
     expect(drawn.container.querySelector('[data-files-git-diff="src/a.ts"]')).not.toBeNull()
     expect(drawn.container.querySelector('[data-files-git-diff]')?.textContent).toContain('new')
+  })
+
+  it('drills into the comparison in the narrow layout and back to the list', () => {
+    const onSelect = vi.fn()
+    const onDrillDown = vi.fn()
+    const onBack = vi.fn()
+    const wide = panel({ status: REPOSITORY, selected: 'src/a.ts', diff: DIFF }, {}, false)
+    expect(wide.container.querySelector('[data-files-git-layout]')?.getAttribute('data-files-git-layout')).toBe('wide')
+    expect(wide.container.querySelector('[data-files-git-diff]')).not.toBeNull()
+    cleanup()
+
+    const list = panel({ status: REPOSITORY }, { onSelect, onDrillDown, onBack }, true)
+    expect(list.container.querySelector('[data-files-git-layout]')?.getAttribute('data-files-git-layout')).toBe('narrow')
+    expect(list.container.querySelector('[data-files-git-page-open]')?.getAttribute('data-files-git-page-open')).toBe('false')
+    fireEvent.click(list.container.querySelector('[data-files-git-entry="src/a.ts"]')!)
+    expect(onSelect).toHaveBeenCalledOnce()
+    expect(onDrillDown).toHaveBeenCalledOnce()
+    cleanup()
+
+    const page = panel({ status: REPOSITORY, selected: 'src/a.ts', diff: DIFF, pageOpen: true }, { onBack }, true)
+    expect(page.container.querySelector('[data-files-git-page-open]')?.getAttribute('data-files-git-page-open')).toBe('true')
+    expect(page.container.querySelector('[data-files-git-diff="src/a.ts"]')).not.toBeNull()
+    fireEvent.click(page.container.querySelector('[data-files-git-back]')!)
+    expect(onBack).toHaveBeenCalledOnce()
+  })
+
+  it('moves focus with the narrow drill-down and back', () => {
+    const hands = {
+      onSelect: vi.fn(), onDrillDown: vi.fn(), onBack: vi.fn(), onReload: vi.fn(),
+      onRetryDiff: vi.fn(), onMode: vi.fn(), onRatio: vi.fn(), onScrolled: vi.fn(), onToggleGroup: vi.fn(),
+    }
+    const element = (git: GitTabState) => (
+      <GitPanel git={git} narrow onSelect={hands.onSelect} onDrillDown={hands.onDrillDown} onBack={hands.onBack}
+        onReload={hands.onReload} onRetryDiff={hands.onRetryDiff} onMode={hands.onMode} onRatio={hands.onRatio}
+        onScrolled={hands.onScrolled} onToggleGroup={hands.onToggleGroup} ratio={0.58} t={t} />
+    )
+    const { container, rerender } = render(element(gitState({ status: REPOSITORY })))
+    rerender(element(gitState({ status: REPOSITORY, selected: 'src/a.ts', diff: DIFF, pageOpen: true })))
+    expect(document.activeElement).toBe(container.querySelector('[data-files-git-back]'))
+    rerender(element(gitState({ status: REPOSITORY, selected: 'src/a.ts', diff: DIFF, pageOpen: false })))
+    expect(document.activeElement).toBe(container.querySelector('[data-files-git-entry="src/a.ts"]'))
+  })
+
+  it('marks the summary as failed while the stale list stays on screen', () => {
+    const { container } = panel({ status: REPOSITORY, failure: true })
+    expect(container.querySelector('[data-files-git-sync]')?.getAttribute('data-files-git-sync')).toBe('failed')
+    expect(container.querySelector('[data-files-git-state="failed"]')).not.toBeNull()
+    expect(container.querySelectorAll('[data-files-git-entry]')).toHaveLength(3)
   })
 
   it('asks for the shown comparison again from its failed state', () => {
@@ -811,5 +874,47 @@ describe('git view through the body', () => {
 describe('git copy', () => {
   it('names the same keys in both dictionaries', () => {
     expect(Object.keys(zh).sort()).toEqual(Object.keys(en).sort())
+  })
+
+  it('narrows the git container and drills into the comparison from the body', async () => {
+    class FakeResizeObserver implements ResizeObserver {
+      static all: FakeResizeObserver[] = []
+      readonly observed: Element[] = []
+      readonly observe = vi.fn((element: Element) => { this.observed.push(element) })
+      readonly unobserve = vi.fn()
+      readonly disconnect = vi.fn()
+      constructor(private readonly callback: ResizeObserverCallback) {
+        FakeResizeObserver.all.push(this)
+      }
+
+      fire(width: number): void {
+        this.callback([{ contentRect: { width } } as ResizeObserverEntry], this)
+      }
+    }
+    FakeResizeObserver.all = []
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver)
+    try {
+      const mounted = mountBody(ROOT, undefined, { status: REPOSITORY, diff: DIFF })
+      await act(() => mounted.script.watches.ready(ROOT))
+      await act(() => mounted.script.settle({ ok: true, value: { entries: [], truncated: false } }))
+      const host = mounted.view.container.querySelector('[data-files-container-host]')
+      if (host === null) throw new Error('expected the measured container host')
+      const observer = FakeResizeObserver.all.find(candidate => candidate.observed.includes(host))
+      if (observer === undefined) throw new Error('expected the workbench to measure its container')
+      act(() => { observer.fire(400) })
+      fireEvent.click(mounted.view.container.querySelector('[data-files-rail-item="git"]')!)
+      const panel = mounted.view.container.querySelector('[data-files-git-panel]')!
+      expect(panel.getAttribute('data-files-git-layout')).toBe('narrow')
+      expect(panel.getAttribute('data-files-git-page-open')).toBe('false')
+      await act(async () => {
+        fireEvent.click(mounted.view.container.querySelector('[data-files-git-entry="src/a.ts"]')!)
+      })
+      expect(mounted.instance.getSnapshot().byTab[TAB]?.git.pageOpen).toBe(true)
+      expect(panel.getAttribute('data-files-git-page-open')).toBe('true')
+      fireEvent.click(mounted.view.container.querySelector('[data-files-git-back]')!)
+      expect(mounted.instance.getSnapshot().byTab[TAB]?.git.pageOpen).toBe(false)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

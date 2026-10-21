@@ -69,18 +69,20 @@ describe('FilesBody', () => {
 
   it('marks the root path clipped while its text is wider than its box, re-reading on resize', async () => {
     class FakeResizeObserver implements ResizeObserver {
-      static latest: FakeResizeObserver | undefined
-      readonly observe = vi.fn()
+      static all: FakeResizeObserver[] = []
+      readonly observed: Element[] = []
+      readonly observe = vi.fn((element: Element) => { this.observed.push(element) })
       readonly unobserve = vi.fn()
       readonly disconnect = vi.fn()
       constructor(private readonly callback: ResizeObserverCallback) {
-        FakeResizeObserver.latest = this
+        FakeResizeObserver.all.push(this)
       }
 
       fire(): void {
         this.callback([], this)
       }
     }
+    FakeResizeObserver.all = []
     vi.stubGlobal('ResizeObserver', FakeResizeObserver)
     let boxWidth = 300
     const offsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')
@@ -94,7 +96,7 @@ describe('FilesBody', () => {
       const path = view.container.querySelector<HTMLElement>('[data-files-path]')
       const text = path?.firstElementChild
       expect(path?.hasAttribute('data-path-clipped')).toBe(false)
-      const observer = FakeResizeObserver.latest
+      const observer = FakeResizeObserver.all.find(candidate => candidate.observed.includes(path!))
       if (observer === undefined) throw new Error('expected the path to observe its size')
       expect(observer.observe).toHaveBeenCalledWith(path)
       expect(observer.observe).toHaveBeenCalledWith(text)
@@ -476,6 +478,55 @@ describe('FilesBody', () => {
     expect(instance.getSnapshot().byTab[TAB]).toBeUndefined()
     expect(view.container.querySelector('[data-files-state="tree"]')).toBeNull()
     expect(script.list).toHaveBeenCalledTimes(1)
+  })
+
+  it('switches to one column below the measured threshold and drills into the preview', async () => {
+    class FakeResizeObserver implements ResizeObserver {
+      static all: FakeResizeObserver[] = []
+      readonly observed: Element[] = []
+      readonly observe = vi.fn((element: Element) => { this.observed.push(element) })
+      readonly unobserve = vi.fn()
+      readonly disconnect = vi.fn()
+      constructor(private readonly callback: ResizeObserverCallback) {
+        FakeResizeObserver.all.push(this)
+      }
+
+      fire(width: number): void {
+        this.callback([{ contentRect: { width } } as ResizeObserverEntry], this)
+      }
+    }
+    FakeResizeObserver.all = []
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver)
+    try {
+      const { view, script, instance } = mountBody()
+      await act(() => script.watches.ready(ROOT))
+      await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
+      const host = view.container.querySelector('[data-files-container-host]')
+      if (host === null) throw new Error('expected the measured container host')
+      const observer = FakeResizeObserver.all.find(candidate => candidate.observed.includes(host))
+      if (observer === undefined) throw new Error('expected the workbench to measure its container')
+      act(() => { observer.fire(400) })
+      expect(host.getAttribute('data-files-files-layout')).toBe('narrow')
+      expect(host.getAttribute('data-files-files-page')).toBe('list')
+      expect(view.container.querySelector('[data-files-narrow-pane="tree"]')).not.toBeNull()
+      expect(view.container.querySelector('[data-files-preview]')).toBeNull()
+
+      act(() => {
+        fireEvent.click(view.container.querySelector(`[data-files-path="${ROOT}/README.md"] > button`)!)
+      })
+      expect(instance.getSnapshot().byTab[TAB]?.pageOpen).toBe(true)
+      expect(host.getAttribute('data-files-files-page')).toBe('open')
+      expect(view.container.querySelector('[data-files-narrow-pane="preview"]')).not.toBeNull()
+      expect(view.container.querySelector('[data-files-preview]')).not.toBeNull()
+      expect(view.container.querySelector('[data-files-files-back]')).not.toBeNull()
+
+      act(() => { fireEvent.click(view.container.querySelector('[data-files-files-back]')!) })
+      expect(instance.getSnapshot().byTab[TAB]?.pageOpen).toBe(false)
+      expect(host.getAttribute('data-files-files-page')).toBe('list')
+      expect(view.container.querySelector('[data-files-narrow-pane="tree"]')).not.toBeNull()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
 
