@@ -6,10 +6,12 @@
  *
  * Presentational — the body owns the reads and the store. The navigator's refs
  * filter only changes which history the list walks; it never switches branches.
- * Rows carry the inline commit graph in a narrow gutter, computed by the pure
- * lane layout in `history-graph.ts`, so the graph never becomes its own column.
+ * Rows carry one inline commit graph computed by the pure lane layout in
+ * `history-graph.ts`: each row draws the lane segments that cross it and its
+ * commit dot, so a fork or a merge shows as a diagonal while a lane that keeps
+ * its place draws straight, and every row shares one gutter width.
  */
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import clsx from 'clsx'
 import {
@@ -25,39 +27,47 @@ import { HistoryRefsFilter } from './HistoryRefsFilter.tsx'
 import { useScrollRestore } from './use-scroll-restore.ts'
 import { RefPills } from './RefPills.tsx'
 import { SplitView } from './SplitView.tsx'
+import { useNarrowLayout } from './layout.ts'
 import { useNow } from './use-now.ts'
 import { absoluteTime, commitRefPills, historyTime, refsByCommit } from './history.ts'
 import { layoutGraph } from './history-graph.ts'
-import type { GraphRow } from './history-graph.ts'
+import type { GraphLayout, GraphRow } from './history-graph.ts'
 import bodyCss from './FilesBody.module.css'
 import css from './HistoryPanel.module.css'
 
-/** Below this measured panel width the history view drops to one column. */
-const HISTORY_NARROW_WIDTH = 560
-
-/** A commit row's height in px; the inline graph draws in the same unit. */
+/** A commit row's height in px; the commit graph draws in the same unit. */
 const ROW_HEIGHT = 44
 
-/**
- * The row height, published to the stylesheet: the row and the graph gutter
- * both consume it, so the drawing can never disagree with the box it sits in.
- */
-const ROW_STYLE = { '--files-history-row-height': `${ROW_HEIGHT}px` } as CSSProperties
+/** A lane's distance from the gutter's leading edge, in px. */
+const LANE_PAD = 8
 
-/** Distance from the gutter's start to the first lane's center. */
-const LANE_START = 8
-
-/** Distance between lane centers. */
-const LANE_WIDTH = 10
-
-/** Lane colors the stylesheet defines (`lane0`..`lane5`). */
-const LANE_COLORS = 6
+/** The distance between two adjacent lanes, in px. */
+const LANE_SPACING = 9
 
 /** Ref names a commit row names before the `+n` pill. */
 const ROW_REF_LIMIT = 2
 
 /** The refs a commit without any tips carries; one instance, so a row's memo holds. */
 const NO_REFS: readonly WorkspaceGitRef[] = []
+
+/**
+ * The x coordinate a lane's line draws at.
+ * @param lane - zero-based lane index from the gutter's leading edge.
+ * @returns the coordinate in px.
+ */
+function laneX(lane: number): number {
+  return LANE_PAD + lane * LANE_SPACING
+}
+
+/**
+ * The gutter width a lane count needs. The navigator publishes this one width
+ * for every row, so row text starts at the same edge whatever a row draws.
+ * @param lanes - the widest row's lane count; 0 for an empty page.
+ * @returns the width in px.
+ */
+function gutterWidth(lanes: number): number {
+  return LANE_PAD * 2 + (Math.max(1, lanes) - 1) * LANE_SPACING
+}
 
 /** The history view's props: the slice, the gestures, and translate. */
 export interface HistoryPanelProps {
@@ -102,61 +112,61 @@ export interface HistoryPanelProps {
   readonly t: TranslateNS<'sidebarFiles'>
 }
 
-/** The lane color class for one color index. */
-function laneClass(color: number): string | undefined {
-  return css[`lane${color % LANE_COLORS}`]
-}
-
 /**
- * The inline commit graph gutter for one row.
- * @param props.row - the row's lane layout.
+ * One row's commit-graph gutter: every lane segment crossing the row, the
+ * commit's dot, and the shown commit's ring. A segment runs between the lane it
+ * occupied above the row and the one it occupies below, so a lane that keeps
+ * its place draws vertically and a fork or merge draws a diagonal.
+ * @param props.row - the row's graph drawing.
+ * @param props.lanes - the layout's widest lane count; fixes the gutter width.
  * @param props.active - whether the row is the shown commit.
- * @returns the gutter, or nothing before the row's layout is known.
+ * @returns the gutter, or nothing before the row's drawing is known.
  */
-function GraphGutter({ row, active }: {
+function GraphGutter({ row, lanes, active }: {
   readonly row: GraphRow | undefined
+  readonly lanes: number
   readonly active: boolean
 }): ReactNode {
   /* v8 ignore next -- the pure layout covers every loaded commit hash. */
   if (row === undefined) return null
-  const width = Math.max(20, LANE_START + (row.lanes - 1) * LANE_WIDTH + 12)
-  const x = (lane: number): number => LANE_START + lane * LANE_WIDTH
-  const center = ROW_HEIGHT / 2
+  const width = gutterWidth(lanes)
+  const centerY = ROW_HEIGHT / 2
   return (
-    <svg className={css.graph} width={width} height={ROW_HEIGHT} viewBox={`0 0 ${width} ${ROW_HEIGHT}`} aria-hidden="true">
-      {row.segments.map((segment, index) => (
+    <svg
+      className={css.gutter}
+      width={width}
+      height={ROW_HEIGHT}
+      viewBox={`0 0 ${width} ${ROW_HEIGHT}`}
+      aria-hidden="true"
+    >
+      {row.edges.map((edge, index) => (
         <line
-          key={`s${index}`}
-          className={laneClass(segment.color)}
-          x1={x(segment.lane)} x2={x(segment.lane)}
-          y1={segment.from * ROW_HEIGHT} y2={segment.to * ROW_HEIGHT}
-          stroke="currentColor" strokeWidth={1.2} strokeLinecap="round"
-        />
-      ))}
-      {row.curves.map((curve, index) => (
-        <path
-          key={`c${index}`}
-          className={laneClass(curve.color)}
-          d={`M ${x(curve.from)} ${center} C ${x(curve.from)} ${ROW_HEIGHT * 0.72}, ${x(curve.to)} ${ROW_HEIGHT * 0.78}, ${x(curve.to)} ${ROW_HEIGHT}`}
-          fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round"
+          // Segments are positional: the drawing holds every crossing of the row.
+          key={index}
+          className={clsx(css.edge, css[`lane${edge.color}`])}
+          x1={laneX(edge.fromLane)} y1={edge.from * ROW_HEIGHT}
+          x2={laneX(edge.toLane)} y2={edge.to * ROW_HEIGHT}
         />
       ))}
       {active && (
         <circle
-          className={laneClass(row.dot.color)}
-          cx={x(row.dot.lane)} cy={center} r={6.5}
-          fill="none" stroke="currentColor" strokeOpacity={0.35} strokeWidth={1.4}
+          className={clsx(css.ring, css[`lane${row.node.color}`])}
+          cx={laneX(row.node.lane)} cy={centerY} r={6.5}
         />
       )}
-      <circle className={laneClass(row.dot.color)} cx={x(row.dot.lane)} cy={center} r={3} fill="currentColor" />
+      <circle
+        className={clsx(css.node, css[`lane${row.node.color}`])}
+        cx={laneX(row.node.lane)} cy={centerY} r={3}
+      />
     </svg>
   )
 }
 
-/** One commit row: its graph gutter, ref pills, subject, and identity line. */
-const CommitRow = memo(function CommitRow({ commit, row, active, refs, now, onSelect, t }: {
+/** One commit row: its commit-graph gutter, ref pills, subject, and identity line. */
+const CommitRow = memo(function CommitRow({ commit, row, lanes, active, refs, now, onSelect, t }: {
   readonly commit: WorkspaceGitCommit
   readonly row: GraphRow | undefined
+  readonly lanes: number
   readonly active: boolean
   readonly refs: readonly WorkspaceGitRef[]
   readonly now: number
@@ -172,7 +182,7 @@ const CommitRow = memo(function CommitRow({ commit, row, active, refs, now, onSe
       data-files-history-commit={commit.hash}
       onClick={() => { onSelect(commit.hash) }}
     >
-      <GraphGutter row={row} active={active} />
+      <GraphGutter row={row} lanes={lanes} active={active} />
       <span className={css.commitMain}>
         <span className={css.commitLine1}>
           <RefPills pills={pills} className={css.refPills} pillClassName={css.refPill} labelClassName={css.refPillLabel} />
@@ -199,7 +209,7 @@ function Navigator({
 }: {
   readonly history: HistoryTabState
   readonly dirtyCount: number
-  readonly graph: ReadonlyMap<string, GraphRow>
+  readonly graph: GraphLayout
   readonly tips: ReadonlyMap<string, readonly WorkspaceGitRef[]>
   readonly now: number
   readonly onSelectRef: HistoryPanelProps['onSelectRef']
@@ -270,7 +280,8 @@ function Navigator({
           <CommitRow
             key={commit.hash}
             commit={commit}
-            row={graph.get(commit.hash)}
+            row={graph.rows.get(commit.hash)}
+            lanes={graph.lanes}
             active={commit.hash === history.selected}
             refs={tips.get(commit.hash) ?? NO_REFS}
             now={now}
@@ -338,27 +349,18 @@ function Navigator({
  */
 export function HistoryPanel(props: HistoryPanelProps): ReactNode {
   const { history, dirtyCount, ...hands } = props
-  const root = useRef<HTMLDivElement | null>(null)
-  const [narrow, setNarrow] = useState(false)
   // The threshold is the panel's own measured width, not the window's: the
   // right Sidebar is resizable and the same window holds both layouts.
-  useEffect(() => {
-    const element = root.current
-    /* v8 ignore next 2 -- the ref is attached before the effect runs. */
-    if (element === null) return undefined
-    if (typeof ResizeObserver === 'undefined') return undefined
-    const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 0
-      // A hidden or not-yet-laid-out panel keeps the wide layout: only a real
-      // measured width crosses the threshold.
-      if (width === 0) return
-      setNarrow(width < HISTORY_NARROW_WIDTH)
-    })
-    observer.observe(element)
-    return () => { observer.disconnect() }
-  }, [])
+  const { root, setRoot, narrow } = useNarrowLayout()
   const now = useNow()
   const graph = useMemo(() => layoutGraph(history.commits), [history.commits])
+  // The row height and the one gutter width are published to the stylesheet:
+  // the rows and the graph drawings both consume them, so the drawing can never
+  // disagree with the box it sits in and no row's text starts at another edge.
+  const panelStyle = useMemo(() => ({
+    '--files-history-row-height': `${ROW_HEIGHT}px`,
+    '--files-history-gutter-width': `${gutterWidth(graph.lanes)}px`,
+  }) as CSSProperties, [graph.lanes])
   const tips = useMemo(() => refsByCommit(history.refs ?? []), [history.refs])
   const pageOpen = narrow && history.pageOpen && history.selected !== undefined
   // Only a narrow pick is a drill-down: the wide layout draws the page beside
@@ -381,7 +383,7 @@ export function HistoryPanel(props: HistoryPanelProps): ReactNode {
     if (previous === pageOpen) return
     const selector = pageOpen
       ? '[data-files-history-back]'
-      : `[data-files-history-commit="${history.selected ?? ''}"]`
+      : `[data-files-history-commit="${history.selected}"]`
     const target = root.current?.querySelector<HTMLElement>(selector)
       ?? root.current?.querySelector<HTMLElement>('[data-files-history-refs]')
     if (target != null) focusWithoutRing(target)
@@ -423,9 +425,9 @@ export function HistoryPanel(props: HistoryPanelProps): ReactNode {
   )
   return (
     <div
-      ref={root}
+      ref={setRoot}
       className={css.panel}
-      style={ROW_STYLE}
+      style={panelStyle}
       data-files-history
       data-files-history-layout={narrow ? 'narrow' : 'wide'}
       data-files-history-page-open={pageOpen ? 'true' : 'false'}

@@ -230,6 +230,13 @@ describe('web e2e: the repository history view', () => {
     // Another row moves the page: the merge commit's first-parent comparison
     // holds only the branch-side path.
     const mergeRow = rows.filter({ hasText: 'merge: topic/sidebar into main' })
+    // The graph gutter draws the merge's fork: the merge row carries a diagonal
+    // lane segment beside the mainline it continues.
+    const mergeSegments = await mergeRow.locator('svg line').evaluateAll(lines => lines.map(line => ({
+      x1: line.getAttribute('x1'), x2: line.getAttribute('x2'),
+    })))
+    expect(mergeSegments.length).toBeGreaterThan(0)
+    expect(mergeSegments.some(segment => segment.x1 !== segment.x2)).toBe(true)
     await mergeRow.scrollIntoViewIfNeeded()
     await mergeRow.click()
     await expect.poll(async () => await column.locator('[data-files-history-page-subject]').textContent(), { timeout: 15_000 })

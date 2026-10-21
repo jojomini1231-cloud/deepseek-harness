@@ -140,16 +140,57 @@ describe('HistoryPanel navigator', () => {
     expect(chip.textContent).toBe('dev')
   })
 
-  it('draws the merge curves of a branchy page', () => {
+  it('draws the commit graph: a straight lane for linear history and a diagonal at a merge', () => {
+    const linear = mountHistory({ commits: COMMITS, selected: hash('a') })
+    const linearRows = [...linear.container.querySelectorAll('[data-files-history-commit]')]
+    expect(linearRows).toHaveLength(COMMITS.length)
+    for (const row of linearRows) {
+      const svg = row.querySelector('svg')!
+      expect(svg.getAttribute('aria-hidden')).toBe('true')
+      const lines = [...svg.querySelectorAll('line')]
+      expect(lines.length).toBeGreaterThan(0)
+      // One lane, so every segment keeps the lane's x from the row's top to its
+      // bottom and the history reads as one straight line.
+      for (const line of lines) expect(line.getAttribute('x1')).toBe(line.getAttribute('x2'))
+      // The commit dot sits on that lane at the row's vertical center.
+      const circles = [...svg.querySelectorAll('circle')]
+      expect(circles.at(-1)!.getAttribute('cx')).toBe('8')
+      expect(circles.at(-1)!.getAttribute('cy')).toBe('22')
+    }
+    // The shown commit carries the active ring; the other rows do not.
+    expect(linearRows[0]!.querySelectorAll('svg circle')).toHaveLength(2)
+    expect(linearRows[0]!.querySelector('svg circle')!.getAttribute('r')).toBe('6.5')
+    expect(linearRows[1]!.querySelectorAll('svg circle')).toHaveLength(1)
+    // One lane needs the gutter's padding on both sides only.
+    expect(Number(linearRows[0]!.querySelector('svg')!.getAttribute('width'))).toBe(16)
+    cleanup()
+
     const branchy = [
       { hash: hash('d'), short: 'ddddddd', parents: [hash('e'), hash('f')], author: 'jojo', authoredAt: '2026-10-19T10:00:00+08:00', subject: 'Merge a branch' },
       { hash: hash('e'), short: 'eeeeeee', parents: [hash('f')], author: 'jojo', authoredAt: '2026-10-18T10:00:00+08:00', subject: 'Branch work' },
       { hash: hash('f'), short: 'fffffff', parents: [], author: 'jojo', authoredAt: '2026-10-17T10:00:00+08:00', subject: 'Root' },
     ]
-    const { container } = mountHistory({ commits: branchy })
-    // Two lanes and the merge curve: paths are drawn, not only straight lines.
-    expect(container.querySelectorAll('[data-files-history-commit] svg path').length).toBeGreaterThan(0)
-    expect(container.querySelectorAll('[data-files-history-commit] svg line').length).toBeGreaterThan(0)
+    const merged = mountHistory({ commits: branchy })
+    const mergeRows = [...merged.container.querySelectorAll('[data-files-history-commit]')]
+    // The merge's second parent opens a lane beside the first: one diagonal
+    // leaves the dot (row fraction 0.5) for the lane one step to its right.
+    const diagonals = [...mergeRows[0]!.querySelectorAll('svg line')]
+      .filter(line => line.getAttribute('x1') !== line.getAttribute('x2'))
+    expect(diagonals).toHaveLength(1)
+    expect(diagonals[0]!.getAttribute('x1')).toBe('8')
+    expect(diagonals[0]!.getAttribute('y1')).toBe('22')
+    expect(diagonals[0]!.getAttribute('x2')).toBe('17')
+    expect(diagonals[0]!.getAttribute('y2')).toBe('44')
+    // Two lanes widen the one gutter the whole navigator shares, so every row's
+    // drawing and text take the same width.
+    const mergeWidth = Number(mergeRows[0]!.querySelector('svg')!.getAttribute('width'))
+    expect(mergeWidth).toBe(25)
+    for (const row of mergeRows) expect(row.querySelector('svg')!.getAttribute('width')).toBe(String(mergeWidth))
+    expect(merged.container.querySelector<HTMLElement>('[data-files-history]')!.style.getPropertyValue('--files-history-gutter-width'))
+      .toBe('25px')
+    // The node dot remains on the commit's own lane.
+    expect(mergeRows[0]!.querySelectorAll('svg circle')).toHaveLength(1)
+    expect(mergeRows[0]!.querySelector('svg circle')!.getAttribute('cx')).toBe('8')
   })
 
   it('draws each list state: pending refs, failed refs, loading, failed, empty', () => {
@@ -273,6 +314,16 @@ describe('HistoryPanel refs filter', () => {
     expect(document.querySelector('[data-files-history-ref=":all"]')?.getAttribute('aria-current')).toBeNull()
   })
 
+  it('names the walked ref before the refs answer and after it disappears', () => {
+    const pending = mountHistory({ refs: undefined, ref: 'refs/heads/dev' })
+    expect(pending.container.querySelector('[data-files-history-refs]')?.textContent).toBe('refs/heads/dev')
+    cleanup()
+    // A ref the repository no longer reports still names the walked history
+    // until the next refs read drops it.
+    const stale = mountHistory({ refs: REFS, ref: 'refs/heads/gone' })
+    expect(stale.container.querySelector('[data-files-history-refs]')?.textContent).toBe('refs/heads/gone')
+  })
+
   it('states the empty search, the loading refs, and the failed refs with their retry', () => {
     const { container } = mountHistory({ refs: REFS })
     const popover = openFilter(container)
@@ -368,6 +419,21 @@ describe('HistoryPanel refs filter', () => {
   })
 })
 
+describe('HistoryPanel clock', () => {
+  it('re-dates the rows on its minute timer and clears it on unmount', () => {
+    vi.useFakeTimers()
+    try {
+      const { container, unmount } = mountHistory({ refs: REFS, commits: COMMITS })
+      const list = container.querySelector('[data-files-history-list]')!
+      act(() => { vi.advanceTimersByTime(60_000) })
+      expect(container.querySelector('[data-files-history-list]')).toBe(list)
+      unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
 describe('HistoryPanel narrow layout', () => {
   it('keeps the wide layout when no width is measured or no observer exists', () => {
     const { container } = mountHistory({ refs: REFS, commits: COMMITS })
@@ -458,6 +524,19 @@ describe('HistoryPanel narrow layout', () => {
       rerender(<HistoryPanel {...props} history={{ ...props.history, pageOpen: false }} />)
       expect(document.activeElement?.getAttribute('data-files-history-commit')).toBe(hash('a'))
       expect(container.querySelector('[data-files-history-list]')).not.toBeNull()
+    })
+  })
+
+  it('returns focus to the refs chip when the selected row is gone', () => {
+    withResizeObserver(() => {
+      const { rerender, props } = mountHistory({
+        refs: REFS, commits: COMMITS, selected: hash('a'), detail: DETAIL, pageOpen: true,
+      })
+      act(() => { FakeResizeObserver.latest!.fire(400) })
+      // A refresh dropped the selected commit: the back transition has no row
+      // to land on, so keyboard focus stays on the navigator's refs control.
+      rerender(<HistoryPanel {...props} history={{ ...props.history, commits: [], pageOpen: false }} />)
+      expect(document.activeElement?.getAttribute('data-files-history-refs')).not.toBeNull()
     })
   })
 

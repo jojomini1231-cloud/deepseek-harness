@@ -4,8 +4,8 @@
 .panel {
   display: flex;
   flex: 1 1 auto;
-  /* --files-history-row-height is published here by the component, which draws
-     the graph gutter's geometry in the same unit. */
+  /* --files-history-row-height and --files-history-gutter-width are published
+     here by the component, which draws the commit graph in the same units. */
   min-width: 0;
   min-height: 0;
 }
@@ -181,9 +181,10 @@
   scrollbar-gutter: stable;
 }
 
-/* One commit: the inline graph gutter and two lines of text on one row. The
-   row and the gutter share --files-history-row-height, published by the
-   component, so the drawing and its row cannot drift apart. */
+/* One commit: the commit-graph gutter and two lines of text on one row.
+   The row and the gutter share --files-history-row-height, and every row shares
+   --files-history-gutter-width, so the drawing and its row cannot drift apart
+   and no row's text starts at another edge. */
 .commitRow {
   display: flex;
   gap: 6px;
@@ -208,25 +209,49 @@
   background: var(--dsw-alias-interactive-bg-active, var(--dsw-alias-interactive-bg-hover));
 }
 
-/* The inline commit graph: a narrow gutter, never its own column. Its height
-   is the row's, so the lanes end where the row does. */
-.graph {
+/* One row's commit-graph gutter: the lane segments crossing the row, the
+   commit's dot, and the shown commit's ring. Its height is the row's and its
+   width is the navigator's one gutter width, so the text of every row starts at
+   the same edge; the box clips a lane that runs past the drawn width. */
+.gutter {
   flex: none;
   align-self: center;
+  width: var(--files-history-gutter-width, 16px);
   height: var(--files-history-row-height, 44px);
   overflow: hidden;
-  color: var(--dsw-alias-state-business-primary);
 }
 
-/* Six categorical lane tints drawn from the brand and neutral ramps. The
-   status aliases mean health, so a decorative lane must not borrow them: a
-   red or amber line on an ordinary commit graph reads as an error state. */
-.lane0 { color: var(--dsw-alias-state-business-primary); }
-.lane1 { color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 70%, var(--dsw-alias-label-primary)); }
-.lane2 { color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 45%, var(--dsw-alias-label-secondary)); }
-.lane3 { color: var(--dsw-alias-label-secondary); }
-.lane4 { color: var(--dsw-alias-label-tertiary); }
-.lane5 { color: var(--dsw-alias-label-caption); }
+/* A lane segment takes its lane's hue through the class the layout's color
+   index selects; the geometry comes from the element's own attributes. */
+.edge {
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.node {
+  fill: currentColor;
+}
+
+/* The shown commit's ring: the same lane hue, quiet enough to read as a halo. */
+.ring {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-opacity: 0.35;
+}
+
+/* Lane hues are categorical: no semantic alias names a lane, so these take the
+   static scale directly, as the trajectory accent does, and mix it for the
+   violet and teal lanes the scale does not hold. Each hue is pulled 30% toward
+   the theme's primary ink, which darkens it on the light theme and lightens it
+   on the dark one, so a thin 1.4px lane keeps above 3:1 against both fills. */
+.lane0 { color: color-mix(in srgb, var(--dsw-static-deepseek-450) 70%, var(--dsw-alias-label-primary)); }
+.lane1 { color: color-mix(in srgb, var(--dsw-static-green-400) 70%, var(--dsw-alias-label-primary)); }
+.lane2 { color: color-mix(in srgb, var(--dsw-static-amber-500) 70%, var(--dsw-alias-label-primary)); }
+.lane3 { color: color-mix(in srgb, var(--dsw-static-red-400) 70%, var(--dsw-alias-label-primary)); }
+.lane4 { color: color-mix(in srgb, color-mix(in srgb, var(--dsw-static-deepseek-450) 52%, var(--dsw-static-red-400)) 70%, var(--dsw-alias-label-primary)); }
+.lane5 { color: color-mix(in srgb, color-mix(in srgb, var(--dsw-static-deepseek-450) 55%, var(--dsw-static-green-400)) 70%, var(--dsw-alias-label-primary)); }
 
 .commitMain {
   display: flex;

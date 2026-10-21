@@ -86,9 +86,9 @@ export function HistoryRefsFilter({
   // Every close path clears the search text, including an outside press, so a
   // reopened popover starts from the full list. The callback identity is stable
   // because the dismissal hook re-registers its listener whenever it changes.
-  const dismiss = useCallback((next: boolean): void => {
-    setOpen(next)
-    if (!next) setQuery('')
+  const dismiss = useCallback((): void => {
+    setOpen(false)
+    setQuery('')
   }, [])
   useDismissOnOutsidePointer(triggerRef, open, dismiss, panelRef)
   // The search box takes the keyboard when the popover opens, and the text is
@@ -141,11 +141,13 @@ export function HistoryRefsFilter({
     // Tab and Shift+Tab cycle inside the panel instead, the way the shared
     // Menu keeps its portalled list operable.
     if (event.key === 'Tab') {
-      const stops = [
+      const panel = panelRef.current
+      /* v8 ignore next -- the popover's panel is attached while its own key handler runs. */
+      if (panel === null) return
+      const stops: Array<HTMLInputElement | HTMLButtonElement | null> = [
         searchRef.current,
-        ...(panelRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []),
-      ].filter(stop => stop !== null)
-      if (stops.length === 0) return
+        ...panel.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
+      ]
       event.preventDefault()
       const at = stops.indexOf(document.activeElement as HTMLButtonElement)
       const step = event.shiftKey ? -1 : 1
