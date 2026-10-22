@@ -138,31 +138,29 @@ describe('layoutGraph', () => {
     expect(rowOf(layout.rows, 'older').node.color).toBe(0)
   })
 
-  it('keeps each child lane waiting for the shared parent and joins both at its dot', () => {
+  it('joins a parent lane an earlier row already opened instead of growing a second one', () => {
     const layout = layoutGraph([
       { hash: 'z', parents: ['a', 'p1', 'p2'] },
       { hash: 'a', parents: ['p1', 'p2'] },
       { hash: 'p1', parents: [] },
       { hash: 'p2', parents: [] },
     ])
-    // 'a' opens lanes for both parents instead of reusing the lanes 'z' opened:
-    // every edge keeps the hue of the commit that draws it until the dot, and
-    // the second parent takes the first free column because both lanes the
-    // other rows opened are still occupied.
+    // 'z' opened lanes for both shared parents; 'a' continues one in its own
+    // hue and reaches the other through the line already waiting for it, so the
+    // graph stays three columns wide instead of growing a fourth.
     const merge = rowOf(layout.rows, 'a')
     expect(merge.edges.filter(edge => edge.from === 0.5).map(edge => ({ lane: edge.toLane, color: edge.color })))
-      .toEqual([{ lane: 0, color: 0 }, { lane: 3, color: 3 }])
+      .toEqual([{ lane: 0, color: 0 }, { lane: 2, color: 2 }])
+    expect(layout.lanes).toBe(3)
     // The lines that do not reach a dot keep their columns: only the segments
     // that end at a dot are slanted.
-    expect(layout.lanes).toBe(4)
-    // Both lanes waiting for 'p1' meet at its dot, and the leftmost one carries
-    // the dot.
     expect(edgesOf(rowOf(layout.rows, 'p1'))).toEqual([
       { fromLane: 0, toLane: 0, from: 0, to: 0.5, color: 0 },
       { fromLane: 1, toLane: 0, from: 0, to: 0.5, color: 1 },
       { fromLane: 2, toLane: 2, from: 0, to: 1, color: 2 },
-      { fromLane: 3, toLane: 3, from: 0, to: 1, color: 3 },
     ])
+    // Both lanes waiting for 'p1' meet at its dot, and the leftmost one carries
+    // the dot.
     expect(rowOf(layout.rows, 'p1').node).toEqual({ lane: 0, color: 0 })
     expect(rowOf(layout.rows, 'p2').node).toEqual({ lane: 2, color: 2 })
   })
@@ -247,7 +245,19 @@ describe('layoutGraph', () => {
     expect(layoutGraph([])).toEqual({ lanes: 0, rows: new Map() })
   })
 
-  it('clamps a wide fork into the gutter and cycles the palette once it runs out', () => {
+  it('re-lays rows already on screen when the page naming their parent arrives', () => {
+    const first = layoutGraph([{ hash: 'x', parents: ['p', 'q'] }, { hash: 'q', parents: [] }])
+    // 'p' is outside the page, so the line below the dot continues into 'q'
+    // instead of ending at the boundary with nothing under it.
+    expect(rowOf(first.rows, 'q').node).toEqual({ lane: 0, color: 0 })
+    const all = layoutGraph([{ hash: 'x', parents: ['p', 'q'] }, { hash: 'q', parents: [] }, { hash: 'p', parents: [] }])
+    // The parent now known takes the dot's column and hue, so the row already
+    // drawn moves beside it: the boundary row is what stays fixed across pages.
+    expect(rowOf(all.rows, 'x').node).toEqual(rowOf(first.rows, 'x').node)
+    expect(rowOf(all.rows, 'q').node).toEqual({ lane: 1, color: 1 })
+  })
+
+  it('clamps a wide fork into the gutter and keeps one segment per drawn position', () => {
     const parents = Array.from({ length: 8 }, (_, index) => `p${index}`)
     const commits: readonly GraphCommit[] = [
       { hash: 'm', parents },
@@ -255,13 +265,17 @@ describe('layoutGraph', () => {
     ]
     const layout = layoutGraph(commits)
     // Eight open lanes exceed the six the gutter draws; every lane is clamped
-    // into the drawn columns and the palette's hues repeat past six lanes.
+    // into the drawn columns, and the lanes past the cap share the last one.
     expect(layout.lanes).toBe(MAX_GRAPH_LANES)
     const merge = rowOf(layout.rows, 'm')
     expect(merge.node.lane).toBe(0)
     expect(merge.edges.every(edge => edge.toLane < MAX_GRAPH_LANES)).toBe(true)
-    expect(merge.edges.map(edge => edge.toLane)).toEqual([0, 1, 2, 3, 4, 5, 5, 5])
-    expect(merge.edges.map(edge => edge.color)).toEqual([0, 1, 2, 3, 4, 5, 0, 0])
+    // The three lanes past the cap land on column 5 at the same fractions, so
+    // one segment draws there instead of three painted one over another.
+    expect(merge.edges.map(edge => edge.toLane)).toEqual([0, 1, 2, 3, 4, 5])
+    // The kept segment is the one SVG would have painted last, the eighth
+    // parent's: its hue is what the eye already saw on that column.
+    expect(merge.edges.at(-1)).toEqual({ fromLane: 0, toLane: 5, from: 0.5, to: 1, color: 0 })
   })
 
   it('keeps a commit whose lane moved past the cap inside the drawn columns', () => {

@@ -11,11 +11,11 @@
  * commit dot, so a fork or a merge shows as a diagonal while a lane that keeps
  * its place draws straight, and every row shares one gutter width.
  */
-import { memo, useEffect, useMemo, useRef } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import clsx from 'clsx'
 import {
-  Button, focusWithoutRing, IconRefreshOutlineRegular, Tooltip,
+  Button, IconRefreshOutlineRegular, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { WorkspaceGitCommit, WorkspaceGitRef } from '@deepseek-ai/dsh-workspace-changes/types'
@@ -23,6 +23,7 @@ import type {} from './locales.ts'
 import type { HistoryTabState } from './store.ts'
 import { CommitPage } from './CommitPage.tsx'
 import type { DiffMode } from './DiffModeControl.tsx'
+import { useDrillDownFocus } from './drill-down-focus.ts'
 import { HistoryRefsFilter } from './HistoryRefsFilter.tsx'
 import { useScrollRestore } from './use-scroll-restore.ts'
 import { RefPills } from './RefPills.tsx'
@@ -217,7 +218,7 @@ function Navigator({
   readonly onRetryRefs: HistoryPanelProps['onRetryRefs']
   readonly onLoadMore: HistoryPanelProps['onLoadMore']
   readonly onRetryList: HistoryPanelProps['onRetryList']
-  readonly onSelectCommit: HistoryPanelProps['onSelectCommit']
+  readonly onSelectCommit: (hash: string) => void
   readonly onDirty: HistoryPanelProps['onDirty']
   readonly onListScrolled: HistoryPanelProps['onListScrolled']
   readonly t: HistoryPanelProps['t']
@@ -363,31 +364,36 @@ export function HistoryPanel(props: HistoryPanelProps): ReactNode {
   }) as CSSProperties, [graph.lanes])
   const tips = useMemo(() => refsByCommit(history.refs ?? []), [history.refs])
   const pageOpen = narrow && history.pageOpen && history.selected !== undefined
-  // Only a narrow pick is a drill-down: the wide layout draws the page beside
-  // the list, so recording the drill-down state there would open it on a later
-  // resize for a commit the reader never drilled into.
-  const selectCommit = (hash: string): void => {
-    hands.onSelectCommit(hash)
-    if (narrow) hands.onDrillDown()
-  }
   // Both narrow transitions unmount the control that held the keyboard, which
   // would otherwise leave focus on the page body and restart the next Tab at
-  // the top of the document. Focus follows the view: the drill-down's back
-  // control when the page opens, and the row it came from when the list
-  // returns. A pointer gesture moves it without a ring, like the menu's own
-  // post-selection return.
-  const wasPageOpen = useRef(pageOpen)
-  useEffect(() => {
-    const previous = wasPageOpen.current
-    wasPageOpen.current = pageOpen
-    if (previous === pageOpen) return
-    const selector = pageOpen
-      ? '[data-files-history-back]'
-      : `[data-files-history-commit="${history.selected}"]`
-    const target = root.current?.querySelector<HTMLElement>(selector)
-      ?? root.current?.querySelector<HTMLElement>('[data-files-history-refs]')
-    if (target != null) focusWithoutRing(target)
-  }, [pageOpen, history.selected])
+  // the top of the document. The flip hands focus to the control its own state
+  // names: the drill-down's back control as the page opens, and the row it came
+  // from when the list returns. A refresh that dropped the selected commit
+  // leaves no row to return to, so the refs chip takes the focus instead.
+  useDrillDownFocus(root, pageOpen, narrow, (panel, open) => {
+    if (open) return panel.querySelector<HTMLElement>('[data-files-history-back]')
+    const rows = panel.querySelectorAll<HTMLElement>('[data-files-history-commit]')
+    const row = history.selected === undefined
+      ? undefined
+      : [...rows].find(candidate => candidate.dataset.filesHistoryCommit === history.selected)
+    return row ?? panel.querySelector<HTMLElement>('[data-files-history-refs]')
+  })
+  // Only a narrow pick is a drill-down: the wide layout draws the page beside
+  // the list, so recording the drill-down state there would open it on a later
+  // resize for a commit the reader never drilled into. The row handler is held
+  // still across renders — the body rebuilds its hands on every store write,
+  // and a fresh handler would re-render every loaded row through the memo.
+  const latest = useRef(hands)
+  useEffect(() => { latest.current = hands })
+  const selectCommit = useCallback((hash: string): void => {
+    latest.current.onSelectCommit(hash)
+    // A narrow pick is the drill-down; the wide layout draws the page beside
+    // the list, so recording it there would open one the reader never chose.
+    if (narrow) latest.current.onDrillDown()
+  }, [narrow])
+  const back = useCallback((): void => {
+    latest.current.onBack()
+  }, [])
   const page = (
     <CommitPage
       key={history.selected ?? 'none'}
@@ -395,7 +401,7 @@ export function HistoryPanel(props: HistoryPanelProps): ReactNode {
       narrow={narrow}
       tips={tips}
       now={now}
-      onBack={hands.onBack}
+      onBack={back}
       onSelectFile={hands.onSelectFile}
       onToggleFiles={hands.onToggleFiles}
       onRetryDetail={hands.onRetryDetail}

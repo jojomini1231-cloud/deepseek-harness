@@ -28,6 +28,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client'
 import type { WorkspaceGitEntry } from '@deepseek-ai/dsh-workspace-changes/types'
 import { HISTORY_PAGE_SIZE } from '../git.ts'
 import { useNarrowLayout } from './layout.ts'
+import { useDrillDownFocus } from './drill-down-focus.ts'
 import type { FilesInjected } from './face.ts'
 import { FileTabs } from './FileTabs.tsx'
 import type {} from './locales.ts'
@@ -118,11 +119,30 @@ export function FilesBody({
   historyOpen.current = historyContainer
   const historyPageOwed = useRef<{ root: string; ref: string | undefined } | undefined>(undefined)
   const filesContainer = state !== undefined && state.container === 'files'
+  // The narrow preview drill-down unmounts whichever control held the keyboard
+  // in both directions, so a gesture hands focus to the control its own state
+  // names: the back control as the preview opens, and the tree row it came from
+  // when the tree returns.
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const previewOpen = filesContainer && narrow && state.pageOpen && state.active !== undefined
+  useDrillDownFocus(panelRef, previewOpen, narrow, (panel, open) => {
+    if (open) return panel.querySelector<HTMLElement>('[data-files-files-back]')
+    const active = state?.active
+    const rows = panel.querySelectorAll<HTMLElement>('[data-files-path]')
+    const row = active === undefined
+      ? undefined
+      : [...rows].find(candidate => candidate.dataset.filesPath === active)
+    return row?.querySelector<HTMLElement>('button')
+      ?? panel.querySelector<HTMLElement>('[data-files-tree-action="expand"]')
+  })
   // Come back where the reader was: loaded levels outlive the body in the
   // store, so a remounted tree lays out at its full height before this runs
   // and the stored offset re-lands exactly. Switching to another container
   // unmounts the tree without writing the store, so the live offset kept in
-  // the ref wins over the stored one.
+  // the ref wins over the stored one. Crossing the narrow threshold and opening
+  // or leaving the preview drill-down both remount the tree's scroller, so the
+  // layout and the drill-down are dependencies for the same reason the
+  // container is.
   const seeded = state !== undefined
   useLayoutEffect(() => {
     const body = bodyRef.current
@@ -130,7 +150,7 @@ export function FilesBody({
       body.scrollTop = scrollTopRef.current || state.scrollTop
       scrollTopRef.current = body.scrollTop
     }
-  }, [seeded, filesContainer, state?.scrollTop])
+  }, [seeded, filesContainer, narrow, state?.pageOpen, state?.scrollTop])
   // Scrolling only moves the ref; the store hears about it once, on unmount,
   // so a scroll neither re-renders the tree nor writes after the owner's
   // abort has forgotten the bucket.
@@ -439,7 +459,8 @@ export function FilesBody({
       actions.fileOpened(tab.id, openFileFor(sessionId, state.root, path))
       // A narrow pick is the preview drill-down; the wide layout draws the
       // preview beside the tree and records nothing here.
-      if (narrow) actions.filesPageOpened(tab.id, true)
+      if (!narrow) return
+      actions.filesPageOpened(tab.id, true)
     },
     t,
   }, [state, tab.id, sessionId, toggle, actions, signal, t, narrow])
@@ -578,11 +599,10 @@ export function FilesBody({
   }
   // A narrow pick opens the preview drill-down; it only exists while a file is
   // shown, so closing the last chip returns to the tree.
-  const filesPreviewOpen = state.container === 'files' && narrow && state.pageOpen && state.active !== undefined
   return (
-    <div className={css.root} data-files-state="tree" data-files-root={state.root}>
+    <div ref={panelRef} className={css.root} data-files-state="tree" data-files-root={state.root}>
       <div className={css.header}>
-        {filesPreviewOpen && (
+        {previewOpen && (
           <Tooltip label={t('files.back.aria')} side="bottom" delayMs={300}>
             <button
               type="button"
@@ -626,9 +646,8 @@ export function FilesBody({
           ref={setContainerHost}
           className={css.containerHost}
           data-files-container-host
-          data-files-layout={narrow ? 'narrow' : 'wide'}
           data-files-files-layout={state.container === 'files' ? (narrow ? 'narrow' : 'wide') : undefined}
-          data-files-files-page={state.container === 'files' ? (filesPreviewOpen ? 'open' : 'list') : undefined}
+          data-files-files-page={state.container === 'files' ? (previewOpen ? 'open' : 'list') : undefined}
         >
           {gitContainer ? (
             <GitPanel
@@ -674,8 +693,8 @@ export function FilesBody({
               t={t}
             />
           ) : narrow ? (
-            <div className={css.narrowPane} data-files-narrow-pane={filesPreviewOpen ? 'preview' : 'tree'}>
-              {filesPreviewOpen ? contentColumn : treeColumn}
+            <div className={css.narrowPane} data-files-narrow-pane={previewOpen ? 'preview' : 'tree'}>
+              {previewOpen ? contentColumn : treeColumn}
             </div>
           ) : (
             <SplitView

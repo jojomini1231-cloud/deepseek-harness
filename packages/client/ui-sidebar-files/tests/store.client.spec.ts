@@ -4,6 +4,7 @@ import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import { createFilesStore } from '../src/client/store.ts'
 import type { DirLevel } from '../src/client/store.ts'
 import { DEFAULT_RATIO, MAX_RATIO, MIN_RATIO } from '../src/client/store.ts'
+import type { WorkspaceGitEntry } from '@deepseek-ai/dsh-workspace-changes/types'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 
 const ROOT = '/work/app'
@@ -13,6 +14,8 @@ const LEVEL: DirLevel = {
   entries: [{ name: 'src', type: 'directory' }, { name: 'README.md', type: 'file', size: 12 }],
   truncated: false,
 }
+
+const MODIFIED: WorkspaceGitEntry = { path: 'src/a.ts', display: 'src/a.ts', kind: 'modified' }
 
 describe('createFilesStore', () => {
   it('mints an independent instance per call', () => {
@@ -186,6 +189,33 @@ describe('createFilesStore', () => {
     expect(store.getSnapshot().byTab[TAB]?.container).toBe('files')
     store.actions.containerSelected(TAB, 'history')
     expect(store.getSnapshot().byTab[TAB]?.container).toBe('history')
+  })
+
+  it('closes the narrow files drill-down when the last chip closes', () => {
+    const store = createFilesStore().create()
+    const { actions } = store
+    const file = { path: `${ROOT}/a.md`, address: `dsh-resource://file/session/s${ROOT}/a.md`, name: 'a.md' }
+    actions.start(TAB, ROOT)
+    actions.fileOpened(TAB, file)
+    actions.filesPageOpened(TAB, true)
+    // Closing the shown file by its own chip is the other route out of the
+    // drill-down: the preview it showed is gone, so the state goes with it.
+    actions.fileClosed(TAB, file.path)
+    expect(store.getSnapshot().byTab[TAB]?.pageOpen).toBe(false)
+  })
+
+  it('closes the git drill-down when a status read drops the shown path', () => {
+    const store = createFilesStore().create()
+    const { actions } = store
+    actions.start(TAB, ROOT)
+    actions.gitStatusLoaded(TAB, { kind: 'repository', total: 1, entries: [MODIFIED] })
+    actions.gitEntrySelected(TAB, MODIFIED.path, undefined)
+    actions.gitPageOpened(TAB, true)
+    // The file was committed or reverted while the reader had it open.
+    actions.gitStatusLoaded(TAB, { kind: 'repository', total: 0, entries: [] })
+    const git = store.getSnapshot().byTab[TAB]?.git
+    expect(git?.selected).toBeUndefined()
+    expect(git?.pageOpen).toBe(false)
   })
 
   it('records each container\'s narrow drill-down and closes it with the last file', () => {

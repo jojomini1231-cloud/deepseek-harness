@@ -100,7 +100,6 @@ describe('web e2e: the working-tree git view', () => {
     await expect.poll(async () => await column.locator('[data-files-git-summary]').textContent(), { timeout: 15_000 })
       .toContain('2 files')
     expect(await column.locator('[data-files-git-sync]').getAttribute('data-files-git-sync')).toBe('synced')
-    expect(await column.locator('[data-files-git-branch]').textContent()).toBe('main')
     // The branch and both groups come from the Host's status read.
     await expect.poll(async () => await column.locator('[data-files-git-branch]').textContent()).toBe('main')
     const groups = await column.locator('[data-files-git-group]').evaluateAll(nodes => nodes.map(node => (

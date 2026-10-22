@@ -253,20 +253,15 @@
   font-weight: 500;
 }
 
-.gitBranch {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--dsw-alias-label-secondary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .gitGroup {
   flex: 0 0 auto;
   padding: 4px 0;
 }
 
+/* Sticky under the list's fixed header, so rows scroll beneath it rather than
+   through it. The fill is the host's own ground: a docked sidebar is on the base
+   surface and a floating panel one layer up, which is a different colour in dark
+   mode. */
 .gitGroupTitle {
   position: sticky;
   top: 0;
@@ -281,7 +276,7 @@
   font: inherit;
   font-weight: 500;
   text-align: start;
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsh-dockkit-surface, var(--dsw-alias-bg-base));
   border: 0;
   cursor: pointer;
 }
@@ -371,6 +366,16 @@
   min-height: 0;
   overflow: hidden;
   padding: 8px;
+}
+
+/* The comparison's non-diff states are plain lines and a retry control, so they
+   scroll on their own: the column clips, and the only control a failure offers
+   must stay reachable in a short column. A drawn comparison keeps its own
+   scroller inside `DiffHunks` and needs none here. */
+.gitCompare .gitNote,
+.gitCompare .gitNoteRow {
+  min-height: 0;
+  overflow: auto;
 }
 
 .gitDiff {

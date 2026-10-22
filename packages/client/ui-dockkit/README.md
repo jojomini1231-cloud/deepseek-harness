@@ -98,7 +98,7 @@ None; this package neither assembles nor sends a provider request.
 - **Size semantics are deliberately small**: fractional weights with one minimum-size clamp. No snap, priority, or preferred size, so the cascading-squeeze behaviour of a full splitview is absent.
 - **Touch is untuned.** Gestures are pointer-based and `touch-action` is set where a scroller would otherwise interfere, but no touch-specific tuning has been done.
 - **Accessibility is incomplete**: no `separator` role on dividers and no keyboard route to split, move, or float.
-- **No published stylesheet contract.** Consumers get hashed module class names; the kit exposes no theming API beyond the `--dsw-*` custom properties it reads.
+- **No published stylesheet contract.** Consumers get hashed module class names; the kit exposes no theming API beyond the `--dsw-*` custom properties it reads. The one variable it publishes outward is `--dsh-dockkit-surface`, the fill a hosted tab's body sits on (base when docked, the raised layer in a float), for a sticky row that must cover what scrolls beneath it.
 
 <a id="dev-note"></a>
 ### Dev Note

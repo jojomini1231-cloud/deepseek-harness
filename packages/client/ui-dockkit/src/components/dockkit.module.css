@@ -170,6 +170,13 @@
   background: var(--dsw-alias-bg-base);
 }
 
+/* The ground a hosted tab's body sits on, for a sticky row inside it that must
+   cover what scrolls beneath. A docked tab sits on the base fill; a floating one
+   sits on the raised layer, which is a different colour in dark mode. */
+.tabHost:not(.float) {
+  --dsh-dockkit-surface: var(--dsw-alias-bg-base);
+}
+
 .tabCell[data-dockkit-host='dock'][data-dockkit-column='0'] > .tabHost {
   border-left: 0.5px solid var(--dsw-alias-border-l4);
 }
@@ -755,6 +762,9 @@
      to its own corners. */
   overflow: hidden;
   background: var(--dsw-alias-bg-layer-2);
+  /* A hosted tab's body draws on this layer, so a sticky row inside the tab
+     covers what scrolls under it in the float's own colour. */
+  --dsh-dockkit-surface: var(--dsw-alias-bg-layer-2);
   border-radius: var(--dsw-radius-panel);
   /* The menu's shadow with the stroke rebound one step lighter than the
      default (l2): the panel reads as the same kind of raised surface, and the

@@ -144,14 +144,21 @@ export function HistoryRefsFilter({
       const panel = panelRef.current
       /* v8 ignore next -- the popover's panel is attached while its own key handler runs. */
       if (panel === null) return
-      const stops: Array<HTMLInputElement | HTMLButtonElement | null> = [
+      // The search box can be unfocused while the popover is open, so the walk
+      // keeps only the stops that exist. The panel's own rows always remain:
+      // the all-refs sentinel is rendered for every state it draws.
+      const stops = [
         searchRef.current,
         ...panel.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'),
-      ]
+      ].filter((stop): stop is HTMLInputElement | HTMLButtonElement => stop !== null)
       event.preventDefault()
       const at = stops.indexOf(document.activeElement as HTMLButtonElement)
-      const step = event.shiftKey ? -1 : 1
-      stops[(at + step + stops.length) % stops.length]?.focus()
+      // Focus outside the walk forwards to its first stop and backwards to its
+      // last, rather than to whatever the arithmetic happens to land on.
+      const next = event.shiftKey
+        ? (at <= 0 ? stops.length - 1 : at - 1)
+        : (at === -1 ? 0 : (at + 1) % stops.length)
+      stops[next]?.focus()
       return
     }
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Home' && event.key !== 'End') return

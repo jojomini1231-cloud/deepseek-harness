@@ -9,17 +9,20 @@
  * waiting for one commit meet at that commit's dot — the leftmost of them
  * becomes the dot and continues the chain, and the others slant into it at the
  * row's corner. A commit's first loaded parent continues its lane and hue, and
- * every further parent opens a free lane beside it, so a fork leaves the dot at
- * a corner. A lane keeps its column until the commit it waits for arrives, so a
- * line holds its place and the layout draws straight vertical segments except
- * at those corners; the column a branch leaves is free for the next branch.
- * The coordinate phase gives every lane one x, so each row draws straight
- * segments between the lane a line occupied above the row and the lane it
- * occupies below. Segments compose across rows into the DAG's parent edges,
- * including the diagonals at merges and forks.
+ * every further parent joins the lane already waiting for it or else takes a
+ * free lane beside the dot, so a fork leaves the dot at a corner. A lane keeps
+ * its column until the commit it waits for arrives, so a line holds its place
+ * and the layout draws straight vertical segments except at those corners; the
+ * column a branch leaves is free for the next branch. The coordinate phase gives
+ * every lane one x, so each row draws straight segments between the lane a line
+ * occupied above the row and the lane it occupies below. Segments compose across
+ * rows into the DAG's parent edges, including the diagonals at merges and forks.
  *
- * Loaded pages stay continuous: a parent outside the loaded set draws no lane,
- * so "load more" extends the graph at the boundary instead of restarting it.
+ * The boundary row is continuous across pages: a parent outside the loaded set
+ * draws no lane, so "load more" extends that row instead of restarting the
+ * graph. Rows already above the boundary can still move when a later page names
+ * a parent they could not place, because the lane order depends only on the
+ * commits loaded above them.
  *
  * A branch keeps its hue for the life of its lane, and a new branch takes the
  * next hue no open lane uses in a rotating sequence, so successive branches
@@ -113,13 +116,13 @@ export function layoutGraph(commits: readonly GraphCommit[]): GraphLayout {
   let nextHue = 0
   /**
    * Take the next hue no open lane uses, advancing the rotation.
-   * @param taken - color indices already in use.
+   * @param taken - one bit per color index already in use.
    * @returns a free color index, or the rotation's current index when every hue is taken.
    */
-  const freshColor = (taken: ReadonlySet<number>): number => {
+  const freshColor = (taken: number): number => {
     for (let offset = 0; offset < LANE_COLORS; offset += 1) {
       const color = (nextHue + offset) % LANE_COLORS
-      if (taken.has(color)) continue
+      if ((taken & (1 << color)) !== 0) continue
       nextHue = (color + 1) % LANE_COLORS
       return color
     }
@@ -130,16 +133,19 @@ export function layoutGraph(commits: readonly GraphCommit[]): GraphLayout {
     // Every child keeps a lane waiting for the parent, so several lanes can
     // wait for one commit; its dot is where they meet.
     const waiting: Waiting[] = []
+    // One bit per hue an open lane carries, so a new branch avoids them
+    // without building a Set per row.
+    let takenColors = 0
     for (const [index, lane] of before.entries()) {
-      if (lane?.hash === commit.hash) waiting.push({ index, lane })
+      if (lane === undefined) continue
+      takenColors |= 1 << lane.color
+      if (lane.hash === commit.hash) waiting.push({ index, lane })
     }
     const first = waiting[0]
     const tip = first === undefined
     const nodeTop = first === undefined ? freeColumn(before, 0) : first.index
     // The dot's hue is the hue of the leftmost lane that waited for it; a tip
     // takes a fresh hue.
-    const takenColors = new Set<number>()
-    for (const lane of before) if (lane !== undefined) takenColors.add(lane.color)
     const nodeColor = first === undefined ? freshColor(takenColors) : first.lane.color
     // The dot meets every lane that waited for it, and a line keeps its column
     // until then: only the corners of the row are diagonal.
@@ -151,30 +157,55 @@ export function layoutGraph(commits: readonly GraphCommit[]): GraphLayout {
       if (index === nodeTop) continue
       edges.push({ fromLane: index, toLane: nodeTop, from: 0, to: 0.5, color: lane.color })
     }
+    let widestHere = nodeTop
     for (const [index, lane] of before.entries()) {
       if (lane === undefined || lane.hash === commit.hash) continue
       edges.push({ fromLane: index, toLane: index, from: 0, to: 1, color: lane.color })
     }
     // The first parent continues the dot's column and hue; each further parent
-    // takes the nearest free column beside it and leaves the dot at a corner.
-    const taken = new Set<number>()
-    for (const lane of after) if (lane !== undefined) taken.add(lane.color)
+    // joins the lane already waiting for it, or else takes the nearest free
+    // column beside the dot and leaves the dot at a corner.
+    let takenBits = 0
+    for (const lane of after) if (lane !== undefined) takenBits |= 1 << lane.color
     let continuation = true
     for (const parent of commit.parents) {
       if (!known.has(parent)) continue
-      const color = continuation ? nodeColor : freshColor(taken)
+      if (!continuation) {
+        // Two children of one commit share the line already waiting for it
+        // rather than growing a second lane that waits for the same hash.
+        const waitingAt = after.findIndex(lane => lane?.hash === parent)
+        const joined = waitingAt >= 0 ? after[waitingAt] : undefined
+        if (joined !== undefined) {
+          edges.push({ fromLane: nodeTop, toLane: waitingAt, from: 0.5, to: 1, color: joined.color })
+          continue
+        }
+      }
+      const color = continuation ? nodeColor : freshColor(takenBits)
       const column = continuation ? nodeTop : freeColumn(after, nodeTop + 1)
       after[column] = { hash: parent, color }
-      taken.add(color)
+      takenBits |= 1 << color
       edges.push({ fromLane: nodeTop, toLane: column, from: 0.5, to: 1, color })
       continuation = false
     }
-    const width = Math.min(MAX_GRAPH_LANES, 1 + Math.max(nodeTop, ...edges.map(edge => edge.fromLane), ...edges.map(edge => edge.toLane)))
+    // The drawn width covers every lane a segment touches, so a lane that only
+    // enters on a corner still gets its own column.
+    for (const edge of edges) {
+      if (edge.fromLane > widestHere) widestHere = edge.fromLane
+      if (edge.toLane > widestHere) widestHere = edge.toLane
+    }
+    const width = Math.min(MAX_GRAPH_LANES, 1 + widestHere)
     const drawnLane = (lane: number): number => lane < width ? lane : width - 1
-    rows.set(commit.hash, {
-      node: { lane: drawnLane(nodeTop), color: nodeColor },
-      edges: edges.map(edge => ({ ...edge, fromLane: drawnLane(edge.fromLane), toLane: drawnLane(edge.toLane) })),
-    })
+    const clamped = edges.map(edge => ({
+      ...edge, fromLane: drawnLane(edge.fromLane), toLane: drawnLane(edge.toLane),
+    }))
+    // Every lane past the drawn width clamps onto the last column, so their
+    // segments land on one another. Only the segment that paints last at each
+    // position survives, in its own paint order: the drawing is what it already
+    // was, without the nodes the covered ones would have cost.
+    const lastAt = new Map<string, number>()
+    for (const [index, edge] of clamped.entries()) lastAt.set(`${edge.fromLane}:${edge.toLane}:${edge.from}:${edge.to}`, index)
+    const drawn = clamped.filter((edge, index) => lastAt.get(`${edge.fromLane}:${edge.toLane}:${edge.from}:${edge.to}`) === index)
+    rows.set(commit.hash, { node: { lane: drawnLane(nodeTop), color: nodeColor }, edges: drawn })
     widest = Math.max(widest, width)
     while (after.length > 0 && after[after.length - 1] === undefined) after.pop()
     lanes = after

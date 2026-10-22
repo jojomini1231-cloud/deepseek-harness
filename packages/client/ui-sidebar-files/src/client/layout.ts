@@ -1,14 +1,14 @@
 /**
  * The measured-width switch every workbench container uses: a container drops
- * to one column below {@link NARROW_LAYOUT_WIDTH} of its own panel width, not at
- * a window media query, because the right Sidebar is resizable and the same
+ * to one column below `NARROW_LAYOUT_WIDTH` of its own panel width, not at a
+ * window media query, because the right Sidebar is resizable and the same
  * window holds both layouts.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 
 /** Below this measured panel width a workbench container draws one column. */
-export const NARROW_LAYOUT_WIDTH = 560
+const NARROW_LAYOUT_WIDTH = 560
 
 /** One container's measured layout: the element to observe and the switch. */
 export interface NarrowLayout {
@@ -25,10 +25,9 @@ export interface NarrowLayout {
  *
  * A hidden or not-yet-laid-out panel measures zero and keeps the wide layout:
  * only a real measured width crosses the threshold.
- * @param threshold - width in px below which the layout is narrow.
  * @returns the element ref and the current narrow state.
  */
-export function useNarrowLayout(threshold: number = NARROW_LAYOUT_WIDTH): NarrowLayout {
+export function useNarrowLayout(): NarrowLayout {
   const root = useRef<HTMLDivElement | null>(null)
   const [element, setElement] = useState<HTMLDivElement | null>(null)
   const [narrow, setNarrow] = useState(false)
@@ -45,10 +44,10 @@ export function useNarrowLayout(threshold: number = NARROW_LAYOUT_WIDTH): Narrow
     const observer = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width ?? 0
       if (width === 0) return
-      setNarrow(width < threshold)
+      setNarrow(width < NARROW_LAYOUT_WIDTH)
     })
     observer.observe(element)
     return () => { observer.disconnect() }
-  }, [element, threshold])
+  }, [element])
   return { root, setRoot, narrow }
 }

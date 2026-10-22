@@ -128,6 +128,9 @@ describe('git route contract', () => {
     // A rename's original path is part of what the row draws.
     expect(sameGitStatus(REPOSITORY, { ...REPOSITORY, entries: [REPOSITORY.entries[0]!, { ...REPOSITORY.entries[1]!, from: 'src/old.ts' }, REPOSITORY.entries[2]!] }))
       .toBe(false)
+    // The summary's count moves on its own once the entry cap holds the list
+    // still, so it is part of the comparison too.
+    expect(sameGitStatus(REPOSITORY, { ...REPOSITORY, total: 4 })).toBe(false)
     expect(isFileDiff(DIFF)).toBe(true)
     expect(isFileDiff({ kind: 'binary', path: 'a', display: 'a' })).toBe(true)
     expect(isFileDiff({ kind: 'oversized', path: 'a', display: 'a' })).toBe(true)
@@ -235,6 +238,32 @@ describe('git slice', () => {
 })
 
 describe('GitPanel', () => {
+  /** Render the panel in the narrow layout with recording gestures. */
+  function narrowElement(hands: {
+    readonly onSelect: () => void
+    readonly onDrillDown: () => void
+    readonly onBack: () => void
+    readonly onReload: () => void
+    readonly onRetryDiff: () => void
+    readonly onMode: () => void
+    readonly onRatio: () => void
+    readonly onScrolled: () => void
+    readonly onToggleGroup: () => void
+  }) {
+    return (git: GitTabState) => (
+      <GitPanel git={git} narrow onSelect={hands.onSelect} onDrillDown={hands.onDrillDown} onBack={hands.onBack}
+        onReload={hands.onReload} onRetryDiff={hands.onRetryDiff} onMode={hands.onMode} onRatio={hands.onRatio}
+        onScrolled={hands.onScrolled} onToggleGroup={hands.onToggleGroup} ratio={0.58} t={t} />
+    )
+  }
+
+  /** Recording gestures for the panel's own hands. */
+  function panelHands() {
+    return {
+      onSelect: vi.fn(), onDrillDown: vi.fn(), onBack: vi.fn(), onReload: vi.fn(),
+      onRetryDiff: vi.fn(), onMode: vi.fn(), onRatio: vi.fn(), onScrolled: vi.fn(), onToggleGroup: vi.fn(),
+    }
+  }
   it('groups tracked and untracked paths and reports the picked entry', () => {
     const onSelect = vi.fn()
     const { container } = panel({ status: REPOSITORY }, { onSelect })
@@ -354,10 +383,12 @@ describe('GitPanel', () => {
     expect(panel({ status: { kind: 'unavailable', entries: [], total: 0 } })
       .container.querySelector('[data-files-git-state="failed"]')).not.toBeNull()
     cleanup()
+    // A clean repository states it once: the wide layout draws it in the
+    // comparison column, so the list beside it stays empty.
     expect(panel({ status: { kind: 'repository', entries: [], total: 0 } })
-      .container.querySelector('[data-files-git-state="clean"]')).not.toBeNull()
+      .container.querySelector('[data-files-git-state="clean"]')).toBeNull()
     cleanup()
-    // The narrow list carries the filled clean state instead of the wide note.
+    // The narrow list carries the filled clean state itself.
     expect(panel({ status: { kind: 'repository', entries: [], total: 0 } }, {}, true)
       .container.querySelector('[data-files-git-state="clean"]')).not.toBeNull()
     cleanup()
@@ -439,20 +470,24 @@ describe('GitPanel', () => {
   })
 
   it('moves focus with the narrow drill-down and back', () => {
-    const hands = {
-      onSelect: vi.fn(), onDrillDown: vi.fn(), onBack: vi.fn(), onReload: vi.fn(),
-      onRetryDiff: vi.fn(), onMode: vi.fn(), onRatio: vi.fn(), onScrolled: vi.fn(), onToggleGroup: vi.fn(),
-    }
-    const element = (git: GitTabState) => (
-      <GitPanel git={git} narrow onSelect={hands.onSelect} onDrillDown={hands.onDrillDown} onBack={hands.onBack}
-        onReload={hands.onReload} onRetryDiff={hands.onRetryDiff} onMode={hands.onMode} onRatio={hands.onRatio}
-        onScrolled={hands.onScrolled} onToggleGroup={hands.onToggleGroup} ratio={0.58} t={t} />
-    )
+    const element = narrowElement(panelHands())
     const { container, rerender } = render(element(gitState({ status: REPOSITORY })))
     rerender(element(gitState({ status: REPOSITORY, selected: 'src/a.ts', diff: DIFF, pageOpen: true })))
     expect(document.activeElement).toBe(container.querySelector('[data-files-git-back]'))
     rerender(element(gitState({ status: REPOSITORY, selected: 'src/a.ts', diff: DIFF, pageOpen: false })))
     expect(document.activeElement).toBe(container.querySelector('[data-files-git-entry="src/a.ts"]'))
+  })
+
+  it('returns focus to the list\'s own reread when a status read dropped the shown path', () => {
+    const element = narrowElement(panelHands())
+    const { container, rerender } = render(element(gitState({
+      status: REPOSITORY, selected: 'src/a.ts', diff: DIFF, pageOpen: true,
+    })))
+    // The file was committed or reverted while its comparison was open: the
+    // store drops both the selection and the drill-down, so the list that
+    // returns has no row to hand the keyboard back to.
+    rerender(element(gitState({ status: REPOSITORY, selected: undefined, pageOpen: false })))
+    expect(document.activeElement).toBe(container.querySelector('[data-files-git-refresh]'))
   })
 
   it('marks the summary as failed while the stale list stays on screen', () => {

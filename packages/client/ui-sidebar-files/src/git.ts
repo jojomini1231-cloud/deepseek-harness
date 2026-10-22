@@ -174,6 +174,9 @@ function isHunk(value: unknown): value is WorkspaceDiffHunk {
  */
 export function sameGitStatus(left: WorkspaceGitStatus | undefined, right: WorkspaceGitStatus): boolean {
   if (left === undefined || left.kind !== right.kind || left.branch !== right.branch) return false
+  // The summary draws the complete count, which moves on its own when the entry
+  // cap holds the list still.
+  if (left.total !== right.total) return false
   if (left.entries.length !== right.entries.length) return false
   return left.entries.every((entry, at) => {
     const other = right.entries[at]

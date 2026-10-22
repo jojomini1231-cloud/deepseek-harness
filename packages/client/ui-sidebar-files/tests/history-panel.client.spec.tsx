@@ -417,17 +417,43 @@ describe('HistoryPanel refs filter', () => {
     expect(document.activeElement?.getAttribute('data-files-history-ref')).toBe('v1.0.0')
     expect(document.querySelector('[role="dialog"]')).not.toBeNull()
   })
+
+  it('forwards a Tab from outside the walk to the end it approaches', () => {
+    const { container } = mountHistory({ refs: REFS })
+    const popover = openFilter(container)
+    const input = popover.querySelector<HTMLInputElement>('[data-files-history-refs-search]')!
+    // The search box can lose the keyboard while the popover stays open (the
+    // reader pressed on a row and released elsewhere), which leaves no current
+    // stop for the arithmetic; forward lands on the first, backward the last.
+    act(() => { input.blur() })
+    act(() => { fireEvent.keyDown(input, { key: 'Tab' }) })
+    expect(document.activeElement).toBe(input)
+    act(() => { input.blur() })
+    act(() => { fireEvent.keyDown(input, { key: 'Tab', shiftKey: true }) })
+    expect(document.activeElement?.getAttribute('data-files-history-ref')).toBe('v1.0.0')
+    // From a row that is not the first, the backward walk steps one stop back.
+    act(() => { fireEvent.keyDown(document.activeElement!, { key: 'Tab', shiftKey: true }) })
+    expect(document.activeElement?.getAttribute('data-files-history-ref')).toBe('origin/main')
+  })
 })
 
 describe('HistoryPanel clock', () => {
-  it('re-dates the rows on its minute timer and clears it on unmount', () => {
+  it('re-dates the rows when its minute timer fires and clears it on unmount', () => {
     vi.useFakeTimers()
     try {
-      const { container, unmount } = mountHistory({ refs: REFS, commits: COMMITS })
-      const list = container.querySelector('[data-files-history-list]')!
+      vi.setSystemTime(new Date('2026-10-19T10:00:00Z'))
+      const { container, unmount } = mountHistory({
+        refs: REFS,
+        commits: [{ ...COMMITS[0]!, authoredAt: '2026-10-19T09:59:40Z' }],
+      })
+      const time = (): string | undefined =>
+        container.querySelector('[data-files-history-commit] [title]')?.textContent ?? undefined
+      expect(time()).toBe(zh['history.time.now'])
       act(() => { vi.advanceTimersByTime(60_000) })
-      expect(container.querySelector('[data-files-history-list]')).toBe(list)
+      // The tick re-dates the row: a minute has passed since its author date.
+      expect(time()).toBe(zh['history.time.minutes'].replace('{n}', '1'))
       unmount()
+      expect(vi.getTimerCount()).toBe(0)
     } finally {
       vi.useRealTimers()
     }
@@ -465,6 +491,14 @@ describe('HistoryPanel narrow layout', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  it.each([[559, 'narrow'], [560, 'wide'], [561, 'wide']] as const)('treats a %ipx panel as %s', (width, layout) => {
+    withResizeObserver(() => {
+      const { container } = mountHistory({ refs: REFS, commits: COMMITS })
+      act(() => { FakeResizeObserver.latest!.fire(width) })
+      expect(container.querySelector('[data-files-history]')?.getAttribute('data-files-history-layout')).toBe(layout)
+    })
   })
 
   it('returns the list to the top when the walked ref changes', () => {
@@ -536,6 +570,19 @@ describe('HistoryPanel narrow layout', () => {
       // A refresh dropped the selected commit: the back transition has no row
       // to land on, so keyboard focus stays on the navigator's refs control.
       rerender(<HistoryPanel {...props} history={{ ...props.history, commits: [], pageOpen: false }} />)
+      expect(document.activeElement?.getAttribute('data-files-history-refs')).not.toBeNull()
+    })
+  })
+
+  it('returns focus to the refs chip when the state dropped the commit itself', () => {
+    withResizeObserver(() => {
+      const { rerender, props } = mountHistory({
+        refs: REFS, commits: COMMITS, selected: hash('a'), detail: DETAIL, pageOpen: true,
+      })
+      act(() => { FakeResizeObserver.latest!.fire(400) })
+      // A refs settlement restarted the list, which clears the selection with
+      // the drill-down: there is no selection left to look a row up by.
+      rerender(<HistoryPanel {...props} history={{ ...props.history, selected: undefined, pageOpen: false }} />)
       expect(document.activeElement?.getAttribute('data-files-history-refs')).not.toBeNull()
     })
   })

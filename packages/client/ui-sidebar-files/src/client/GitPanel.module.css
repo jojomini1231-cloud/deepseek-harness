@@ -93,7 +93,9 @@
   min-width: 0;
 }
 
-/* The summary line under the header: file count and sync state. */
+/* The summary line under the header: file count and sync state. It shares the
+   workbench's one secondary size rather than inventing a smaller one, and its
+   divider draws at the container's shared hairline weight. */
 .summary {
   display: flex;
   flex: 0 0 auto;
@@ -103,8 +105,8 @@
   height: 24px;
   padding: 0 12px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11.5px;
-  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  border-bottom: 0.5px solid var(--dsw-alias-border-l3);
 }
 
 .sync {
@@ -113,7 +115,7 @@
   align-items: center;
   margin-left: auto;
   color: var(--dsw-alias-label-caption, var(--dsw-alias-label-tertiary));
-  font-size: 10.5px;
+  font-size: inherit;
 }
 
 .syncDot {
@@ -180,12 +182,6 @@
   margin: 0;
   color: var(--dsw-alias-label-secondary);
   font-size: var(--dsh-content-font-size-secondary, 13px);
-}
-
-.cleanDetail {
-  margin: 0;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 11.5px;
 }
 
 /* The compared file's category sheet in the comparison header. */

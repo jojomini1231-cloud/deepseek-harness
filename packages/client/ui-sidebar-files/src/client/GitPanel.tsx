@@ -9,13 +9,13 @@
  * list side by side; below the measured narrow threshold the list and the
  * comparison become one column with the comparison as a drill-down.
  */
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import {
   Button, DiffHunks, FileTypeIcon, IconBranchOutlineRegular, IconCheckCircleFillRegular,
   IconChevronDownOutlineRegular, IconChevronLeftOutlineRegular, IconChevronRightOutlineRegular,
-  IconRefreshOutlineRegular, IconWarningOutlineRegular, Tooltip, classifyFileType, focusWithoutRing,
+  IconRefreshOutlineRegular, IconWarningOutlineRegular, Tooltip, classifyFileType,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { WorkspaceGitEntry } from '@deepseek-ai/dsh-workspace-changes/types'
@@ -25,6 +25,7 @@ import css from './FilesBody.module.css'
 import gitCss from './GitPanel.module.css'
 import { SplitView } from './SplitView.tsx'
 import { DiffModeControl } from './DiffModeControl.tsx'
+import { useDrillDownFocus } from './drill-down-focus.ts'
 import { useScrollRestore } from './use-scroll-restore.ts'
 
 /** The panel's props: the git slice, the gestures, and translate. */
@@ -130,7 +131,6 @@ function CleanState({ t, stateAttr }: {
     <div className={gitCss.cleanState} {...{ [stateAttr]: 'clean' }}>
       <IconCheckCircleFillRegular className={gitCss.cleanIcon} />
       <p className={gitCss.cleanTitle}>{t('git.clean')}</p>
-      <p className={gitCss.cleanDetail}>{t('git.clean.detail')}</p>
     </div>
   )
 }
@@ -208,10 +208,11 @@ function ChangedPaths({ git, narrow, onSelect, onReload, onToggleGroup, onScroll
                     <Button size="sm" data-files-git-retry onClick={onReload}>{t('retry')}</Button>
                   </div>
                 )}
+                {/* One clean state per layout: the narrow list is the only
+                    column on screen, while the wide layout states it once in
+                    the comparison column beside the list. */}
                 {clean
-                  ? (narrow
-                    ? <CleanState t={t} stateAttr="data-files-git-state" />
-                    : <p className={css.gitNote} data-files-git-state="clean">{t('git.clean')}</p>)
+                  ? (narrow ? <CleanState t={t} stateAttr="data-files-git-state" /> : null)
                   : (
                     <>
                       <ChangeGroup group="changed" label={t('git.changes')} entries={changed}
@@ -303,24 +304,24 @@ export function GitPanel(props: GitPanelProps): ReactNode {
   // A narrow pick is the comparison drill-down; the wide layout draws both
   // columns, so selecting there records nothing for a later resize.
   const pageOpen = narrow && git.pageOpen && git.selected !== undefined
+  // Both narrow transitions unmount the control that held the keyboard, so the
+  // flip hands focus to the control its own state names: the back control as
+  // the comparison opens, and the row it came from when the list returns. The
+  // row is found by the selection marker it already carries, never by
+  // interpolating its path into a selector, because a path may hold a quote.
+  // A status read that drops the shown path leaves no row to return to, so the
+  // list's own refresh control takes the focus instead.
+  useDrillDownFocus(root, pageOpen, narrow, (panel, open) => {
+    if (open) return panel.querySelector<HTMLElement>('[data-files-git-back]')
+    return panel.querySelector<HTMLElement>('[data-files-git-entry][aria-current="true"]')
+      ?? panel.querySelector<HTMLElement>('[data-files-git-refresh]')
+  })
   const selectEntry = (entry: WorkspaceGitEntry): void => {
     props.onSelect(entry)
+    // A narrow pick is the comparison drill-down; the wide layout draws both
+    // columns, so selecting there records nothing for a later resize.
     if (narrow) props.onDrillDown()
   }
-  // Both narrow transitions unmount the control that held the keyboard. Focus
-  // follows the view: the back control when the comparison opens, and the row
-  // it came from when the list returns.
-  const wasPageOpen = useRef(pageOpen)
-  useEffect(() => {
-    const previous = wasPageOpen.current
-    wasPageOpen.current = pageOpen
-    if (previous === pageOpen) return
-    const selector = pageOpen
-      ? '[data-files-git-back]'
-      : `[data-files-git-entry="${git.selected}"]`
-    const target = root.current?.querySelector<HTMLElement>(selector)
-    if (target != null) focusWithoutRing(target)
-  }, [pageOpen, git.selected])
   const list = <ChangedPaths {...props} onSelect={selectEntry} />
   const content = (
     <div className={css.gitCompare} data-files-git-compare>
@@ -344,7 +345,7 @@ export function GitPanel(props: GitPanelProps): ReactNode {
                   type="button"
                   className={gitCss.back}
                   data-files-git-back
-                  onClick={props.onBack}
+                  onClick={() => { props.onBack() }}
                 >
                   <IconChevronLeftOutlineRegular />
                   <span>{t('git.back')}</span>

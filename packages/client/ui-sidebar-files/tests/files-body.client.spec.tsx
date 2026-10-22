@@ -27,6 +27,44 @@ function names(root: HTMLElement): string[] {
   return [...root.querySelectorAll('[data-files-entry]')].map(li => li.getAttribute('data-files-path')!)
 }
 
+/**
+ * A ResizeObserver the spec fires by hand, found by the element it watches.
+ * @returns the class to stub and a lookup for the observer of one element.
+ */
+function resizeObserver() {
+  interface HandMade {
+    readonly observed: Element[]
+    readonly unobserve: () => void
+    readonly disconnect: () => void
+    fire(width: number): void
+  }
+  const instances: HandMade[] = []
+  class FakeResizeObserver implements ResizeObserver {
+    readonly observed: Element[] = []
+    readonly unobserve = vi.fn()
+    readonly disconnect = vi.fn()
+    private readonly callback: ResizeObserverCallback
+    constructor(callback: ResizeObserverCallback) {
+      this.callback = callback
+      instances.push(this)
+    }
+
+    readonly observe = vi.fn((element: Element) => { this.observed.push(element) })
+
+    fire(width: number): void {
+      this.callback([{ contentRect: { width } } as ResizeObserverEntry], this)
+    }
+  }
+  return {
+    type: FakeResizeObserver,
+    for: (element: Element): HandMade => {
+      const found = instances.find(candidate => candidate.observed.includes(element))
+      if (found === undefined) throw new Error('expected the workbench to measure that element')
+      return found
+    },
+  }
+}
+
 describe('FilesBody', () => {
   it('displays the effective file-tree refresh accelerator', async () => {
     const { view, script } = mountBody(ROOT, { id: 'page.refresh' as never, label: 'Refresh', aliases: [],
@@ -524,6 +562,74 @@ describe('FilesBody', () => {
       expect(instance.getSnapshot().byTab[TAB]?.pageOpen).toBe(false)
       expect(host.getAttribute('data-files-files-page')).toBe('list')
       expect(view.container.querySelector('[data-files-narrow-pane="tree"]')).not.toBeNull()
+
+      // Widening puts both columns back: the tree returns beside the preview
+      // that was drilled into, and the one-column pane is gone.
+      act(() => { observer.fire(700) })
+      expect(host.getAttribute('data-files-files-layout')).toBe('wide')
+      expect(view.container.querySelector('[data-files-splitter]')).not.toBeNull()
+      expect(view.container.querySelector('[data-files-preview]')).not.toBeNull()
+      expect(view.container.querySelector('[data-files-narrow-pane]')).toBeNull()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('hands focus to the preview and back to the row it came from', async () => {
+    const observer = resizeObserver()
+    vi.stubGlobal('ResizeObserver', observer.type)
+    try {
+      const { view, script } = mountBody()
+      await act(() => script.watches.ready(ROOT))
+      await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
+      const host = view.container.querySelector('[data-files-container-host]')!
+      act(() => { observer.for(host).fire(400) })
+      const row = view.container.querySelector<HTMLElement>(`[data-files-path="${ROOT}/README.md"] > button`)!
+      row.focus()
+      act(() => { fireEvent.click(row) })
+      expect(document.activeElement).toBe(view.container.querySelector('[data-files-files-back]'))
+      act(() => { fireEvent.click(view.container.querySelector('[data-files-files-back]')!) })
+      expect(document.activeElement).toBe(view.container.querySelector(`[data-files-path="${ROOT}/README.md"] > button`))
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('returns focus to the tree when the last chip closed out of the preview', async () => {
+    const observer = resizeObserver()
+    vi.stubGlobal('ResizeObserver', observer.type)
+    try {
+      const { view, script } = mountBody()
+      await act(() => script.watches.ready(ROOT))
+      await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
+      act(() => { observer.for(view.container.querySelector('[data-files-container-host]')!).fire(400) })
+      act(() => { fireEvent.click(view.container.querySelector(`[data-files-path="${ROOT}/README.md"] > button`)!) })
+      // Closing the shown file's own chip leaves the preview with nothing to
+      // show, so the store closes the drill-down and the selection with it.
+      act(() => { fireEvent.click(view.container.querySelector(`[data-files-tab-close="${ROOT}/README.md"]`)!) })
+      expect(view.container.querySelector('[data-files-narrow-pane="tree"]')).not.toBeNull()
+      expect(document.activeElement).toBe(view.container.querySelector('[data-files-tree-action="expand"]'))
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('keeps the tree scroll offset across a narrow drill-down round trip', async () => {
+    const observer = resizeObserver()
+    vi.stubGlobal('ResizeObserver', observer.type)
+    try {
+      const { view, script } = mountBody()
+      await act(() => script.watches.ready(ROOT))
+      await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
+      act(() => { observer.for(view.container.querySelector('[data-files-container-host]')!).fire(400) })
+      const body = view.container.querySelector<HTMLElement>('[data-files-body]')!
+      body.scrollTop = 300
+      act(() => { fireEvent.scroll(body) })
+      act(() => { fireEvent.click(view.container.querySelector(`[data-files-path="${ROOT}/README.md"] > button`)!) })
+      act(() => { fireEvent.click(view.container.querySelector('[data-files-files-back]')!) })
+      // The drill-down remounts the tree's scroller; the offset it was at
+      // before the preview opened comes back with it.
+      expect(view.container.querySelector<HTMLElement>('[data-files-body]')!.scrollTop).toBe(300)
     } finally {
       vi.unstubAllGlobals()
     }
