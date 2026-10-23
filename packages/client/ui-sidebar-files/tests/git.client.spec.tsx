@@ -353,9 +353,9 @@ describe('GitPanel', () => {
     expect(onSelect).toHaveBeenCalledWith(UNTRACKED)
     // The unified column is drawn by the shared numbered renderer.
     expect(container.querySelector('[data-review-view="unified"]')).not.toBeNull()
-    const split = container.querySelector<HTMLButtonElement>('[data-files-git-diff-mode="split"]')!
-    expect(split.getAttribute('aria-pressed')).toBe('false')
-    fireEvent.click(split)
+    const toggle = container.querySelector<HTMLButtonElement>('[data-files-git-diff-mode="unified"]')!
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(toggle)
     expect(onMode).toHaveBeenCalledWith('split')
     cleanup()
     // The split layout pairs the two sides and marks its own rows.
@@ -372,6 +372,28 @@ describe('GitPanel', () => {
     })
     expect(coarse.container.querySelector('[data-diff-coarse]')?.textContent).toBe(zh['diff.coarse'])
     expect(coarse.container.querySelector('[data-diff-note="metadata"]')?.textContent).toBe(zh['git.diff.created'])
+  })
+
+  it('names the layout its press switches to from the icon-only toggle', () => {
+    vi.useFakeTimers()
+    try {
+      const { container } = panel({ status: REPOSITORY, selected: 'src/a.ts', diff: DIFF })
+      const toggle = container.querySelector<HTMLButtonElement>('[data-files-git-diff-mode="unified"]')!
+      // The glyph states the current layout; the tooltip names the other one.
+      expect(toggle.getAttribute('aria-label')).toBe(zh['diff.mode.aria'])
+      fireEvent.mouseEnter(toggle)
+      act(() => { vi.advanceTimersByTime(300) })
+      expect(container.querySelector('[role="tooltip"]')?.textContent).toBe(zh['diff.mode.split'])
+      fireEvent.mouseLeave(toggle)
+      expect(container.querySelector('[role="tooltip"]')).toBeNull()
+      cleanup()
+      const split = panel({ status: REPOSITORY, selected: 'src/a.ts', diff: DIFF, diffMode: 'split' })
+      fireEvent.mouseEnter(split.container.querySelector('[data-files-git-diff-mode="split"]')!)
+      act(() => { vi.advanceTimersByTime(300) })
+      expect(split.container.querySelector('[role="tooltip"]')?.textContent).toBe(zh['diff.mode.unified'])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('draws the loading, failed, clean, and non-repository states', () => {
@@ -726,15 +748,15 @@ describe('git view through the body', () => {
     })
     expect(mounted.gitDiff).toHaveBeenCalledWith(TAB, ROOT, { path: 'src/a.ts' }, expect.anything())
     expect(mounted.instance.getSnapshot().byTab[TAB]?.git.diff).toEqual(DIFF)
-    // The layout control writes the store and the drawn comparison follows it.
+    // The layout toggle writes the store and the drawn comparison follows it.
     expect(mounted.view.container.querySelector('[data-review-view="unified"]')).not.toBeNull()
     await act(async () => {
-      fireEvent.click(mounted.view.container.querySelector('[data-files-git-diff-mode="split"]')!)
+      fireEvent.click(mounted.view.container.querySelector('[data-files-git-diff-mode="unified"]')!)
     })
     expect(mounted.instance.getSnapshot().byTab[TAB]?.git.diffMode).toBe('split')
     expect(mounted.view.container.querySelector('[data-review-view="split"]')).not.toBeNull()
     await act(async () => {
-      fireEvent.click(mounted.view.container.querySelector('[data-files-git-diff-mode="unified"]')!)
+      fireEvent.click(mounted.view.container.querySelector('[data-files-git-diff-mode="split"]')!)
     })
     expect(mounted.view.container.querySelector('[data-review-view="unified"]')).not.toBeNull()
     // A one-sided comparison (an added file) still honours the choice: the side
@@ -751,7 +773,7 @@ describe('git view through the body', () => {
     })
     expect(added.view.container.querySelector('[data-review-view="unified"]')).not.toBeNull()
     await act(async () => {
-      fireEvent.click(added.view.container.querySelector('[data-files-git-diff-mode="split"]')!)
+      fireEvent.click(added.view.container.querySelector('[data-files-git-diff-mode="unified"]')!)
     })
     expect(added.view.container.querySelector('[data-review-view="split"]')).not.toBeNull()
   })

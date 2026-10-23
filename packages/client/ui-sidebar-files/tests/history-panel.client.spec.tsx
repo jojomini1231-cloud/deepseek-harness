@@ -773,7 +773,7 @@ describe('CommitPage', () => {
     const unified = mountPage({
       commits: COMMITS, selected: hash('a'), detail: DETAIL, file: 'packages/app/src/a.ts', diff: DIFF,
     })
-    fireEvent.click(unified.container.querySelector('[data-files-history-diff-mode="split"]')!)
+    fireEvent.click(unified.container.querySelector('[data-files-history-diff-mode="unified"]')!)
     expect(unified.hands.onDiffMode).toHaveBeenCalledWith('split')
     cleanup()
     const split = mountPage({

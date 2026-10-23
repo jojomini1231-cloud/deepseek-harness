@@ -15,7 +15,7 @@ import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, onTestFailed } from 'vitest'
 import { launchWebScaffold, watchConsole, type WebScaffold } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, expectTooltipOnTop, newEnglishPage, saveFailureShot } from './support.ts'
 
 /** The connected directory inside the scaffold's workspace; the repository lives here. */
 const WORKSPACE_NAME = 'workspace'
@@ -112,11 +112,21 @@ describe('web e2e: the working-tree git view', () => {
     const colors = await column.locator('[data-files-git-kind]').evaluateAll(nodes => nodes.map(node => (
       getComputedStyle(node).color)))
     expect(colors[0]).not.toBe(colors[1])
-    // The changed path's comparison starts unified and follows the layout choice.
+    // The changed path's comparison starts unified and follows the layout choice;
+    // the icon-only toggle carries the shown layout and names the one its next
+    // press switches to.
     await column.locator('[data-files-git-entry="change.md"]').click()
     await column.locator('[data-review-view="unified"]').waitFor({ timeout: 15_000 })
-    await column.locator('[data-files-git-diff-mode="split"]').click()
+    await column.locator('[data-files-git-diff-mode="unified"]').click()
     await column.locator('[data-review-view="split"]').waitFor({ timeout: 15_000 })
+    // Move off the pressed control first: the click withdrew its bubble, and a
+    // hover on the anchor the pointer already rests on shows nothing.
+    await page.mouse.move(10, 500)
+    await column.locator('[data-files-git-diff-mode="split"]').hover()
+    const layoutTooltip = column.getByRole('tooltip', { name: 'Switch to unified view', exact: true })
+    await layoutTooltip.waitFor()
+    // The bubble must escape the panel instead of being clipped by its edges.
+    await expectTooltipOnTop(layoutTooltip)
     // Folding the changed group keeps its header and hides its rows.
     const changedToggle = column.locator('[data-files-git-group-toggle="changed"]')
     await changedToggle.click()

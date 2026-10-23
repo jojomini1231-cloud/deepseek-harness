@@ -122,7 +122,7 @@ describe('history through the body', () => {
       TAB, ROOT, { hash: hash('b'), path: 'packages/app/src/a.ts' }, expect.anything(),
     )
     await act(async () => {
-      fireEvent.click(mounted.view.container.querySelector('[data-files-history-diff-mode="split"]')!)
+      fireEvent.click(mounted.view.container.querySelector('[data-files-history-diff-mode="unified"]')!)
     })
     expect(mounted.instance.getSnapshot().byTab[TAB]?.history.diffMode).toBe('split')
     expect(mounted.view.container.querySelector('[data-review-view="split"]')).not.toBeNull()

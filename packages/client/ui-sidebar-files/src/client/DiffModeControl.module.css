@@ -1,28 +1,32 @@
-/* Two segments choosing the comparison layout, the chosen one filled. */
-.mode {
-  display: flex;
+/* One icon toggle for the comparison layout: the glyph turns a quarter when the
+   sides split, so the press offers the other layout. */
+.tool {
+  display: inline-flex;
   flex: none;
-  gap: 2px;
-  padding: 2px;
-  background: var(--dsw-alias-interactive-bg-hover);
-  border-radius: var(--dsw-radius-sm);
-}
-
-.button {
-  padding: 2px 8px;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  padding: 6px;
   color: var(--dsw-alias-label-secondary);
-  font: inherit;
   background: transparent;
   border: 0;
   border-radius: var(--dsw-radius-sm);
   cursor: pointer;
 }
 
-.button:hover {
-  color: var(--dsw-alias-label-primary);
+.tool svg {
+  display: block;
+  width: 15px;
+  height: 15px;
 }
 
-.active {
+.tool:hover {
   color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-interactive-bg-active);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.tool[aria-pressed='true'] .icon {
+  transform: rotate(90deg);
 }

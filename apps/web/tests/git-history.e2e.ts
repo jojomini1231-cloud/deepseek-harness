@@ -224,9 +224,13 @@ describe('web e2e: the repository history view', () => {
     await expect.poll(async () => await column.locator('[data-files-history-diff]').getAttribute('data-files-history-diff'), { timeout: 15_000 })
       .toBe('src/main.ts')
     await column.locator('[data-review-view="unified"]').waitFor({ timeout: 15_000 })
-    // The layout choice is honoured, and stays chosen across commit picks.
-    await column.locator('[data-files-history-diff-mode="split"]').click()
+    // The layout choice is honoured and stays chosen across commit picks; the
+    // icon-only toggle carries the shown layout and marks the split choice.
+    await column.locator('[data-files-history-diff-mode="unified"]').click()
     await column.locator('[data-review-view="split"]').waitFor({ timeout: 15_000 })
+    const layoutToggle = column.locator('[data-files-history-diff-mode="split"]')
+    await layoutToggle.waitFor({ timeout: 15_000 })
+    expect(await layoutToggle.getAttribute('aria-pressed')).toBe('true')
     // Another row moves the page: the merge commit's first-parent comparison
     // holds only the branch-side path.
     const mergeRow = rows.filter({ hasText: 'merge: topic/sidebar into main' })
