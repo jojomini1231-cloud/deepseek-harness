@@ -67,7 +67,12 @@ interface WorkspaceChangesSummary {
 ## `WorkspaceDiffHunk`：一个 unified diff hunk
 
 ```ts type-equiv
-/** One unified-diff hunk with three context lines; every line keeps its `+`, `-`, or space prefix. */
+/**
+ * One unified-diff hunk. A comparison that asked for the changed hunks keeps
+ * three context lines around each change; one that asked for the whole file
+ * carries every unchanged line as context. Every line keeps its `+`, `-`, or
+ * space prefix.
+ */
 interface WorkspaceDiffHunk {
   /** First line of the hunk in the turn-start content, 1-based; a side without lines starts at 1 with zero lines. */
   oldStart: number
@@ -149,6 +154,12 @@ interface WorkspaceGitDiffRequest {
   path: string
   /** Original path of a rename or copy, relative to the Session working directory; its `HEAD` content is the old side. */
   from?: string
+  /**
+   * Cover the whole file: every unchanged line arrives as context, instead of
+   * three context lines around each change. Absent or false keeps the changed
+   * hunks only.
+   */
+  complete?: boolean
 }
 ```
 
@@ -269,6 +280,12 @@ interface WorkspaceGitCommitDiffRequest {
   path: string
   /** Original path of a rename, relative to the working directory. */
   from?: string
+  /**
+   * Cover the whole file: every unchanged line arrives as context, instead of
+   * three context lines around each change. Absent or false keeps the changed
+   * hunks only.
+   */
+  complete?: boolean
 }
 ```
 
@@ -306,7 +323,7 @@ interface WorkspaceChanges {
   /**
    * Compare one working-tree path with its `HEAD` content.
    * @param cwd - the Session working directory.
-   * @param request - the path to compare and, for a rename or copy, its original path.
+   * @param request - the path to compare, a rename or copy's original path, and whether to cover the whole file.
    * @param signal - the request's cancellation.
    * @returns the comparison, or undefined when a path leaves `cwd`, the path is gone, or git cannot answer.
    */
@@ -340,7 +357,7 @@ interface WorkspaceChanges {
   /**
    * Compare one commit file with the commit's first parent.
    * @param cwd - the Session working directory.
-   * @param request - the commit, the path to compare, and a rename origin.
+   * @param request - the commit, the path to compare, a rename origin, and whether to cover the whole file.
    * @param signal - the request's cancellation.
    * @returns the comparison, or undefined when a path leaves `cwd` (directly or through a symbolic
    *   link), the commit is unknown, or the path has nothing to compare; an oversized patch answers
@@ -400,7 +417,7 @@ workingTree(cwd: string, signal: AbortSignal): Promise<WorkspaceGitStatus>
 /**
  * Compare one working-tree path with its `HEAD` content.
  * @param cwd - the Session working directory.
- * @param request - the path to compare and, for a rename or copy, its original path.
+ * @param request - the path to compare, a rename or copy's original path, and whether to cover the whole file.
  * @param signal - the request's cancellation.
  * @returns the comparison, or undefined when a path leaves `cwd`, the path is gone, or git cannot answer.
  */
@@ -438,7 +455,7 @@ commit(cwd: string, hash: string, signal: AbortSignal): Promise<WorkspaceGitComm
 /**
  * Compare one commit file with the commit's first parent.
  * @param cwd - the Session working directory.
- * @param request - the commit, the path to compare, and a rename origin.
+ * @param request - the commit, the path to compare, a rename origin, and whether to cover the whole file.
  * @param signal - the request's cancellation.
  * @returns the comparison, or undefined when a path leaves `cwd` (directly or through a symbolic
  *   link), the commit is unknown, or the path has nothing to compare; an oversized patch answers

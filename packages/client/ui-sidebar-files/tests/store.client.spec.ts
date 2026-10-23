@@ -35,13 +35,13 @@ describe('createFilesStore', () => {
       open: [], active: undefined, ratio: DEFAULT_RATIO, pageOpen: false, container: 'files',
       git: {
         status: undefined, loading: false, failure: false, selected: undefined, selectedFrom: undefined,
-        scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: 0.58, pageOpen: false, groups: { changed: true, untracked: true },
+        scrollTop: 0, diff: undefined, diffMode: 'unified', diffComplete: false, ratio: 0.58, pageOpen: false, groups: { changed: true, untracked: true },
       },
       history: {
         refs: undefined, refsLoading: false, refsFailure: false, ref: undefined,
         commits: [], listEpoch: 0, hasMore: false, loading: false, failure: false,
         selected: undefined, file: undefined, filesOpen: true,
-        detail: undefined, diff: undefined, diffMode: 'unified',
+        detail: undefined, diff: undefined, diffMode: 'unified', diffComplete: false,
         listScrollTop: 0, pageScrollTop: 0, ratio: 0.58, pageOpen: false,
       },
     })
@@ -263,13 +263,13 @@ describe('createFilesStore', () => {
       open: [], active: undefined, ratio: DEFAULT_RATIO, pageOpen: false, container: 'files',
       git: {
         status: undefined, loading: false, failure: false, selected: undefined, selectedFrom: undefined,
-        scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: 0.58, pageOpen: false, groups: { changed: true, untracked: true },
+        scrollTop: 0, diff: undefined, diffMode: 'unified', diffComplete: false, ratio: 0.58, pageOpen: false, groups: { changed: true, untracked: true },
       },
       history: {
         refs: undefined, refsLoading: false, refsFailure: false, ref: undefined,
         commits: [], listEpoch: 0, hasMore: false, loading: false, failure: false,
         selected: undefined, file: undefined, filesOpen: true,
-        detail: undefined, diff: undefined, diffMode: 'unified',
+        detail: undefined, diff: undefined, diffMode: 'unified', diffComplete: false,
         listScrollTop: 0, pageScrollTop: 0, ratio: 0.58, pageOpen: false,
       },
     })

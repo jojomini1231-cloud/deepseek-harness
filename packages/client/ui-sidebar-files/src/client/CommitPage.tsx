@@ -21,6 +21,7 @@ import type {} from './locales.ts'
 import type { HistoryTabState } from './store.ts'
 import { DiffModeControl } from './DiffModeControl.tsx'
 import type { DiffMode } from './DiffModeControl.tsx'
+import { DiffScopeControl } from './DiffScopeControl.tsx'
 import { absoluteTime, commitRefPills, historyTime } from './history.ts'
 import { RefPills } from './RefPills.tsx'
 import { useScrollRestore } from './use-scroll-restore.ts'
@@ -59,6 +60,8 @@ export interface CommitPageProps {
   readonly onRetryDiff: () => void
   /** Choose the comparison layout. */
   readonly onDiffMode: (mode: DiffMode) => void
+  /** Choose whether the comparison covers the whole file or the changed hunks. */
+  readonly onDiffComplete: (complete: boolean) => void
   /** Record where the page is scrolled to, for the commit it draws. */
   readonly onScrolled: (hash: string, scrollTop: number) => void
   readonly t: TranslateNS<'sidebarFiles'>
@@ -96,9 +99,10 @@ function FileRow({ file, active, onSelect, t }: {
 }
 
 /** The comparison box: its filled states and the selected file's hunks. */
-function FileComparison({ history, onDiffMode, onRetryDiff, t }: {
+function FileComparison({ history, onDiffMode, onDiffComplete, onRetryDiff, t }: {
   readonly history: HistoryTabState
   readonly onDiffMode: (mode: DiffMode) => void
+  readonly onDiffComplete: (complete: boolean) => void
   readonly onRetryDiff: () => void
   readonly t: CommitPageProps['t']
 }): ReactNode {
@@ -124,6 +128,8 @@ function FileComparison({ history, onDiffMode, onRetryDiff, t }: {
     <div className={css.diff} data-files-history-diff={diff.path}>
       <div className={css.diffHeader}>
         <span className={css.diffPath} title={diff.path}>{diff.display}</span>
+        <DiffScopeControl complete={history.diffComplete} onComplete={onDiffComplete}
+          dataAttr="data-files-history-diff-scope" t={t} />
         <DiffModeControl mode={history.diffMode} onMode={onDiffMode} dataAttr="data-files-history-diff-mode" t={t} />
       </div>
       <div className={css.diffBody}>
@@ -157,7 +163,10 @@ function FileComparison({ history, onDiffMode, onRetryDiff, t }: {
  * @returns the commit page column.
  */
 export function CommitPage(props: CommitPageProps): ReactNode {
-  const { history, narrow, tips, now, onBack, onSelectFile, onToggleFiles, onRetryDetail, onRetryDiff, onDiffMode, onScrolled, t } = props
+  const {
+    history, narrow, tips, now, onBack, onSelectFile, onToggleFiles, onRetryDetail, onRetryDiff, onDiffMode,
+    onDiffComplete, onScrolled, t,
+  } = props
   const [messageOpen, setMessageOpen] = useState(false)
   const selected = history.selected
   const detail = history.detail
@@ -288,7 +297,8 @@ export function CommitPage(props: CommitPageProps): ReactNode {
                       </p>
                     )}
                   </div>
-                  <FileComparison history={history} onDiffMode={onDiffMode} onRetryDiff={onRetryDiff} t={t} />
+                  <FileComparison history={history} onDiffMode={onDiffMode} onDiffComplete={onDiffComplete}
+                    onRetryDiff={onRetryDiff} t={t} />
                 </>
               )}
           </>

@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-工作台的活动栏提供第二个视图容器：当会话目录位于 git 工作树内时，`git.status` 报 `repository`，活动栏在文件项旁多出一个分支项。git 容器用变更视图替换两栏 —— 引导侧是选中路径与 `HEAD` 的对比，尾随侧按 Changes / Untracked Files 分组列出改动路径，两者之间是同一个可拖拽的 `SplitView`，对比区上方是纯图标布局开关。每组可从标题折叠、默认展开；每行按类型给状态字母与文件名上色；对比、列表滚动位置、布局与比例都按 tab 记住。
+工作台的活动栏提供第二个视图容器：当会话目录位于 git 工作树内时，`git.status` 报 `repository`，活动栏在文件项旁多出一个分支项。git 容器用变更视图替换两栏 —— 引导侧是选中路径与 `HEAD` 的对比，尾随侧按 Changes / Untracked Files 分组列出改动路径，两者之间是同一个可拖拽的 `SplitView`，对比区上方是两个纯图标开关，一个切换单栏或左右布局，一个切换整个文件或改动部分（默认改动部分）。每组可从标题折叠、默认展开；每行按类型给状态字母与文件名上色；对比、列表滚动位置、两个开关与比例都按 tab 记住。
 
 Host 侧只有一份能力，不是第二套 git 栈：`workspaceChanges` 新增 `workingTree` 与 `workingDiff`。`workingTree` 通过轮次记录器已经约束好的运行器执行 `git rev-parse --is-inside-work-tree` 与 `git status --porcelain=v1 --branch -z --untracked-files=all`；`workingDiff` 把某路径的 `HEAD` 文本与工作副本并列，交给与轮次摘要相同的 `compareText`。工作台的 Host 半在连接鉴权栅栏内注册 `/api/git.status` 与 `/api/git.diff`：两者都解析会话并拒绝与会话实际解析出的工作目录不一致的请求，对比路由还拒绝逃出该目录的路径。这使得 `ui-sidebar-files` 成为双面包（Host 与 Client 各一个编译面），因为要提供路由的功能必须两面都在。
 

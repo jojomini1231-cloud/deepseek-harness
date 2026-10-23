@@ -1697,3 +1697,43 @@ export const IconMicrophoneOutlineRegular = (props: IconProps) => (
 export const IconMicrophoneOutlineMedium = (props: IconProps) => (
   <IconMicrophoneOutlineArtwork {...props} strokeWidth={ICON_MEDIUM_STROKE} />
 )
+
+const IconFullFileOutlineArtwork = ({ size = 16, className, strokeWidth }: WeightedIconProps) => (
+  <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" strokeWidth={strokeWidth}>
+    <path d="M9.5 1.5H4.5C3.94772 1.5 3.5 1.94772 3.5 2.5V13.5C3.5 14.0523 3.94772 14.5 4.5 14.5H11.5C12.0523 14.5 12.5 14.0523 12.5 13.5V4.5L9.5 1.5Z" stroke="currentColor" />
+    <path d="M9.5 1.5V4.5H12.5" stroke="currentColor" />
+    <path d="M5.75 7.5H10.25" stroke="currentColor" />
+    <path d="M5.75 9.75H10.25" stroke="currentColor" />
+    <path d="M5.75 12H8.75" stroke="currentColor" />
+  </svg>
+)
+
+/** Regular one-pixel IconFullFileOutline artwork. */
+export const IconFullFileOutlineRegular = (props: IconProps) => (
+  <IconFullFileOutlineArtwork {...props} strokeWidth={ICON_REGULAR_STROKE} />
+)
+
+/** Medium IconFullFileOutline artwork with a 1.3px stroke. */
+export const IconFullFileOutlineMedium = (props: IconProps) => (
+  <IconFullFileOutlineArtwork {...props} strokeWidth={ICON_MEDIUM_STROKE} />
+)
+
+const IconDiffHunksOutlineArtwork = ({ size = 16, className, strokeWidth }: WeightedIconProps) => (
+  <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" strokeWidth={strokeWidth}>
+    <path d="M3 1.5V6.5" stroke="currentColor" />
+    <path d="M0.5 4H5.5" stroke="currentColor" />
+    <path d="M8 4H15" stroke="currentColor" />
+    <path d="M0.5 12H5.5" stroke="currentColor" />
+    <path d="M8 12H15" stroke="currentColor" />
+  </svg>
+)
+
+/** Regular one-pixel IconDiffHunksOutline artwork. */
+export const IconDiffHunksOutlineRegular = (props: IconProps) => (
+  <IconDiffHunksOutlineArtwork {...props} strokeWidth={ICON_REGULAR_STROKE} />
+)
+
+/** Medium IconDiffHunksOutline artwork with a 1.3px stroke. */
+export const IconDiffHunksOutlineMedium = (props: IconProps) => (
+  <IconDiffHunksOutlineArtwork {...props} strokeWidth={ICON_MEDIUM_STROKE} />
+)

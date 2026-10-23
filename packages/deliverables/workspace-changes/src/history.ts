@@ -14,7 +14,7 @@ import { homedir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import type { GitRunner, GitRunResult } from './git.ts'
 import { parseNumstatRecords } from './numstat.ts'
-import { parsePatch } from './patch.ts'
+import { contextFlag, parsePatch } from './patch.ts'
 import {
   canonicalPath, compareDisplay, displayPathOf, isInside, toPosix, underPrefix,
 } from './paths.ts'
@@ -49,9 +49,20 @@ const COMMIT_HASH = /^[0-9a-f]{4,64}$/u
 
 /** The diff flags every patch read shares: no color, no external driver, no textconv, fixed prefixes. */
 const PATCH_FLAGS = [
-  '-M', '-U3', '--no-color', '--no-ext-diff', '--no-textconv', '--no-relative',
+  '--no-color', '--no-ext-diff', '--no-textconv', '--no-relative',
   '--src-prefix=a/', '--dst-prefix=b/',
 ] as const
+
+/**
+ * The diff flags one patch read passes: rename detection, the context count the
+ * request asked for, and {@link PATCH_FLAGS}.
+ * @param complete - true when the view asked to cover the whole file.
+ * @param maxPatchBytes - bytes this patch read may collect before it is refused as truncated.
+ * @returns the flags for one patch read.
+ */
+function patchFlags(complete: boolean | undefined, maxPatchBytes: number): string[] {
+  return ['-M', contextFlag(complete, maxPatchBytes), ...PATCH_FLAGS]
+}
 
 /** The tree-read flags every file listing shares: recursion, rename detection, NUL records, no external programs. */
 const TREE_FLAGS = ['-r', '-M', '-z', '--no-ext-diff', '--no-textconv', '--no-relative'] as const
@@ -464,10 +475,11 @@ export async function commit(
  * A root commit is compared against the empty tree. The path and a rename's
  * origin must stay inside the Session working directory, including through a
  * symbolic link; both are mapped to literal pathspecs relative to the
- * repository root.
+ * repository root. A request that asks for the whole file gets every unchanged
+ * line as context instead of three around each change.
  * @param git - command runner.
  * @param cwd - the Session working directory.
- * @param request - the commit, the path to compare, and a rename origin.
+ * @param request - the commit, the path to compare, a rename origin, and whether the whole file is asked for.
  * @param signal - the request's cancellation.
  * @param limits - the patch output cap.
  * @returns the comparison, or undefined when a path leaves the working directory (directly or
@@ -498,10 +510,10 @@ export async function commitDiff(
   const environment = { GIT_LITERAL_PATHSPECS: '1' }
   const found = parent === undefined
     ? await git.run([
-      'diff-tree', '--root', '--no-commit-id', ...PATCH_FLAGS, resolved, '--', ...specs,
+      'diff-tree', '--root', '--no-commit-id', ...patchFlags(request.complete, maxBytes), resolved, '--', ...specs,
     ], { cwd: location.root, env: environment, signal, maxBytes })
     : await git.run([
-      'diff', ...PATCH_FLAGS, parent, resolved, '--', ...specs,
+      'diff', ...patchFlags(request.complete, maxBytes), parent, resolved, '--', ...specs,
     ], { cwd: location.root, env: environment, signal, maxBytes })
   if (found.exitCode !== 0) throw new Error(`git diff in ${cwd} failed: ${found.stderr.trim()}`)
   const display = displayPathOf(absolute, cwd, location.root, homedir())

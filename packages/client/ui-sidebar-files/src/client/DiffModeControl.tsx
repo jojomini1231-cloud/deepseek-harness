@@ -8,11 +8,13 @@
  * browser specs use carries the shown layout and is supplied by the caller, so
  * each view keeps its own stable attribute.
  */
+import clsx from 'clsx'
 import type { ReactNode } from 'react'
 import { IconCompareSplitOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from './locales.ts'
 import css from './DiffModeControl.module.css'
+import toggleCss from './DiffToggle.module.css'
 
 /** How a file comparison is laid out: one unified column, or both sides. */
 export type DiffMode = 'unified' | 'split'
@@ -42,7 +44,7 @@ export function DiffModeControl({ mode, onMode, dataAttr, t }: DiffModeControlPr
     <Tooltip label={t(split ? 'diff.mode.unified' : 'diff.mode.split')} side="bottom" delayMs={300}>
       <button
         type="button"
-        className={css.tool}
+        className={clsx(toggleCss.tool, split && css.split)}
         aria-pressed={split}
         aria-label={t('diff.mode.aria')}
         {...{ [dataAttr]: mode }}

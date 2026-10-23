@@ -70,13 +70,22 @@ describe('ui-sidebar-files host half', () => {
     expect((await call(diff, 'sessionId=s-1&cwd=%2Fwork%2Fapp&path=a.bin&from=.')).status).toBe(400)
     expect((await call(diff, 'sessionId=s-1&cwd=%2Fwork%2Fapp&path=a.bin&from=..%2Fsecret')).status).toBe(400)
     expect((await call(diff, 'sessionId=s-1&cwd=%2Fwork%2Fapp&path=a.bin&from=%2Fetc%2Fpasswd')).status).toBe(400)
+    // The scope parameter names the whole file only as `1`; any other spelling is refused.
+    for (const complete of ['complete=0', 'complete=true', 'complete=', 'complete=yes']) {
+      expect((await call(diff, `sessionId=s-1&cwd=%2Fwork%2Fapp&path=a.bin&${complete}`)).status, complete).toBe(400)
+    }
     const comparison = await call(diff, 'sessionId=s-1&cwd=%2Fwork%2Fapp&path=a.bin')
     expect(comparison.status).toBe(200)
     expect(await comparison.json()).toEqual({ kind: 'binary', path: 'a.bin', display: 'a.bin' })
-    expect(workingDiff).toHaveBeenLastCalledWith('/work/app', { path: 'a.bin' }, expect.anything())
+    expect(workingDiff).toHaveBeenLastCalledWith('/work/app', { path: 'a.bin', complete: false }, expect.anything())
     // A rename carries its origin so the comparison pairs the two paths.
     expect((await call(diff, 'sessionId=s-1&cwd=%2Fwork%2Fapp&path=a.bin&from=old.bin')).status).toBe(200)
-    expect(workingDiff).toHaveBeenLastCalledWith('/work/app', { path: 'a.bin', from: 'old.bin' }, expect.anything())
+    expect(workingDiff).toHaveBeenLastCalledWith(
+      '/work/app', { path: 'a.bin', complete: false, from: 'old.bin' }, expect.anything(),
+    )
+    // `complete=1` asks for the whole file rather than the changed hunks.
+    expect((await call(diff, 'sessionId=s-1&cwd=%2Fwork%2Fapp&path=a.bin&complete=1')).status).toBe(200)
+    expect(workingDiff).toHaveBeenLastCalledWith('/work/app', { path: 'a.bin', complete: true }, expect.anything())
     // A refused comparison is a 404, and the route lifetime ends with the plugin.
     workingDiff.mockResolvedValueOnce(undefined as never)
     expect((await call(diff, 'sessionId=s-1&cwd=%2Fwork%2Fapp&path=a.bin')).status).toBe(404)
@@ -233,12 +242,18 @@ describe('ui-sidebar-files host half', () => {
     expect(diffAnswer.status).toBe(200)
     expect(await diffAnswer.json()).toEqual({ kind: 'binary', path: 'a.bin', display: 'a.bin' })
     expect(commitDiff).toHaveBeenLastCalledWith(
-      '/work/app', { hash: 'abcdef', path: 'a.bin', from: 'old.bin' }, expect.anything(),
+      '/work/app', { hash: 'abcdef', path: 'a.bin', complete: false, from: 'old.bin' }, expect.anything(),
+    )
+    // `complete=1` reaches the service; any other spelling of the scope is refused.
+    expect((await call('/api/git.commit-diff', `${coordinates}&hash=abcdef&path=a.bin&complete=1`)).status).toBe(200)
+    expect(commitDiff).toHaveBeenLastCalledWith(
+      '/work/app', { hash: 'abcdef', path: 'a.bin', complete: true }, expect.anything(),
     )
     for (const query of [
       '', 'hash=abcdef', 'path=a.bin', 'hash=zzzz&path=a.bin', 'hash=abcdef&path=..%2Fescape',
       'hash=abcdef&path=%2Fetc%2Fpasswd', 'hash=abcdef&path=.', 'hash=abcdef&path=a.bin&from=',
       'hash=abcdef&path=a.bin&from=..%2Fescape', 'hash=abcdef&path=a.bin&from=%2Fetc%2Fpasswd',
+      'hash=abcdef&path=a.bin&complete=0', 'hash=abcdef&path=a.bin&complete=true', 'hash=abcdef&path=a.bin&complete=',
     ]) {
       expect((await call('/api/git.commit-diff', `${coordinates}&${query}`)).status, query).toBe(400)
     }

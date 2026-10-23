@@ -316,6 +316,8 @@ describe('history slice', () => {
     expect(store.getSnapshot().byTab[TAB]?.history.filesOpen).toBe(false)
     actions.historyDiffModeSelected(TAB, 'split')
     expect(store.getSnapshot().byTab[TAB]?.history.diffMode).toBe('split')
+    actions.historyDiffCompleteSelected(TAB, true)
+    expect(store.getSnapshot().byTab[TAB]?.history.diffComplete).toBe(true)
     actions.historyRatioChanged(TAB, 0.05)
     expect(store.getSnapshot().byTab[TAB]?.history.ratio).toBe(0.2)
     actions.historyRatioChanged(TAB, 0.95)

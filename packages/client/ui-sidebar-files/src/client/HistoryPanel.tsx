@@ -102,6 +102,8 @@ export interface HistoryPanelProps {
   readonly onRetryDiff: () => void
   /** Choose the comparison layout. */
   readonly onDiffMode: (mode: DiffMode) => void
+  /** Choose whether the comparison covers the whole file or the changed hunks. */
+  readonly onDiffComplete: (complete: boolean) => void
   /** Settle where a drag left the two columns. */
   readonly onRatio: (ratio: number) => void
   /** Leave the narrow drill-down and go back to the list. */
@@ -407,6 +409,7 @@ export function HistoryPanel(props: HistoryPanelProps): ReactNode {
       onRetryDetail={hands.onRetryDetail}
       onRetryDiff={hands.onRetryDiff}
       onDiffMode={hands.onDiffMode}
+      onDiffComplete={hands.onDiffComplete}
       onScrolled={hands.onPageScrolled}
       t={hands.t}
     />

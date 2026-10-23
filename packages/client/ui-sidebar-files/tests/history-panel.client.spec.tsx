@@ -26,7 +26,8 @@ function panelHands() {
     onSelectRef: vi.fn(), onRefresh: vi.fn(), onRetryRefs: vi.fn(), onLoadMore: vi.fn(),
     onRetryList: vi.fn(), onSelectCommit: vi.fn(), onDrillDown: vi.fn(), onDirty: vi.fn(), onSelectFile: vi.fn(),
     onToggleFiles: vi.fn(), onRetryDetail: vi.fn(), onRetryDiff: vi.fn(), onDiffMode: vi.fn(),
-    onRatio: vi.fn(), onBack: vi.fn(), onListScrolled: vi.fn(), onPageScrolled: vi.fn(),
+    onDiffComplete: vi.fn(), onRatio: vi.fn(), onBack: vi.fn(), onListScrolled: vi.fn(),
+    onPageScrolled: vi.fn(),
   }
 }
 
@@ -52,7 +53,7 @@ function mountPage(
     history: historyState(overrides), narrow: false, tips, now: NOW,
     onBack: hands.onBack, onSelectFile: hands.onSelectFile, onToggleFiles: hands.onToggleFiles,
     onRetryDetail: hands.onRetryDetail, onRetryDiff: hands.onRetryDiff, onDiffMode: hands.onDiffMode,
-    onScrolled: hands.onPageScrolled, t, ...custom,
+    onDiffComplete: hands.onDiffComplete, onScrolled: hands.onPageScrolled, t, ...custom,
   }
   return { props, hands, ...render(<CommitPage {...props} />) }
 }
@@ -782,6 +783,44 @@ describe('CommitPage', () => {
     })
     expect(split.container.querySelector('[data-review-view="split"]')).not.toBeNull()
     expect(split.container.querySelector('[data-files-history-diff-mode="split"]')?.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('defaults to the changed hunks and names the scope its press switches to', () => {
+    vi.useFakeTimers()
+    try {
+      const changes = mountPage({
+        commits: COMMITS, selected: hash('a'), detail: DETAIL, file: 'packages/app/src/a.ts', diff: DIFF,
+      })
+      const toggle = changes.container.querySelector<HTMLButtonElement>('[data-files-history-diff-scope]')!
+      expect(toggle.getAttribute('data-files-history-diff-scope')).toBe('changes')
+      expect(toggle.getAttribute('aria-pressed')).toBe('false')
+      expect(toggle.getAttribute('aria-label')).toBe(zh['diff.scope.aria'])
+      fireEvent.mouseEnter(toggle)
+      act(() => { vi.advanceTimersByTime(300) })
+      expect(changes.container.querySelector('[role="tooltip"]')?.textContent).toBe(zh['diff.scope.full'])
+      fireEvent.click(toggle)
+      expect(changes.hands.onDiffComplete).toHaveBeenCalledWith(true)
+      const changesGlyph = toggle.querySelector('svg')?.innerHTML
+      cleanup()
+      const whole = mountPage({
+        commits: COMMITS, selected: hash('a'), detail: DETAIL, file: 'packages/app/src/a.ts', diff: DIFF,
+        diffComplete: true,
+      })
+      const other = whole.container.querySelector<HTMLButtonElement>('[data-files-history-diff-scope]')!
+      expect(other.getAttribute('data-files-history-diff-scope')).toBe('complete')
+      expect(other.getAttribute('aria-pressed')).toBe('true')
+      expect(other.querySelector('svg')?.innerHTML).not.toBe(changesGlyph)
+      fireEvent.mouseEnter(other)
+      act(() => { vi.advanceTimersByTime(300) })
+      expect(whole.container.querySelector('[role="tooltip"]')?.textContent).toBe(zh['diff.scope.changes'])
+      fireEvent.click(other)
+      expect(whole.hands.onDiffComplete).toHaveBeenLastCalledWith(false)
+      // The scope control leads the layout control in the comparison header.
+      expect(other.compareDocumentPosition(whole.container.querySelector('[data-files-history-diff-mode]')!)
+        & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('states a commit that changed no files, and a created file in its comparison', () => {

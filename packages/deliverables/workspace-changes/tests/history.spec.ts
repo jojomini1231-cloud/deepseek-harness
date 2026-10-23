@@ -370,6 +370,40 @@ describe('commitDiff', () => {
       .toEqual([' one', '-two', '+TWO', ' three', '+four'])
   })
 
+  it('covers the whole file as context when the view asks for a complete comparison', async () => {
+    const cwd = await scratchDir('dsh-history-complete-', cleanups)
+    git(cwd, 'init', '-q', '-b', 'main')
+    const lines = Array.from({ length: 20 }, (_, index) => `line-${String(index + 1).padStart(2, '0')}`)
+    await writeFile(join(cwd, 'long.txt'), `${lines.join('\n')}\n`)
+    commitAll(cwd, 'seed')
+    const seed = headHash(cwd)
+    await writeFile(join(cwd, 'long.txt'), `${[...lines.slice(0, 9), 'line-10 changed', ...lines.slice(10)].join('\n')}\n`)
+    commitAll(cwd, 'change')
+    const runner = await harness()
+    const changed = await commitDiff(runner, cwd, { hash: headHash(cwd), path: 'long.txt' }, signal, LIMITS)
+    expect(changed?.kind === 'text' ? changed.hunks.flatMap(hunk => hunk.lines) : []).toEqual([
+      ' line-07', ' line-08', ' line-09', '-line-10', '+line-10 changed', ' line-11', ' line-12', ' line-13',
+    ])
+    const whole = await commitDiff(
+      runner, cwd, { hash: headHash(cwd), path: 'long.txt', complete: true }, signal, LIMITS,
+    )
+    expect(whole?.kind === 'text' ? whole.hunks : []).toEqual([{
+      oldStart: 1,
+      oldLines: 20,
+      newStart: 1,
+      newLines: 20,
+      lines: [
+        ...lines.slice(0, 9).map(line => ` ${line}`),
+        '-line-10',
+        '+line-10 changed',
+        ...lines.slice(10).map(line => ` ${line}`),
+      ],
+    }])
+    // A root commit's side holds no old lines, so its whole-file request keeps the additions alone.
+    const root = await commitDiff(runner, cwd, { hash: seed, path: 'long.txt', complete: true }, signal, LIMITS)
+    expect(root?.kind === 'text' ? root.hunks.flatMap(hunk => hunk.lines) : []).toEqual(lines.map(line => `+${line}`))
+  })
+
   it('reports an added file and a deleted file as one-sided', async () => {
     const { cwd, second } = await commitRepository()
     const runner = await harness()

@@ -20,6 +20,19 @@ import { connectFreshWorkspace, expectTooltipOnTop, newEnglishPage, saveFailureS
 /** The connected directory inside the scaffold's workspace; the repository lives here. */
 const WORKSPACE_NAME = 'workspace'
 
+/**
+ * The modified file's committed content: twelve lines with `changed-before` in
+ * the middle, so a changed-hunks comparison starts at line 3 while a whole-file
+ * comparison starts at line 1.
+ */
+const CHANGED_BEFORE = `${[
+  'head-1', 'head-2', 'head-3', 'head-4', 'head-5', 'changed-before',
+  'tail-7', 'tail-8', 'tail-9', 'tail-10', 'tail-11', 'tail-12',
+].join('\n')}\n`
+
+/** The modified file's working content: the same lines with the middle one changed. */
+const CHANGED_AFTER = CHANGED_BEFORE.replace('changed-before', 'changed-after')
+
 /** Where this batch's accepted product forms are archived. */
 const SHOT_DIR = fileURLToPath(new URL('../../../.artifacts/screenshots/1017-git-view', import.meta.url))
 
@@ -61,14 +74,16 @@ describe('web e2e: the working-tree git view', () => {
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     // A repository with one commit, one modified file, and one untracked file.
+    // The modified file is long enough that a changed line in its middle leaves
+    // the first and last lines outside the changed hunks' three context lines.
     const cwd = join(scaffold.workspaceCwd, WORKSPACE_NAME)
     mkdirSync(cwd, { recursive: true })
     writeFileSync(join(cwd, 'keep.md'), 'unchanged\n')
-    writeFileSync(join(cwd, 'change.md'), 'before\n')
+    writeFileSync(join(cwd, 'change.md'), CHANGED_BEFORE)
     git(cwd, 'init', '-q', '-b', 'main')
     git(cwd, 'add', '.')
     git(cwd, 'commit', '-q', '-m', 'seed')
-    writeFileSync(join(cwd, 'change.md'), 'after\n')
+    writeFileSync(join(cwd, 'change.md'), CHANGED_AFTER)
     writeFileSync(join(cwd, 'new.md'), 'added by the reader\n')
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
@@ -84,7 +99,7 @@ describe('web e2e: the working-tree git view', () => {
     }
   })
 
-  it('lists the working tree and switches the comparison layout', async () => {
+  it('lists the working tree and switches the comparison layout and scope', async () => {
     const column = page.locator('[data-rightbar-col]')
     // The panel starts collapsed: its expand control opens it onto the guide.
     await page.locator('[data-sidebar-right-expand]').click()
@@ -112,11 +127,35 @@ describe('web e2e: the working-tree git view', () => {
     const colors = await column.locator('[data-files-git-kind]').evaluateAll(nodes => nodes.map(node => (
       getComputedStyle(node).color)))
     expect(colors[0]).not.toBe(colors[1])
-    // The changed path's comparison starts unified and follows the layout choice;
-    // the icon-only toggle carries the shown layout and names the one its next
+    // The changed path's comparison starts unified and shows the changed hunks:
+    // the change sits far enough down that the file's first line is off scope.
+    // The scope toggle carries the shown scope and names the scope its next
     // press switches to.
     await column.locator('[data-files-git-entry="change.md"]').click()
     await column.locator('[data-review-view="unified"]').waitFor({ timeout: 15_000 })
+    const comparisonText = async (): Promise<string> => await column.locator('[data-review-view]').count() === 0
+      ? ''
+      : (await column.locator('[data-review-view]').textContent()) ?? ''
+    await expect.poll(comparisonText, { timeout: 15_000 }).toContain('@@ -3,7 +3,7 @@')
+    expect(await column.locator('[data-files-git-diff-scope="changes"]').getAttribute('aria-pressed')).toBe('false')
+    expect(await comparisonText()).not.toContain('head-1')
+    await page.mouse.move(10, 500)
+    await column.locator('[data-files-git-diff-scope="changes"]').hover()
+    const scopeTooltip = column.getByRole('tooltip', { name: 'Switch to full file', exact: true })
+    await scopeTooltip.waitFor()
+    await expectTooltipOnTop(scopeTooltip)
+    // Pressing widens the comparison to the whole file, first line included.
+    await column.locator('[data-files-git-diff-scope="changes"]').click()
+    await column.locator('[data-files-git-diff-scope="complete"]').waitFor({ timeout: 15_000 })
+    await expect.poll(comparisonText, { timeout: 15_000 }).toContain('@@ -1,12 +1,12 @@')
+    expect(await comparisonText()).toContain('head-1')
+    // Pressing again restores the changed hunks.
+    await column.locator('[data-files-git-diff-scope="complete"]').click()
+    await column.locator('[data-files-git-diff-scope="changes"]').waitFor({ timeout: 15_000 })
+    await expect.poll(comparisonText, { timeout: 15_000 }).toContain('@@ -3,7 +3,7 @@')
+    expect(await comparisonText()).not.toContain('head-1')
+    // The layout toggle is independent of the scope: the changed hunks draw side
+    // by side, and the toggle names the layout its next press switches to.
     await column.locator('[data-files-git-diff-mode="unified"]').click()
     await column.locator('[data-review-view="split"]').waitFor({ timeout: 15_000 })
     // Move off the pressed control first: the click withdrew its bubble, and a

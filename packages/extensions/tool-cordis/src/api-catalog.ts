@@ -3821,7 +3821,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: 'workingDiff(cwd: string, request: WorkspaceGitDiffRequest, signal: AbortSignal): Promise<WorkspaceFileDiff | undefined>',
         description: 'Compare one working-tree path with its `HEAD` content.',
-        parameters: [{ name: 'cwd', description: 'the Session working directory.' }, { name: 'request', description: 'the path to compare and, for a rename or copy, its original path.' }, { name: 'signal', description: 'the request\'s cancellation.' }],
+        parameters: [{ name: 'cwd', description: 'the Session working directory.' }, { name: 'request', description: 'the path to compare, a rename or copy\'s original path, and whether to cover the whole file.' }, { name: 'signal', description: 'the request\'s cancellation.' }],
         returns: 'the comparison, or undefined when a path leaves `cwd`, the path is gone, or git cannot answer.',
       },
       {
@@ -3848,7 +3848,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: 'commitDiff(cwd: string, request: WorkspaceGitCommitDiffRequest, signal: AbortSignal): Promise<WorkspaceFileDiff | undefined>',
         description: 'Compare one commit file with the commit\'s first parent.',
-        parameters: [{ name: 'cwd', description: 'the Session working directory.' }, { name: 'request', description: 'the commit, the path to compare, and a rename origin.' }, { name: 'signal', description: 'the request\'s cancellation.' }],
+        parameters: [{ name: 'cwd', description: 'the Session working directory.' }, { name: 'request', description: 'the commit, the path to compare, a rename origin, and whether to cover the whole file.' }, { name: 'signal', description: 'the request\'s cancellation.' }],
         returns: 'the comparison, or undefined when a path leaves `cwd` (directly or through a symbolic link), the commit is unknown, or the path has nothing to compare; an oversized patch answers `kind: \'oversized\'` rather than undefined.',
         throws: ['when git fails to produce the comparison.'],
       },
@@ -8939,7 +8939,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WorkspaceGitCommitDiffRequest',
-    declaration: 'export interface WorkspaceGitCommitDiffRequest {\n    hash: string;\n    path: string;\n    from?: string;\n}',
+    declaration: 'export interface WorkspaceGitCommitDiffRequest {\n    hash: string;\n    path: string;\n    from?: string;\n    complete?: boolean;\n}',
   },
   {
     name: 'WorkspaceGitCommitFile',
@@ -8947,7 +8947,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WorkspaceGitDiffRequest',
-    declaration: 'export interface WorkspaceGitDiffRequest {\n    path: string;\n    from?: string;\n}',
+    declaration: 'export interface WorkspaceGitDiffRequest {\n    path: string;\n    from?: string;\n    complete?: boolean;\n}',
   },
   {
     name: 'WorkspaceGitEntry',

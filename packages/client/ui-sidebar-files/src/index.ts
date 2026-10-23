@@ -72,6 +72,17 @@ function countParameter(raw: string): number | undefined {
 }
 
 /**
+ * One comparison's `complete` flag: whether the whole file was asked for.
+ * @param raw - the query value, absent when the request names no scope.
+ * @returns true for the whole file, false for the changed hunks only, or
+ *   undefined when the value is not one the route accepts.
+ */
+function completeFlag(raw: string | null): boolean | undefined {
+  if (raw === null) return false
+  return raw === '1' ? true : undefined
+}
+
+/**
  * Refuse one request with a plain-text reason.
  * @param text - the reason shown to the client.
  * @param status - the HTTP status.
@@ -154,11 +165,12 @@ export function apply(ctx: Context): void {
       const query = new URL(request.url).searchParams
       const path = query.get('path') ?? ''
       const from = query.get('from') ?? undefined
-      if (!inside(cwd, path) || (from !== undefined && !inside(cwd, from))) {
+      const complete = completeFlag(query.get('complete'))
+      if (complete === undefined || !inside(cwd, path) || (from !== undefined && !inside(cwd, from))) {
         return refusal('Invalid git path.', 400)
       }
       const comparison = await ctx.workspaceChanges.workingDiff(
-        cwd, from === undefined ? { path } : { path, from }, scope(request),
+        cwd, { path, complete, ...(from === undefined ? {} : { from }) }, scope(request),
       )
       return comparison === undefined
         ? refusal('Comparison unavailable.', 404)
@@ -241,12 +253,14 @@ export function apply(ctx: Context): void {
       const hash = query.get('hash') ?? ''
       const path = query.get('path') ?? ''
       const from = query.get('from') ?? undefined
-      if (!COMMIT_HASH.test(hash) || !inside(cwd, path) || (from !== undefined && !inside(cwd, from))) {
+      const complete = completeFlag(query.get('complete'))
+      if (complete === undefined || !COMMIT_HASH.test(hash) || !inside(cwd, path)
+        || (from !== undefined && !inside(cwd, from))) {
         return refusal('Invalid commit comparison.', 400)
       }
       try {
         const comparison = await ctx.workspaceChanges.commitDiff(
-          cwd, from === undefined ? { hash, path } : { hash, path, from }, scope(request),
+          cwd, { hash, path, complete, ...(from === undefined ? {} : { from }) }, scope(request),
         )
         return comparison === undefined
           ? refusal('Comparison unavailable.', 404)

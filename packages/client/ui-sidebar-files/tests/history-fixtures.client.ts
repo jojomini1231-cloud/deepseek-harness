@@ -73,7 +73,7 @@ export function historyState(overrides: Partial<HistoryTabState> = {}): HistoryT
     refs: undefined, refsLoading: false, refsFailure: false, ref: undefined,
     commits: [], listEpoch: 0, hasMore: false, loading: false, failure: false,
     selected: undefined, file: undefined, filesOpen: true,
-    detail: undefined, diff: undefined, diffMode: 'unified',
+    detail: undefined, diff: undefined, diffMode: 'unified', diffComplete: false,
     listScrollTop: 0, pageScrollTop: 0, ratio: 0.58, pageOpen: false,
     ...overrides,
   }

@@ -1,5 +1,30 @@
-/** The hunks and binary refusal a two-way `git diff` patch carries. */
+/** The hunks and binary refusal a two-way `git diff` patch carries, and the context count a comparison asks git for. */
 import type { WorkspaceDiffHunk } from './types.ts'
+
+/** Unified-diff context lines a comparison carries when it covers the changed hunks only. */
+export const CONTEXT_LINES = 3
+
+/**
+ * Context lines a whole-file comparison asks git for at the least.
+ *
+ * git emits no more context than a side holds, so the count is a request
+ * ceiling rather than an output size. A patch line costs at least its prefix
+ * and newline, so a patch that fits the output cap holds at most half that cap
+ * in lines: {@link contextFlag} asks for one context line per two admitted
+ * bytes, which covers every line of any patch the caps let through whole. This
+ * floor keeps the request large when a deployment lowers the cap.
+ */
+export const COMPLETE_CONTEXT_LINES = 1_000_000
+
+/**
+ * The `-U` flag one comparison passes to git.
+ * @param complete - true when the view asked to cover the whole file.
+ * @param maxPatchBytes - bytes one patch command may collect before its read is refused as truncated.
+ * @returns the flag carrying the context count for that comparison.
+ */
+export function contextFlag(complete: boolean | undefined, maxPatchBytes: number): string {
+  return `-U${complete === true ? Math.max(COMPLETE_CONTEXT_LINES, Math.ceil(maxPatchBytes / 2)) : CONTEXT_LINES}`
+}
 
 /** A patch's drawable facts. */
 export interface ParsedPatch {

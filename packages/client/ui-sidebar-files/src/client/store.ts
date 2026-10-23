@@ -121,6 +121,8 @@ export interface GitTabState {
   diff: WorkspaceFileDiff | 'loading' | 'failed' | undefined
   /** How the comparison is laid out: one unified column, or both sides. */
   diffMode: 'unified' | 'split'
+  /** Whether the comparison covers the whole file; false shows only the changed hunks. */
+  diffComplete: boolean
   /** The comparison column's share of the git view, between `MIN_RATIO` and `MAX_RATIO`. */
   ratio: number
   /** Whether the narrow layout's comparison drill-down is open. */
@@ -171,6 +173,8 @@ export interface HistoryTabState {
   diff: WorkspaceFileDiff | 'loading' | 'failed' | undefined
   /** How the comparison is laid out: one unified column, or both sides. */
   diffMode: 'unified' | 'split'
+  /** Whether the comparison covers the whole file; false shows only the changed hunks. */
+  diffComplete: boolean
   /** The commit list's scroll offset in px, so the list comes back where the reader was. */
   listScrollTop: number
   /** The commit page's scroll offset in px, for the commit it was read on. */
@@ -248,6 +252,7 @@ type FilesActions = {
   gitDiffFailed: (draft: FilesState, tabId: TabId, path: string) => void
   gitListScrolled: (draft: FilesState, tabId: TabId, scrollTop: number) => void
   gitDiffModeSelected: (draft: FilesState, tabId: TabId, mode: 'unified' | 'split') => void
+  gitDiffCompleteSelected: (draft: FilesState, tabId: TabId, complete: boolean) => void
   gitRatioChanged: (draft: FilesState, tabId: TabId, ratio: number) => void
   gitPageOpened: (draft: FilesState, tabId: TabId, open: boolean) => void
   gitGroupToggled: (draft: FilesState, tabId: TabId, group: 'changed' | 'untracked') => void
@@ -268,6 +273,7 @@ type FilesActions = {
   historyDiffFailed: (draft: FilesState, tabId: TabId, hash: string, path: string) => void
   historyFilesToggled: (draft: FilesState, tabId: TabId) => void
   historyDiffModeSelected: (draft: FilesState, tabId: TabId, mode: 'unified' | 'split') => void
+  historyDiffCompleteSelected: (draft: FilesState, tabId: TabId, complete: boolean) => void
   historyRatioChanged: (draft: FilesState, tabId: TabId, ratio: number) => void
   historyListScrolled: (draft: FilesState, tabId: TabId, scrollTop: number) => void
   historyPageScrolled: (draft: FilesState, tabId: TabId, hash: string, scrollTop: number) => void
@@ -300,14 +306,14 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
           open: [], active: undefined, ratio: DEFAULT_RATIO, pageOpen: false, container: 'files',
           git: {
             status: undefined, loading: false, failure: false, selected: undefined, selectedFrom: undefined,
-            scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: DEFAULT_GIT_RATIO, pageOpen: false,
+            scrollTop: 0, diff: undefined, diffMode: 'unified', diffComplete: false, ratio: DEFAULT_GIT_RATIO, pageOpen: false,
             groups: { changed: true, untracked: true },
           },
           history: {
             refs: undefined, refsLoading: false, refsFailure: false, ref: undefined,
             commits: [], listEpoch: 0, hasMore: false, loading: false, failure: false,
             selected: undefined, file: undefined, filesOpen: true,
-            detail: undefined, diff: undefined, diffMode: 'unified',
+            detail: undefined, diff: undefined, diffMode: 'unified', diffComplete: false,
             listScrollTop: 0, pageScrollTop: 0, ratio: DEFAULT_HISTORY_RATIO, pageOpen: false,
           },
         }
@@ -621,6 +627,15 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
         bucket(d, tabId).git.diffMode = mode
       },
       /**
+       * Choose how much of the compared file the comparison covers.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param complete - whether the whole file is drawn.
+       */
+      gitDiffCompleteSelected: (d, tabId: TabId, complete: boolean) => {
+        bucket(d, tabId).git.diffComplete = complete
+      },
+      /**
        * Record where a drag left the git view's two columns.
        * @param d - draft state.
        * @param tabId - the tab being drawn.
@@ -877,6 +892,15 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
        */
       historyDiffModeSelected: (d, tabId: TabId, mode: 'unified' | 'split') => {
         bucket(d, tabId).history.diffMode = mode
+      },
+      /**
+       * Choose how much of the compared commit file the comparison covers.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param complete - whether the whole file is drawn.
+       */
+      historyDiffCompleteSelected: (d, tabId: TabId, complete: boolean) => {
+        bucket(d, tabId).history.diffComplete = complete
       },
       /**
        * Record where a drag left the history view's two columns.

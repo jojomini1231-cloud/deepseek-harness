@@ -88,7 +88,7 @@ describe('history through the body', () => {
     // The first commit of the page opens with its first changed file.
     expect(mounted.commit).toHaveBeenCalledWith(TAB, ROOT, hash('a'), expect.anything())
     expect(mounted.commitDiff).toHaveBeenCalledWith(
-      TAB, ROOT, { hash: hash('a'), path: 'packages/app/src/a.ts' }, expect.anything(),
+      TAB, ROOT, { hash: hash('a'), path: 'packages/app/src/a.ts', complete: false }, expect.anything(),
     )
     const history = mounted.instance.getSnapshot().byTab[TAB]!.history
     expect(history.refs).toEqual(REFS)
@@ -119,13 +119,46 @@ describe('history through the body', () => {
     expect(mounted.instance.getSnapshot().byTab[TAB]?.history.detail).toEqual(second)
     // The new page's first file is compared with its own commit.
     expect(mounted.commitDiff).toHaveBeenLastCalledWith(
-      TAB, ROOT, { hash: hash('b'), path: 'packages/app/src/a.ts' }, expect.anything(),
+      TAB, ROOT, { hash: hash('b'), path: 'packages/app/src/a.ts', complete: false }, expect.anything(),
     )
     await act(async () => {
       fireEvent.click(mounted.view.container.querySelector('[data-files-history-diff-mode="unified"]')!)
     })
     expect(mounted.instance.getSnapshot().byTab[TAB]?.history.diffMode).toBe('split')
     expect(mounted.view.container.querySelector('[data-review-view="split"]')).not.toBeNull()
+  })
+
+  it('re-reads the shown commit file in the other scope when its control is pressed', async () => {
+    const mounted = await seeded({ refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF })
+    await openHistory(mounted)
+    expect(mounted.commitDiff).toHaveBeenLastCalledWith(
+      TAB, ROOT, { hash: hash('a'), path: 'packages/app/src/a.ts', complete: false }, expect.anything(),
+    )
+    // The changed hunks are read while the settled comparison stays drawn, so
+    // the header keeps its controls (and their focus) during the re-read.
+    let release!: (answer: GitRead<WorkspaceFileDiff>) => void
+    mounted.commitDiff.mockImplementationOnce(() => new Promise((resolve) => { release = resolve }))
+    await act(async () => {
+      fireEvent.click(mounted.view.container.querySelector('[data-files-history-diff-scope="changes"]')!)
+    })
+    expect(mounted.commitDiff).toHaveBeenLastCalledWith(
+      TAB, ROOT, { hash: hash('a'), path: 'packages/app/src/a.ts', complete: true }, expect.anything(),
+    )
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.diffComplete).toBe(true)
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.diff).toEqual(DIFF)
+    expect(mounted.view.container.querySelector('[data-files-history-diff-scope="complete"]')).not.toBeNull()
+    await act(async () => { release({ value: DIFF, current: true }) })
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.diff).toEqual(DIFF)
+    // The header now draws the whole-file scope, and its press asks for the
+    // changed hunks back.
+    const whole = mounted.view.container.querySelector('[data-files-history-diff-scope="complete"]')
+    expect(whole).not.toBeNull()
+    await act(async () => { fireEvent.click(whole!) })
+    expect(mounted.commitDiff).toHaveBeenLastCalledWith(
+      TAB, ROOT, { hash: hash('a'), path: 'packages/app/src/a.ts', complete: false }, expect.anything(),
+    )
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.diffComplete).toBe(false)
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.diff).toEqual(DIFF)
   })
 
   it('restarts the list when a ref is picked from the filter', async () => {
@@ -414,13 +447,13 @@ describe('history through the body', () => {
     })
     await openHistory(mounted)
     expect(mounted.commitDiff).toHaveBeenCalledWith(
-      TAB, ROOT, { hash: hash('a'), path: 'packages/app/src/a.ts', from: 'packages/app/old.ts' }, expect.anything(),
+      TAB, ROOT, { hash: hash('a'), path: 'packages/app/src/a.ts', from: 'packages/app/old.ts', complete: false }, expect.anything(),
     )
     // A refresh re-reads the shown file with the same origin.
     fireEvent.click(mounted.view.container.querySelector('[data-files-history-refresh]')!)
     await settleReads()
     expect(mounted.commitDiff).toHaveBeenLastCalledWith(
-      TAB, ROOT, { hash: hash('a'), path: 'packages/app/src/a.ts', from: 'packages/app/old.ts' }, expect.anything(),
+      TAB, ROOT, { hash: hash('a'), path: 'packages/app/src/a.ts', from: 'packages/app/old.ts', complete: false }, expect.anything(),
     )
   })
 
@@ -431,7 +464,7 @@ describe('history through the body', () => {
     await settleReads()
     expect(mounted.instance.getSnapshot().byTab[TAB]?.history.file).toBe('packages/app/b.md')
     expect(mounted.commitDiff).toHaveBeenLastCalledWith(
-      TAB, ROOT, { hash: hash('a'), path: 'packages/app/b.md' }, expect.anything(),
+      TAB, ROOT, { hash: hash('a'), path: 'packages/app/b.md', complete: false }, expect.anything(),
     )
     // Folding the file list writes the store's fold, and the summary reopens it.
     fireEvent.click(mounted.view.container.querySelector('[data-files-history-summary]')!)

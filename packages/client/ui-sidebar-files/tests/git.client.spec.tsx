@@ -43,7 +43,7 @@ const DIFF: WorkspaceFileDiff = {
 function gitState(overrides: Partial<GitTabState> = {}): GitTabState {
   return {
     status: undefined, loading: false, failure: false, selected: undefined, selectedFrom: undefined,
-    scrollTop: 0, diff: undefined, diffMode: 'unified', ratio: 0.58, pageOpen: false,
+    scrollTop: 0, diff: undefined, diffMode: 'unified', diffComplete: false, ratio: 0.58, pageOpen: false,
     groups: { changed: true, untracked: true },
     ...overrides,
   }
@@ -55,6 +55,7 @@ function panel(overrides: Partial<GitTabState> = {}, hands: {
   readonly onReload?: () => void
   readonly onRetryDiff?: () => void
   readonly onMode?: (mode: 'unified' | 'split') => void
+  readonly onDiffComplete?: (complete: boolean) => void
   readonly onRatio?: (ratio: number) => void
   readonly onScrolled?: (scrollTop: number) => void
   readonly onToggleGroup?: (group: 'changed' | 'untracked') => void
@@ -72,6 +73,7 @@ function panel(overrides: Partial<GitTabState> = {}, hands: {
       onReload={hands.onReload ?? vi.fn()}
       onRetryDiff={hands.onRetryDiff ?? vi.fn()}
       onMode={hands.onMode ?? vi.fn()}
+      onDiffComplete={hands.onDiffComplete ?? vi.fn()}
       onRatio={hands.onRatio ?? vi.fn()}
       onScrolled={hands.onScrolled ?? vi.fn()}
       onToggleGroup={hands.onToggleGroup ?? vi.fn()}
@@ -88,6 +90,11 @@ describe('git route contract', () => {
       .toBe('api/git.diff?sessionId=s1&cwd=%2Fwork%2Fapp&path=src%2Fa.ts')
     expect(gitDiffUrl('s1', '/work/app', { path: 'src/new.ts', from: 'src/old.ts' }))
       .toBe('api/git.diff?sessionId=s1&cwd=%2Fwork%2Fapp&path=src%2Fnew.ts&from=src%2Fold.ts')
+    // Only a whole-file request names its scope; the changed hunks are the default.
+    expect(gitDiffUrl('s1', '/work/app', { path: 'src/a.ts', complete: true }))
+      .toBe('api/git.diff?sessionId=s1&cwd=%2Fwork%2Fapp&path=src%2Fa.ts&complete=1')
+    expect(gitDiffUrl('s1', '/work/app', { path: 'src/a.ts', complete: false }))
+      .toBe('api/git.diff?sessionId=s1&cwd=%2Fwork%2Fapp&path=src%2Fa.ts')
     expect(isGitStatus(REPOSITORY)).toBe(true)
     expect(isGitStatus({ kind: 'not-a-repository', entries: [], total: 0 })).toBe(true)
     expect(isGitStatus({ kind: 'unavailable', entries: [], total: 0 })).toBe(true)
@@ -227,6 +234,8 @@ describe('git slice', () => {
     // The layout choice and the list offset are kept per tab.
     store.actions.gitDiffModeSelected(TAB, 'split')
     expect(store.getSnapshot().byTab[TAB]?.git.diffMode).toBe('split')
+    store.actions.gitDiffCompleteSelected(TAB, true)
+    expect(store.getSnapshot().byTab[TAB]?.git.diffComplete).toBe(true)
     store.actions.gitListScrolled(TAB, 96)
     expect(store.getSnapshot().byTab[TAB]?.git.scrollTop).toBe(96)
     // Both groups start expanded and fold one at a time.
@@ -246,13 +255,15 @@ describe('GitPanel', () => {
     readonly onReload: () => void
     readonly onRetryDiff: () => void
     readonly onMode: () => void
+    readonly onDiffComplete: () => void
     readonly onRatio: () => void
     readonly onScrolled: () => void
     readonly onToggleGroup: () => void
   }) {
     return (git: GitTabState) => (
       <GitPanel git={git} narrow onSelect={hands.onSelect} onDrillDown={hands.onDrillDown} onBack={hands.onBack}
-        onReload={hands.onReload} onRetryDiff={hands.onRetryDiff} onMode={hands.onMode} onRatio={hands.onRatio}
+        onReload={hands.onReload} onRetryDiff={hands.onRetryDiff} onMode={hands.onMode}
+        onDiffComplete={hands.onDiffComplete} onRatio={hands.onRatio}
         onScrolled={hands.onScrolled} onToggleGroup={hands.onToggleGroup} ratio={0.58} t={t} />
     )
   }
@@ -261,7 +272,8 @@ describe('GitPanel', () => {
   function panelHands() {
     return {
       onSelect: vi.fn(), onDrillDown: vi.fn(), onBack: vi.fn(), onReload: vi.fn(),
-      onRetryDiff: vi.fn(), onMode: vi.fn(), onRatio: vi.fn(), onScrolled: vi.fn(), onToggleGroup: vi.fn(),
+      onRetryDiff: vi.fn(), onMode: vi.fn(), onDiffComplete: vi.fn(), onRatio: vi.fn(), onScrolled: vi.fn(),
+      onToggleGroup: vi.fn(),
     }
   }
   it('groups tracked and untracked paths and reports the picked entry', () => {
@@ -311,7 +323,8 @@ describe('GitPanel', () => {
     const { container, rerender } = render(
       <GitPanel git={gitState({ status: REPOSITORY })} onSelect={vi.fn()} narrow={false}
         onDrillDown={vi.fn()} onBack={vi.fn()} onReload={vi.fn()} onRetryDiff={vi.fn()}
-        onMode={vi.fn()} onRatio={vi.fn()} onScrolled={vi.fn()} onToggleGroup={onToggleGroup} ratio={0.58} t={t} />,
+        onMode={vi.fn()} onDiffComplete={vi.fn()} onRatio={vi.fn()} onScrolled={vi.fn()}
+        onToggleGroup={onToggleGroup} ratio={0.58} t={t} />,
     )
     const header = container.querySelector<HTMLButtonElement>('[data-files-git-group-toggle="changed"]')!
     expect(header.getAttribute('aria-expanded')).toBe('true')
@@ -324,16 +337,16 @@ describe('GitPanel', () => {
     rerender(
       <GitPanel git={gitState({ status: REPOSITORY, groups: { changed: false, untracked: true } })}
         onSelect={vi.fn()} narrow={false} onDrillDown={vi.fn()} onBack={vi.fn()}
-        onReload={vi.fn()} onRetryDiff={vi.fn()} onMode={vi.fn()} onRatio={vi.fn()} onScrolled={vi.fn()}
-        onToggleGroup={onToggleGroup} ratio={0.58} t={t} />,
+        onReload={vi.fn()} onRetryDiff={vi.fn()} onMode={vi.fn()} onDiffComplete={vi.fn()}
+        onRatio={vi.fn()} onScrolled={vi.fn()} onToggleGroup={onToggleGroup} ratio={0.58} t={t} />,
     )
     expect(container.querySelector('[data-files-git-group-toggle="changed"]')?.getAttribute('aria-expanded')).toBe('false')
     expect(container.querySelectorAll('[data-files-git-entry]')).toHaveLength(1)
     rerender(
       <GitPanel git={gitState({ status: REPOSITORY, groups: { changed: true, untracked: false } })}
         onSelect={vi.fn()} narrow={false} onDrillDown={vi.fn()} onBack={vi.fn()}
-        onReload={vi.fn()} onRetryDiff={vi.fn()} onMode={vi.fn()} onRatio={vi.fn()} onScrolled={vi.fn()}
-        onToggleGroup={onToggleGroup} ratio={0.58} t={t} />,
+        onReload={vi.fn()} onRetryDiff={vi.fn()} onMode={vi.fn()} onDiffComplete={vi.fn()}
+        onRatio={vi.fn()} onScrolled={vi.fn()} onToggleGroup={onToggleGroup} ratio={0.58} t={t} />,
     )
     expect(container.querySelectorAll('[data-files-git-entry]')).toHaveLength(2)
   })
@@ -391,6 +404,48 @@ describe('GitPanel', () => {
       fireEvent.mouseEnter(split.container.querySelector('[data-files-git-diff-mode="split"]')!)
       act(() => { vi.advanceTimersByTime(300) })
       expect(split.container.querySelector('[role="tooltip"]')?.textContent).toBe(zh['diff.mode.unified'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('defaults to the changed hunks and names the scope its press switches to', () => {
+    vi.useFakeTimers()
+    try {
+      const onDiffComplete = vi.fn()
+      const { container } = panel({ status: REPOSITORY, selected: 'src/a.ts', diff: DIFF }, { onDiffComplete })
+      const toggle = container.querySelector<HTMLButtonElement>('[data-files-git-diff-scope]')!
+      // The changed hunks lead: unpressed, its hook states the scope, and the
+      // tooltip names the scope the press switches to.
+      expect(toggle.getAttribute('data-files-git-diff-scope')).toBe('changes')
+      expect(toggle.getAttribute('aria-pressed')).toBe('false')
+      expect(toggle.getAttribute('aria-label')).toBe(zh['diff.scope.aria'])
+      fireEvent.mouseEnter(toggle)
+      act(() => { vi.advanceTimersByTime(300) })
+      expect(container.querySelector('[role="tooltip"]')?.textContent).toBe(zh['diff.scope.full'])
+      fireEvent.mouseLeave(toggle)
+      expect(container.querySelector('[role="tooltip"]')).toBeNull()
+      fireEvent.click(toggle)
+      expect(onDiffComplete).toHaveBeenCalledWith(true)
+      const changesGlyph = toggle.querySelector('svg')?.innerHTML
+      cleanup()
+      // The whole-file state draws its own glyph and offers the changed hunks back.
+      const whole = panel(
+        { status: REPOSITORY, selected: 'src/a.ts', diff: DIFF, diffComplete: true },
+        { onDiffComplete },
+      )
+      const other = whole.container.querySelector<HTMLButtonElement>('[data-files-git-diff-scope]')!
+      expect(other.getAttribute('data-files-git-diff-scope')).toBe('complete')
+      expect(other.getAttribute('aria-pressed')).toBe('true')
+      expect(other.querySelector('svg')?.innerHTML).not.toBe(changesGlyph)
+      fireEvent.mouseEnter(other)
+      act(() => { vi.advanceTimersByTime(300) })
+      expect(whole.container.querySelector('[role="tooltip"]')?.textContent).toBe(zh['diff.scope.changes'])
+      fireEvent.click(other)
+      expect(onDiffComplete).toHaveBeenLastCalledWith(false)
+      // The scope control leads the layout control in the comparison header.
+      expect(other.compareDocumentPosition(whole.container.querySelector('[data-files-git-diff-mode]')!)
+        & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     } finally {
       vi.useRealTimers()
     }
@@ -636,6 +691,7 @@ describe('git view through the body', () => {
       fireEvent.click(mounted.view.container.querySelector('[data-files-git-diff-retry]')!)
     })
     expect(mounted.gitDiff).toHaveBeenCalledTimes(2)
+    expect(mounted.gitDiff).toHaveBeenLastCalledWith(TAB, ROOT, { path: 'src/a.ts', complete: false }, expect.anything())
   })
 
   it('settles the git columns on a drag and keeps the chosen share', async () => {
@@ -685,6 +741,7 @@ describe('git view through the body', () => {
       expect(mounted.instance.getSnapshot().byTab[TAB]?.git.status).toEqual(changed)
       expect(mounted.view.container.querySelectorAll('[data-files-git-entry]')).toHaveLength(4)
       expect(mounted.gitDiff.mock.calls.length).toBeGreaterThan(diffs)
+      expect(mounted.gitDiff).toHaveBeenLastCalledWith(TAB, ROOT, { path: 'src/a.ts', complete: false }, expect.anything())
       // Leaving the container stops the timer.
       fireEvent.click(mounted.view.container.querySelector('[data-files-rail-item="files"]')!)
       const after = mounted.gitStatus.mock.calls.length
@@ -746,7 +803,7 @@ describe('git view through the body', () => {
     await act(async () => {
       fireEvent.click(mounted.view.container.querySelector('[data-files-git-entry="src/a.ts"]')!)
     })
-    expect(mounted.gitDiff).toHaveBeenCalledWith(TAB, ROOT, { path: 'src/a.ts' }, expect.anything())
+    expect(mounted.gitDiff).toHaveBeenCalledWith(TAB, ROOT, { path: 'src/a.ts', complete: false }, expect.anything())
     expect(mounted.instance.getSnapshot().byTab[TAB]?.git.diff).toEqual(DIFF)
     // The layout toggle writes the store and the drawn comparison follows it.
     expect(mounted.view.container.querySelector('[data-review-view="unified"]')).not.toBeNull()
@@ -778,6 +835,76 @@ describe('git view through the body', () => {
     expect(added.view.container.querySelector('[data-review-view="split"]')).not.toBeNull()
   })
 
+  it('re-reads the shown comparison in the other scope when its control is pressed', async () => {
+    const mounted = mountBody(ROOT, undefined, { status: REPOSITORY, diff: DIFF })
+    await act(() => mounted.script.watches.ready(ROOT))
+    await act(() => mounted.script.settle({ ok: true, value: { entries: [], truncated: false } }))
+    fireEvent.click(mounted.view.container.querySelector('[data-files-rail-item="git"]')!)
+    await act(async () => {
+      fireEvent.click(mounted.view.container.querySelector('[data-files-git-entry="src/a.ts"]')!)
+    })
+    expect(mounted.gitDiff).toHaveBeenLastCalledWith(TAB, ROOT, { path: 'src/a.ts', complete: false }, expect.anything())
+    // The whole file is read while the settled comparison stays drawn, so
+    // the header keeps its controls (and their focus) during the re-read.
+    let release!: (answer: { value: WorkspaceFileDiff; current: boolean }) => void
+    mounted.gitDiff.mockImplementationOnce(() => new Promise((resolve) => { release = resolve }))
+    await act(async () => {
+      fireEvent.click(mounted.view.container.querySelector('[data-files-git-diff-scope="changes"]')!)
+    })
+    expect(mounted.gitDiff).toHaveBeenLastCalledWith(TAB, ROOT, { path: 'src/a.ts', complete: true }, expect.anything())
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.git.diffComplete).toBe(true)
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.git.diff).toEqual(DIFF)
+    expect(mounted.view.container.querySelector('[data-files-git-diff-scope="complete"]')).not.toBeNull()
+    await act(async () => { release({ value: DIFF, current: true }) })
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.git.diff).toEqual(DIFF)
+    // The header now draws the whole-file scope, and its press asks for the
+    // changed hunks back.
+    const whole = mounted.view.container.querySelector('[data-files-git-diff-scope="complete"]')
+    expect(whole).not.toBeNull()
+    await act(async () => { fireEvent.click(whole!) })
+    expect(mounted.gitDiff).toHaveBeenLastCalledWith(TAB, ROOT, { path: 'src/a.ts', complete: false }, expect.anything())
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.git.diffComplete).toBe(false)
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.git.diff).toEqual(DIFF)
+  })
+
+  it('aborts the quiet re-read it supersedes when the scope changes', async () => {
+    vi.useFakeTimers()
+    try {
+      const mounted = mountBody(ROOT, undefined, { status: REPOSITORY, diff: DIFF })
+      await act(() => mounted.script.watches.ready(ROOT))
+      await act(() => mounted.script.settle({ ok: true, value: { entries: [], truncated: false } }))
+      fireEvent.click(mounted.view.container.querySelector('[data-files-rail-item="git"]')!)
+      await act(async () => {
+        fireEvent.click(mounted.view.container.querySelector('[data-files-git-entry="src/a.ts"]')!)
+      })
+      // A quiet poll starts a comparison re-read over the settled one; holding
+      // it in flight keeps both the drawn comparison and its scope control.
+      const changed = {
+        ...REPOSITORY,
+        entries: [...REPOSITORY.entries, { path: 'src/c.ts', display: 'src/c.ts', kind: 'modified' as const }],
+      }
+      mounted.gitStatus.mockResolvedValueOnce({ value: changed, current: true })
+      let release!: (answer: { value: WorkspaceFileDiff; current: boolean }) => void
+      mounted.gitDiff.mockImplementationOnce(() => new Promise((resolve) => { release = resolve }))
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+      const quiet = mounted.gitDiff.mock.calls.at(-1)!
+      expect(quiet.slice(0, 3)).toEqual([TAB, ROOT, { path: 'src/a.ts', complete: false }])
+      expect(mounted.instance.getSnapshot().byTab[TAB]?.git.diff).toEqual(DIFF)
+      const quietSignal = quiet[3]
+      await act(async () => {
+        fireEvent.click(mounted.view.container.querySelector('[data-files-git-diff-scope="changes"]')!)
+      })
+      // The superseded re-read is cancelled, so its old-scope answer cannot land
+      // over the comparison the reader asked for.
+      expect(quietSignal.aborted).toBe(true)
+      expect(mounted.gitDiff).toHaveBeenLastCalledWith(TAB, ROOT, { path: 'src/a.ts', complete: true }, expect.anything())
+      await act(async () => { release({ value: DIFF, current: true }) })
+      expect(mounted.instance.getSnapshot().byTab[TAB]?.git.diff).toEqual(DIFF)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('echoes a rename origin in the comparison request', async () => {
     const renamed: WorkspaceGitStatus = {
       kind: 'repository',
@@ -793,7 +920,7 @@ describe('git view through the body', () => {
       fireEvent.click(mounted.view.container.querySelector('[data-files-git-entry="src/new.ts"]')!)
     })
     expect(mounted.gitDiff).toHaveBeenCalledWith(
-      TAB, ROOT, { path: 'src/new.ts', from: 'src/old.ts' }, expect.anything(),
+      TAB, ROOT, { path: 'src/new.ts', from: 'src/old.ts', complete: false }, expect.anything(),
     )
     expect(mounted.instance.getSnapshot().byTab[TAB]?.git.selectedFrom).toBe('src/old.ts')
   })

@@ -245,6 +245,37 @@ describe('worktreeDiff', () => {
     expect(diff?.kind === 'text' ? diff.hunks.flatMap(hunk => hunk.lines) : []).toEqual(['-before', '+after'])
   })
 
+  it('covers the whole file as context when the view asks for a complete comparison', async () => {
+    const cwd = await scratchDir('dsh-worktree-complete-', cleanups)
+    git(cwd, 'init', '-q', '-b', 'main')
+    const lines = Array.from({ length: 20 }, (_, index) => `line-${String(index + 1).padStart(2, '0')}`)
+    await writeFile(join(cwd, 'long.txt'), `${lines.join('\n')}\n`)
+    git(cwd, 'add', '.')
+    git(cwd, 'commit', '-q', '-m', 'seed')
+    await writeFile(join(cwd, 'long.txt'), `${[...lines.slice(0, 9), 'line-10 changed', ...lines.slice(10)].join('\n')}\n`)
+    const { git: runner, fs } = await harness()
+    const changed = await worktreeDiff(runner, fs, cwd, { path: 'long.txt' }, signal, LIMITS)
+    expect(changed?.kind === 'text' ? changed.hunks.flatMap(hunk => hunk.lines) : []).toEqual([
+      ' line-07', ' line-08', ' line-09', '-line-10', '+line-10 changed', ' line-11', ' line-12', ' line-13',
+    ])
+    // An explicit false asks for the same changed hunks as an absent flag.
+    const explicit = await worktreeDiff(runner, fs, cwd, { path: 'long.txt', complete: false }, signal, LIMITS)
+    expect(explicit).toEqual(changed)
+    const whole = await worktreeDiff(runner, fs, cwd, { path: 'long.txt', complete: true }, signal, LIMITS)
+    expect(whole?.kind === 'text' ? whole.hunks : []).toEqual([{
+      oldStart: 1,
+      oldLines: 20,
+      newStart: 1,
+      newLines: 20,
+      lines: [
+        ...lines.slice(0, 9).map(line => ` ${line}`),
+        '-line-10',
+        '+line-10 changed',
+        ...lines.slice(10).map(line => ` ${line}`),
+      ],
+    }])
+  })
+
   it('treats an untracked file as an addition and a deleted one as a removal', async () => {
     const cwd = await repository()
     const { git: runner, fs } = await harness()

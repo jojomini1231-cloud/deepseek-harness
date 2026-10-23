@@ -25,6 +25,7 @@ import css from './FilesBody.module.css'
 import gitCss from './GitPanel.module.css'
 import { SplitView } from './SplitView.tsx'
 import { DiffModeControl } from './DiffModeControl.tsx'
+import { DiffScopeControl } from './DiffScopeControl.tsx'
 import { useDrillDownFocus } from './drill-down-focus.ts'
 import { useScrollRestore } from './use-scroll-restore.ts'
 
@@ -46,6 +47,8 @@ export interface GitPanelProps {
   readonly onRetryDiff: () => void
   /** Choose the comparison layout. */
   readonly onMode: (mode: 'unified' | 'split') => void
+  /** Choose whether the comparison covers the whole file or the changed hunks. */
+  readonly onDiffComplete: (complete: boolean) => void
   /** Settle where a drag left the two columns. */
   readonly onRatio: (ratio: number) => void
   /** Record where the changed-path list is scrolled to, on unmount. */
@@ -235,7 +238,7 @@ function ChangedPaths({ git, narrow, onSelect, onReload, onToggleGroup, onScroll
 
 /** The diff column: the selected path's comparison in its states. */
 function Comparison(props: GitPanelProps): ReactNode {
-  const { git, t, onMode, onRetryDiff } = props
+  const { git, t, onMode, onRetryDiff, onDiffComplete } = props
   const diff = git.diff
   if (git.status?.kind === 'repository' && git.status.entries.length === 0 && !git.failure) {
     return (
@@ -267,6 +270,8 @@ function Comparison(props: GitPanelProps): ReactNode {
       <div className={css.gitDiffHeader}>
         <FileTypeIcon kind={classifyFileType(diff.path)} size={14} className={gitCss.diffIcon} />
         <span className={css.gitDiffPath}>{diff.display}</span>
+        <DiffScopeControl complete={git.diffComplete} onComplete={onDiffComplete}
+          dataAttr="data-files-git-diff-scope" t={t} />
         <DiffModeControl mode={git.diffMode} onMode={onMode} dataAttr="data-files-git-diff-mode" t={t} />
       </div>
       {diff.kind === 'binary'

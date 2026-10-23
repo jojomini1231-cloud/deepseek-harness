@@ -99,6 +99,10 @@ export function FilesBody({
   gitSelection.current = state?.git.selected === undefined
     ? undefined
     : { path: state.git.selected, from: state.git.selectedFrom }
+  // The scope the latest committed render shows. A status read settles after
+  // the reader may have switched it, so its settlement reads the current one.
+  const gitComplete = useRef(true)
+  gitComplete.current = state?.git.diffComplete ?? false
   // The latest committed history slice: a read settles after a gesture may
   // have moved the selection, so its settlement reads the current one.
   const historyState = useRef<HistoryTabState | undefined>(undefined)
@@ -170,12 +174,13 @@ export function FilesBody({
   // or failed status read so its retry stays reachable. The seeding effect
   // probes once per tab, and the panel's reload and retry gestures probe again;
   // reads are gesture-driven so a store write never starts a request of its own.
-  const requestDiff = (root: string, path: string, from: string | undefined): void => {
+  const requestDiff = (root: string, path: string, from: string | undefined, complete: boolean): void => {
     gitCompare.current?.controller.abort()
     const controller = new AbortController()
     gitCompare.current = { controller, path }
     const read = AbortSignal.any([signal, controller.signal])
-    void gitDiff(tab.id, root, from === undefined ? { path } : { path, from }, read).then((answer) => {
+    const request = { path, complete, ...(from === undefined ? {} : { from }) }
+    void gitDiff(tab.id, root, request, read).then((answer) => {
       // The read is no longer in flight, whether or not its answer is current.
       if (gitCompare.current?.controller === controller) gitCompare.current = undefined
       if (signal.aborted || !answer.current) return
@@ -213,7 +218,7 @@ export function FilesBody({
       if (refreshing === undefined || current?.path !== refreshing.path || shown === undefined
         || gitCompare.current !== undefined) return
       if (!quiet) actions.gitDiffReloading(tab.id)
-      requestDiff(root, shown.path, shown.from)
+      requestDiff(root, shown.path, shown.from, gitComplete.current)
     })
   }
   // While the git view is the one on screen the tree refreshes itself: a quiet
@@ -240,13 +245,13 @@ export function FilesBody({
     /* v8 ignore next -- the panel that reports the gesture only renders with a seeded state. */
     if (state === undefined) return
     actions.gitEntrySelected(tab.id, entry.path, entry.from)
-    requestDiff(state.root, entry.path, entry.from)
+    requestDiff(state.root, entry.path, entry.from, state.git.diffComplete)
   }
   const retryGitDiff = (): void => {
     /* v8 ignore next -- the panel that reports the gesture only renders with a seeded state. */
     if (state === undefined || state.git.selected === undefined) return
     actions.gitDiffReloading(tab.id)
-    requestDiff(state.root, state.git.selected, state.git.selectedFrom)
+    requestDiff(state.root, state.git.selected, state.git.selectedFrom, state.git.diffComplete)
   }
   // The history view's reads follow the same rule as the git view's: gestures
   // start them, each read aborts the one it supersedes, and a settlement writes
@@ -264,12 +269,13 @@ export function FilesBody({
       else actions.historyDetailLoaded(tab.id, hash, answer.value)
     })
   }
-  const requestCommitDiff = (root: string, hash: string, path: string, from: string | undefined): void => {
+  const requestCommitDiff = (root: string, hash: string, path: string, from: string | undefined, complete: boolean): void => {
     historyDiffRead.current?.abort()
     const controller = new AbortController()
     historyDiffRead.current = controller
     const read = AbortSignal.any([signal, controller.signal])
-    void commitDiff(tab.id, root, from === undefined ? { hash, path } : { hash, path, from }, read).then((answer) => {
+    const request = { hash, path, complete, ...(from === undefined ? {} : { from }) }
+    void commitDiff(tab.id, root, request, read).then((answer) => {
       if (historyDiffRead.current === controller) historyDiffRead.current = undefined
       if (signal.aborted || controller.signal.aborted || !answer.current) return
       if (answer.value === undefined) actions.historyDiffFailed(tab.id, hash, path)
@@ -357,7 +363,7 @@ export function FilesBody({
     /* v8 ignore next -- the rows only carry the detail's own files. */
     if (file === undefined) return
     actions.historyFileSelected(tab.id, path)
-    requestCommitDiff(state.root, current.selected, path, file.from)
+    requestCommitDiff(state.root, current.selected, path, file.from, state.history.diffComplete)
   }
   const retryHistoryList = (): void => {
     /* v8 ignore next -- the note that reports the gesture only renders with a seeded state. */
@@ -374,7 +380,7 @@ export function FilesBody({
     requestCommit(state.root, current.selected)
     if (current.file === undefined) return
     actions.historyDiffLoading(tab.id, current.selected, current.file)
-    requestCommitDiff(state.root, current.selected, current.file, renameOrigin(current.detail, current.file))
+    requestCommitDiff(state.root, current.selected, current.file, renameOrigin(current.detail, current.file), current.diffComplete)
   }
   const retryHistoryDetail = (): void => {
     /* v8 ignore next -- the note that reports the gesture only renders with a seeded state. */
@@ -390,7 +396,7 @@ export function FilesBody({
     /* v8 ignore next -- the note that reports the gesture only renders with a shown file. */
     if (current?.selected === undefined || current.file === undefined) return
     actions.historyDiffLoading(tab.id, current.selected, current.file)
-    requestCommitDiff(state.root, current.selected, current.file, renameOrigin(current.detail, current.file))
+    requestCommitDiff(state.root, current.selected, current.file, renameOrigin(current.detail, current.file), current.diffComplete)
   }
   const loadMoreHistory = (): void => {
     /* v8 ignore next -- the button that reports the gesture only renders with a seeded state. */
@@ -441,17 +447,24 @@ export function FilesBody({
   const historyDetail = state?.history.detail
   const historyAutoFile = historyContainer && typeof historyDetail === 'object' && historyDetail.files.length > 0
     && (state.history.file === undefined || !historyDetail.files.some(file => file.path === state.history.file))
-    ? { root: state.root, hash: historyDetail.commit.hash, file: pickHistoryFile(historyDetail.files) }
+    ? {
+      root: state.root,
+      hash: historyDetail.commit.hash,
+      file: pickHistoryFile(historyDetail.files),
+      complete: state.history.diffComplete,
+    }
     : undefined
   const autoFileRoot = historyAutoFile?.root
   const autoFileHash = historyAutoFile?.hash
   const autoFilePath = historyAutoFile?.file?.path
   const autoFileFrom = historyAutoFile?.file?.from
+  const autoFileComplete = historyAutoFile?.complete
   useEffect(() => {
-    if (autoFileRoot === undefined || autoFileHash === undefined || autoFilePath === undefined) return
+    if (autoFileRoot === undefined || autoFileHash === undefined || autoFilePath === undefined
+      || autoFileComplete === undefined) return
     actions.historyFileSelected(tab.id, autoFilePath)
-    requestCommitDiff(autoFileRoot, autoFileHash, autoFilePath, autoFileFrom)
-  }, [autoFileRoot, autoFileHash, autoFilePath, autoFileFrom])
+    requestCommitDiff(autoFileRoot, autoFileHash, autoFilePath, autoFileFrom, autoFileComplete)
+  }, [autoFileRoot, autoFileHash, autoFilePath, autoFileFrom, autoFileComplete])
   const tree = useMemo((): TreeContext | undefined => state === undefined ? undefined : {
     state,
     onToggle: (parent, path) => { toggle(tab.id, parent, path, state.expanded, signal) },
@@ -597,6 +610,25 @@ export function FilesBody({
   const reload = (): void => {
     refresh(tab.id)
   }
+  // Switching the comparison's scope replaces the drawn comparison: the shown
+  // path (or commit file) is read again in the other scope, and the read in
+  // flight for the old scope is aborted so its answer never lands. The settled
+  // comparison stays drawn while the other scope is read, so the header keeps
+  // its controls and their focus instead of flashing a loading note.
+  const selectGitDiffComplete = (complete: boolean): void => {
+    actions.gitDiffCompleteSelected(tab.id, complete)
+    const selected = state.git.selected
+    /* v8 ignore next -- the scope control renders only beside a settled comparison. */
+    if (selected === undefined) return
+    requestDiff(state.root, selected, state.git.selectedFrom, complete)
+  }
+  const selectHistoryDiffComplete = (complete: boolean): void => {
+    actions.historyDiffCompleteSelected(tab.id, complete)
+    const current = historyState.current
+    /* v8 ignore next -- the scope control renders only beside a shown file comparison. */
+    if (current?.selected === undefined || current.file === undefined) return
+    requestCommitDiff(state.root, current.selected, current.file, renameOrigin(current.detail, current.file), complete)
+  }
   // A narrow pick opens the preview drill-down; it only exists while a file is
   // shown, so closing the last chip returns to the tree.
   return (
@@ -659,6 +691,7 @@ export function FilesBody({
               onReload={() => { probeGit(state.root) }}
               onRetryDiff={retryGitDiff}
               onMode={(mode) => { actions.gitDiffModeSelected(tab.id, mode) }}
+              onDiffComplete={selectGitDiffComplete}
               onRatio={(ratio) => { actions.gitRatioChanged(tab.id, ratio) }}
               // The abort forgets the bucket before the unmount reports the offset.
               onScrolled={(scrollTop) => { if (!signal.aborted) actions.gitListScrolled(tab.id, scrollTop) }}
@@ -683,6 +716,7 @@ export function FilesBody({
               onRetryDetail={retryHistoryDetail}
               onRetryDiff={retryHistoryDiff}
               onDiffMode={(mode) => { actions.historyDiffModeSelected(tab.id, mode) }}
+              onDiffComplete={selectHistoryDiffComplete}
               onRatio={(ratio) => { actions.historyRatioChanged(tab.id, ratio) }}
               onBack={() => { actions.historyPageOpened(tab.id, false) }}
               // The abort forgets the bucket before the unmount reports an offset.

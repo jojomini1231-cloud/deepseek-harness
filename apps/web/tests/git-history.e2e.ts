@@ -18,7 +18,7 @@ import { chromium } from 'playwright'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, onTestFailed } from 'vitest'
 import { HISTORY_PAGE_SIZE } from '@deepseek-ai/dsh-client-ui-sidebar-files/src/git.ts'
 import { launchWebScaffold, watchConsole, type WebScaffold } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './support.ts'
+import { connectFreshWorkspace, expectTooltipOnTop, newEnglishPage, saveFailureShot } from './support.ts'
 
 /** The connected directory inside the scaffold's workspace; the repository lives here. */
 const WORKSPACE_NAME = 'workspace'
@@ -231,6 +231,23 @@ describe('web e2e: the repository history view', () => {
     const layoutToggle = column.locator('[data-files-history-diff-mode="split"]')
     await layoutToggle.waitFor({ timeout: 15_000 })
     expect(await layoutToggle.getAttribute('aria-pressed')).toBe('true')
+    // The commit page's comparison shows the changed hunks by default, and its
+    // shared scope toggle names the scope its next press switches to.
+    const scopeToggle = column.locator('[data-files-history-diff-scope="changes"]')
+    await scopeToggle.waitFor({ timeout: 15_000 })
+    expect(await scopeToggle.getAttribute('aria-pressed')).toBe('false')
+    await page.mouse.move(10, 500)
+    await scopeToggle.hover()
+    const scopeTooltip = column.getByRole('tooltip', { name: 'Switch to full file', exact: true })
+    await scopeTooltip.waitFor()
+    await expectTooltipOnTop(scopeTooltip)
+    await scopeToggle.click()
+    const widenedScope = column.locator('[data-files-history-diff-scope="complete"]')
+    await widenedScope.waitFor({ timeout: 15_000 })
+    expect(await widenedScope.getAttribute('aria-pressed')).toBe('true')
+    // The scope choice is independent of the layout choice; restore the default.
+    await widenedScope.click()
+    await column.locator('[data-files-history-diff-scope="changes"]').waitFor({ timeout: 15_000 })
     // Another row moves the page: the merge commit's first-parent comparison
     // holds only the branch-side path.
     const mergeRow = rows.filter({ hasText: 'merge: topic/sidebar into main' })

@@ -75,6 +75,7 @@ export function gitStatusUrl(sessionId: string, cwd: string): string {
 export function gitDiffUrl(sessionId: string, cwd: string, request: WorkspaceGitDiffRequest): string {
   const query = new URLSearchParams({ sessionId, cwd, path: request.path })
   if (request.from !== undefined) query.set('from', request.from)
+  if (request.complete === true) query.set('complete', '1')
   return `${GIT_DIFF_ROUTE}?${query}`
 }
 
@@ -122,6 +123,7 @@ export function gitCommitUrl(sessionId: string, cwd: string, hash: string): stri
 export function gitCommitDiffUrl(sessionId: string, cwd: string, request: WorkspaceGitCommitDiffRequest): string {
   const query = new URLSearchParams({ sessionId, cwd, hash: request.hash, path: request.path })
   if (request.from !== undefined) query.set('from', request.from)
+  if (request.complete === true) query.set('complete', '1')
   return `${GIT_COMMIT_DIFF_ROUTE}?${query}`
 }
 

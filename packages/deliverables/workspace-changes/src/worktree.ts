@@ -20,7 +20,7 @@ import { homedir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import type { FileSystem } from '@deepseek-ai/dsh-fs'
 import type { GitRunner } from './git.ts'
-import { parsePatch } from './patch.ts'
+import { contextFlag, parsePatch } from './patch.ts'
 import { canonicalPath, compareDisplay, displayPathOf, isInside, toPosix, underPrefix } from './paths.ts'
 import type {
   WorkspaceFileDiff, WorkspaceGitDiffRequest, WorkspaceGitEntry, WorkspaceGitStatus,
@@ -157,11 +157,12 @@ export async function worktreeStatus(
  * A path `HEAD` holds is compared with `git diff HEAD`; one it does not hold,
  * as for an untracked file or a repository without commits, is compared
  * against `/dev/null`. A rename passes both paths so git pairs them and the
- * old side is the origin's `HEAD` content.
+ * old side is the origin's `HEAD` content. A request that asks for the whole
+ * file gets every unchanged line as context instead of three around each change.
  * @param git - resolved git runner.
  * @param fs - the filesystem provider that sees the working tree.
  * @param cwd - the Session working directory.
- * @param request - the changed path and, for a rename or copy, its original path.
+ * @param request - the changed path, a rename or copy origin, and whether the whole file is asked for.
  * @param signal - the request's cancellation.
  * @param limits - comparison bounds.
  * @returns the comparison, or undefined for a path outside the working directory or one git cannot read.
@@ -199,14 +200,14 @@ export async function worktreeDiff(
   if (before) {
     const specs = (from === undefined ? [path] : [from, path]).map(value => `:(literal)${value}`)
     const result = await git.run([
-      'diff', 'HEAD', '-M', '-U3', '--no-color', '--no-ext-diff', '--no-textconv',
+      'diff', 'HEAD', '-M', contextFlag(request.complete, maxBytes), '--no-color', '--no-ext-diff', '--no-textconv',
       '--src-prefix=a/', '--dst-prefix=b/', '--', ...specs,
     ], { cwd, signal, maxBytes })
     if (result.exitCode !== 0) throw new Error(`git diff in ${cwd} failed: ${result.stderr.trim()}`)
     patch = result
   } else if (after) {
     const result = await git.run([
-      'diff', '--no-index', '-U3', '--no-color', '--no-ext-diff', '--no-textconv',
+      'diff', '--no-index', contextFlag(request.complete, maxBytes), '--no-color', '--no-ext-diff', '--no-textconv',
       '--src-prefix=a/', '--dst-prefix=b/', '--', '/dev/null', path,
     ], { cwd, signal, maxBytes })
     // --no-index exits 1 when the paths differ, which is the comparison the view
