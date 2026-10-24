@@ -10,7 +10,7 @@
 import { relativeTime } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
-  WorkspaceGitCommitDetail, WorkspaceGitCommitFile, WorkspaceGitRef,
+  WorkspaceGitCommit, WorkspaceGitCommitDetail, WorkspaceGitCommitFile, WorkspaceGitRef,
 } from '@deepseek-ai/dsh-workspace-changes/types'
 import type {} from './locales.ts'
 
@@ -34,6 +34,86 @@ function compareRefs(left: WorkspaceGitRef, right: WorkspaceGitRef): number {
   const rank = (ref: WorkspaceGitRef): number => ref.head === true ? 0 : REF_RANK[ref.kind]
   const byRank = rank(left) - rank(right)
   return byRank !== 0 ? byRank : left.name.localeCompare(right.name)
+}
+
+/**
+ * The ref the history list follows before the reader picks one: the local
+ * branch `HEAD` is attached to. A detached `HEAD` reports no such branch, and
+ * the list then walks `HEAD` across all refs.
+ * @param refs - the refs the repository reports.
+ * @returns the attached branch's full ref name, or undefined for all refs.
+ */
+export function attachedBranch(refs: readonly WorkspaceGitRef[]): string | undefined {
+  return refs.find(ref => ref.head === true)?.refname
+}
+
+/**
+ * The ref a history list walks after a refs read settles: the reader's pick
+ * while the repository still reports it, and the attached branch otherwise.
+ * @param refs - the refs the repository reports.
+ * @param ref - the ref the reader picked, `undefined` for all refs at `HEAD`.
+ * @param picked - whether the reader picked the scope; false while the list follows the attached branch.
+ * @returns the walked ref, `undefined` for all refs at `HEAD`.
+ */
+export function resolveHistoryRef(
+  refs: readonly WorkspaceGitRef[],
+  ref: string | undefined,
+  picked: boolean,
+): string | undefined {
+  if (!picked) return attachedBranch(refs)
+  // An explicit all-refs pick needs no ref name, and a picked ref the
+  // repository still reports keeps the page it already walked.
+  if (ref === undefined || refs.some(value => value.refname === ref)) return ref
+  // The pick names a ref that is gone: return to the default scope rather than
+  // to a history the pick never named.
+  return attachedBranch(refs)
+}
+
+/**
+ * Whether the walked scope starts at the repository's `HEAD`, so the working
+ * tree's uncommitted changes sit above the list's newest commit. The all-refs
+ * scope does, and so does the attached branch; another ref does not.
+ * @param refs - the refs the repository reports.
+ * @param ref - the walked ref, `undefined` for all refs.
+ * @returns whether the uncommitted-changes row belongs above the list.
+ */
+export function walksHead(refs: readonly WorkspaceGitRef[], ref: string | undefined): boolean {
+  return ref === undefined || ref === attachedBranch(refs)
+}
+
+/** How a quiet reread of the walked ref's first page relates to the loaded list. */
+export type HistoryPageChange =
+  /** The page repeats the loaded list, so nothing is written. */
+  | { readonly kind: 'unchanged' }
+  /** Commits newer than the list's first commit, in walk order, to put above it. */
+  | { readonly kind: 'prepended'; readonly commits: readonly WorkspaceGitCommit[] }
+  /** The walked ref no longer reaches the loaded rows, so the page replaces them. */
+  | { readonly kind: 'replaced' }
+
+/**
+ * Decide what a quiet reread of the walked ref's first page means to the loaded
+ * list. A commit landing at the tip only prepends the commits above the list's
+ * first one, so the reader keeps the pages they loaded and the commit they are
+ * reading; a rewritten ref, or a list the page no longer reaches, replaces it.
+ * @param loaded - the commits the list holds, newest first.
+ * @param page - the walked ref's first page, newest first.
+ * @returns the change to apply to the loaded list.
+ */
+export function historyPageChange(
+  loaded: readonly WorkspaceGitCommit[],
+  page: readonly WorkspaceGitCommit[],
+): HistoryPageChange {
+  const first = loaded[0]
+  if (first === undefined) return page.length === 0 ? { kind: 'unchanged' } : { kind: 'replaced' }
+  const at = page.findIndex(commit => commit.hash === first.hash)
+  if (at < 0) return { kind: 'replaced' }
+  // From the list's first commit on, the page and the list must agree: a
+  // mismatch means the walked ref was rewritten below the page's tip.
+  for (let offset = 0; offset < page.length - at; offset += 1) {
+    if (page[at + offset]?.hash !== loaded[offset]?.hash) return { kind: 'replaced' }
+  }
+  if (at === 0) return { kind: 'unchanged' }
+  return { kind: 'prepended', commits: page.slice(0, at) }
 }
 
 /**

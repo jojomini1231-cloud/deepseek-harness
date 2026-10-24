@@ -8,8 +8,9 @@
 // subject and hash hooks rather than hardcoded object ids, the commit page's
 // message fold and changed-file chain, the unified/split comparison, the
 // searchable refs filter that restarts the list without switching branches, the
-// next-page control, the uncommitted-changes row, the refresh gesture, and the
-// narrow drill-down a measured panel width picks.
+// branch HEAD is attached to as the list's default scope, the next-page control,
+// the uncommitted-changes row, the refresh gesture, the quiet self-refresh while
+// the view is on screen, and the narrow drill-down a measured panel width picks.
 import { execFileSync } from 'node:child_process'
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -187,10 +188,16 @@ describe('web e2e: the repository history view', () => {
     const panel = column.locator('[data-files-history]')
     // The panel measures wide enough for two columns.
     await expect.poll(async () => await panel.getAttribute('data-files-history-layout'), { timeout: 15_000 }).toBe('wide')
-    // The Host answered the first page: 50 rows and a next-page control.
+    // The Host answered the first page of the attached branch: 50 rows and a
+    // next-page control. The chip names that branch, not all refs.
     const rows = column.locator('[data-files-history-commit]')
     await expect.poll(async () => await rows.count(), { timeout: 15_000 }).toBe(PAGE_SIZE)
+    const chip = column.locator('[data-files-history-refs]')
+    await expect.poll(async () => await chip.textContent(), { timeout: 15_000 }).toBe('main')
     expect(await column.locator('[data-files-history-load]').count()).toBe(1)
+    // The attached branch starts at HEAD, so the dirty working tree is the
+    // list's first row under the default scope.
+    await expect.poll(async () => await column.locator('[data-files-history-dirty]').count(), { timeout: 15_000 }).toBe(1)
     // The newest commit opens on its own: the row is current and the page names
     // the same subject and abbreviated hash, both read from the rendered hooks.
     const firstRow = rows.first()
@@ -269,8 +276,6 @@ describe('web e2e: the repository history view', () => {
     await column.locator('[data-review-view="split"]').waitFor({ timeout: 15_000 })
     // The refs filter searches the local branches and tags, then walks one
     // branch's history; picking it restarts the list without switching branches.
-    const chip = column.locator('[data-files-history-refs]')
-    await expect.poll(async () => await chip.textContent()).toContain('All refs')
     await chip.click()
     const search = page.locator('[data-files-history-refs-search]')
     await search.waitFor({ timeout: 15_000 })
@@ -333,6 +338,26 @@ describe('web e2e: the repository history view', () => {
     await binaryRow.click()
     await column.locator('[data-files-history-diff-state="binary"]').waitFor({ timeout: 15_000 })
     expect(await column.locator('[data-files-history-diff]').getAttribute('data-files-history-diff')).toBe('assets/blob.bin')
+    expect(tripwire.pageErrors).toEqual([])
+  })
+
+  it('refreshes itself while the view is on screen', async () => {
+    const column = await openHistoryView(page)
+    const rows = column.locator('[data-files-history-commit]')
+    await expect.poll(async () => await rows.count(), { timeout: 15_000 }).toBeGreaterThan(0)
+    // A working tree that becomes dirty appears as the list's first row without
+    // a gesture, and clears again once the change is committed.
+    appendFileSync(join(repo, 'docs/main-note.md'), 'auto refresh\n')
+    const dirty = column.locator('[data-files-history-dirty]')
+    await dirty.waitFor({ timeout: 15_000 })
+    // A commit made outside the app is prepended above the loaded rows, so the
+    // reader's page and rows stay put and nothing blanks out.
+    writeFileSync(join(repo, 'auto-refresh.md'), 'auto refresh\n')
+    commitAll(repo, 'chore: prove auto refresh')
+    await expect.poll(async () => await rows.first().locator('[data-files-history-subject]').textContent(), { timeout: 15_000 })
+      .toBe('chore: prove auto refresh')
+    await expect.poll(async () => await dirty.count(), { timeout: 15_000 }).toBe(0)
+    expect(await column.locator('[data-files-history-state="loading"]').count()).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
   })
 

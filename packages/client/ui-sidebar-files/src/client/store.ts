@@ -17,9 +17,10 @@ import type {
   WorkspaceFileDiff, WorkspaceGitCommit, WorkspaceGitCommitDetail, WorkspaceGitHistory, WorkspaceGitRef,
   WorkspaceGitStatus,
 } from '@deepseek-ai/dsh-workspace-changes/types'
-import { sameGitStatus } from '../git.ts'
+import { sameGitRefs, sameGitStatus } from '../git.ts'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { WorkspaceDirectoryEntry } from '@deepseek-ai/dsh-api-workspace-files/types'
+import { historyPageChange } from './history.ts'
 
 /**
  * One directory's contents, as one expanded level of the tree.
@@ -142,8 +143,17 @@ export interface HistoryTabState {
   refsLoading: boolean
   /** Whether the latest refs read failed. */
   refsFailure: boolean
-  /** Full ref name the list walks, such as `refs/heads/dev`; `undefined` walks the repository's `HEAD`. */
+  /**
+   * Full ref name the list walks, such as `refs/heads/dev`; `undefined` walks
+   * the repository's `HEAD` across all refs.
+   */
   ref: string | undefined
+  /**
+   * Whether {@link ref} is the reader's own pick. False while the list follows
+   * the attached branch, so a refs read moves a defaulted list to the branch
+   * that is checked out now; a pick moves only when its ref disappears.
+   */
+  refPicked: boolean
   /** Commits loaded so far, newest first. */
   commits: readonly WorkspaceGitCommit[]
   /**
@@ -257,10 +267,11 @@ type FilesActions = {
   gitPageOpened: (draft: FilesState, tabId: TabId, open: boolean) => void
   gitGroupToggled: (draft: FilesState, tabId: TabId, group: 'changed' | 'untracked') => void
   historyRefsLoading: (draft: FilesState, tabId: TabId) => void
-  historyRefsLoaded: (draft: FilesState, tabId: TabId, refs: readonly WorkspaceGitRef[]) => void
+  historyRefsLoaded: (draft: FilesState, tabId: TabId, refs: readonly WorkspaceGitRef[], walked: string | undefined) => void
   historyRefsFailed: (draft: FilesState, tabId: TabId) => void
   historyLoading: (draft: FilesState, tabId: TabId) => void
   historyLoaded: (draft: FilesState, tabId: TabId, ref: string | undefined, skip: number, epoch: number, page: WorkspaceGitHistory) => void
+  historyPageRefreshed: (draft: FilesState, tabId: TabId, ref: string | undefined, page: WorkspaceGitHistory) => void
   historyFailed: (draft: FilesState, tabId: TabId) => void
   historyRefSelected: (draft: FilesState, tabId: TabId, ref: string | undefined) => void
   historyCommitSelected: (draft: FilesState, tabId: TabId, hash: string) => void
@@ -310,7 +321,7 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
             groups: { changed: true, untracked: true },
           },
           history: {
-            refs: undefined, refsLoading: false, refsFailure: false, ref: undefined,
+            refs: undefined, refsLoading: false, refsFailure: false, ref: undefined, refPicked: false,
             commits: [], listEpoch: 0, hasMore: false, loading: false, failure: false,
             selected: undefined, file: undefined, filesOpen: true,
             detail: undefined, diff: undefined, diffMode: 'unified', diffComplete: false,
@@ -673,22 +684,24 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
         bucket(d, tabId).history.refsLoading = true
       },
       /**
-       * Record the refs the filter offers. A selected ref the repository no
-       * longer reports falls back to walking `HEAD`, with its page and
-       * selection cleared so the fresh list starts clean.
+       * Record the refs the filter offers and the ref the list walks after this
+       * answer. A changed walk restarts the list, with its page and selection
+       * cleared so the fresh history starts clean; an unchanged one keeps its
+       * pages and any read still in flight. An answer that repeats the drawn
+       * refs writes nothing, so the quiet reread never re-renders the rows.
        * @param d - draft state.
        * @param tabId - the tab being drawn.
        * @param refs - what the Host answered.
+       * @param walked - the ref the list walks now, `undefined` for all refs at `HEAD`.
        */
-      historyRefsLoaded: (d, tabId: TabId, refs: readonly WorkspaceGitRef[]) => {
+      historyRefsLoaded: (d, tabId: TabId, refs: readonly WorkspaceGitRef[], walked: string | undefined) => {
         const history = bucket(d, tabId).history
         history.refsLoading = false
         history.refsFailure = false
+        if (history.ref === walked && sameGitRefs(history.refs, refs)) return
         history.refs = refs
-        const ref = history.ref
-        if (ref === undefined || refs.some(value => value.refname === ref)) return
-        history.ref = undefined
-        history.failure = false
+        if (history.ref === walked) return
+        history.ref = walked
         resetHistoryList(history)
       },
       /**
@@ -746,6 +759,30 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
         history.failure = false
       },
       /**
+       * Apply a quiet reread of the walked ref's first page: commits newer than
+       * the loaded list are prepended above it, keeping the loaded pages, the
+       * shown commit, and its page; a rewritten tip replaces the list. The
+       * read succeeded, so it also clears a failed reread's banner; an answer
+       * for a walk the reader has left writes nothing.
+       * @param d - draft state.
+       * @param tabId - the tab being drawn.
+       * @param ref - the walked ref the read asked for, `undefined` for all refs.
+       * @param page - the answered first page.
+       */
+      historyPageRefreshed: (d, tabId: TabId, ref: string | undefined, page: WorkspaceGitHistory) => {
+        const history = bucket(d, tabId).history
+        if (history.ref !== ref) return
+        history.failure = false
+        const change = historyPageChange(history.commits, page.commits)
+        if (change.kind === 'unchanged') return
+        history.listEpoch += 1
+        if (change.kind === 'prepended') history.commits = [...change.commits, ...history.commits]
+        else {
+          history.commits = page.commits
+          history.hasMore = page.hasMore
+        }
+      },
+      /**
        * Record a failed history page read; the loaded pages keep their rows and
        * the list offers its retry.
        * @param d - draft state.
@@ -767,6 +804,9 @@ export function createFilesStore(): EngineStoreHandle<FilesState, FilesActions> 
         const history = bucket(d, tabId).history
         if (history.ref === ref) return
         history.ref = ref
+        // The pick pins the scope: a refs read keeps it while the repository
+        // reports it, rather than following the branch that is checked out.
+        history.refPicked = true
         resetHistoryList(history)
         // The pick's own page read is about to start, so the list states it.
         history.loading = true

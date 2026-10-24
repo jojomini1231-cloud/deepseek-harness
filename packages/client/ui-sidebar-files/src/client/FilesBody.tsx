@@ -26,7 +26,7 @@ import type {
 import { fileAddressFor, pathPartsOf } from '@deepseek-ai/dsh-util-workspace-path'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client'
 import type { WorkspaceGitEntry } from '@deepseek-ai/dsh-workspace-changes/types'
-import { HISTORY_PAGE_SIZE } from '../git.ts'
+import { HISTORY_PAGE_SIZE, sameGitRefs } from '../git.ts'
 import { useNarrowLayout } from './layout.ts'
 import { useDrillDownFocus } from './drill-down-focus.ts'
 import type { FilesInjected } from './face.ts'
@@ -36,7 +36,7 @@ import { SplitView } from './SplitView.tsx'
 import { FILES_RAIL_ITEM, GIT_RAIL_ITEM, HISTORY_RAIL_ITEM, WorkbenchRail } from './WorkbenchRail.tsx'
 import { GitPanel } from './GitPanel.tsx'
 import { HistoryPanel } from './HistoryPanel.tsx'
-import { pickHistoryFile, renameOrigin } from './history.ts'
+import { pickHistoryFile, renameOrigin, resolveHistoryRef } from './history.ts'
 import type { createFilesStore, HistoryTabState, OpenFile } from './store.ts'
 import { TreeList } from './tree.tsx'
 import type { TreeContext } from './tree.tsx'
@@ -64,6 +64,9 @@ export function openFileFor(sessionId: Parameters<typeof fileAddressFor>[0], roo
 
 /** Milliseconds between the git view's quiet working-tree reads. */
 const GIT_SILENT_REFRESH_MS = 3_000
+
+/** Milliseconds between the history view's quiet repository reads. */
+const HISTORY_SILENT_REFRESH_MS = 3_000
 
 /** The files workbench: the workspace root and whatever the reader has open under it. */
 export function FilesBody({
@@ -188,7 +191,16 @@ export function FilesBody({
       else actions.gitDiffLoaded(tab.id, path, answer.value)
     })
   }
-  const probeGit = (root: string, quiet = false): void => {
+  /**
+   * Read the working tree's status, and the shown path's comparison with it.
+   * @param root - the Session working directory.
+   * @param options - `quiet` refreshes in place without a loading state, and
+   * `comparison: false` reads only the status for the history view's poll.
+   */
+  const probeGit = (
+    root: string,
+    { quiet = false, comparison = true }: { readonly quiet?: boolean; readonly comparison?: boolean } = {},
+  ): void => {
     gitProbe.current?.abort()
     const controller = new AbortController()
     gitProbe.current = controller
@@ -213,6 +225,9 @@ export function FilesBody({
         gitCompare.current.controller.abort()
         gitCompare.current = undefined
       }
+      // The history view draws no comparison: its poll keeps the status (and the
+      // list's uncommitted-changes row) current without reading the git view.
+      if (!comparison) return
       // Refresh the comparison the gesture showed the reader, unless they moved
       // to another path or a comparison started after the gesture is in flight.
       if (refreshing === undefined || current?.path !== refreshing.path || shown === undefined
@@ -236,9 +251,9 @@ export function FilesBody({
     if (gitRoot === undefined) return undefined
     // The first activation already read the tree while seeding; coming back on
     // screen after a collapse refreshes at once, then the interval keeps it fresh.
-    if (polled.current) probeLatest.current(gitRoot, true)
+    if (polled.current) probeLatest.current(gitRoot, { quiet: true })
     polled.current = true
-    const timer = setInterval(() => { probeLatest.current(gitRoot, true) }, GIT_SILENT_REFRESH_MS)
+    const timer = setInterval(() => { probeLatest.current(gitRoot, { quiet: true }) }, GIT_SILENT_REFRESH_MS)
     return () => { clearInterval(timer) }
   }, [gitRoot])
   const selectGitEntry = (entry: WorkspaceGitEntry): void => {
@@ -282,11 +297,19 @@ export function FilesBody({
       else actions.historyDiffLoaded(tab.id, hash, path, answer.value)
     })
   }
-  const requestHistoryPage = (root: string, skip: number, ref: string | undefined): void => {
+  /**
+   * Read one page of the walked ref.
+   * @param root - the Session working directory.
+   * @param skip - the commits to skip before the page.
+   * @param ref - the walked ref, `undefined` for all refs.
+   * @param quiet - refresh in place: no loading state, and the page settles
+   * into the loaded list rather than replacing it.
+   */
+  const requestHistoryPage = (root: string, skip: number, ref: string | undefined, quiet = false): void => {
     historyListRead.current?.abort()
     const controller = new AbortController()
     historyListRead.current = controller
-    actions.historyLoading(tab.id)
+    if (!quiet) actions.historyLoading(tab.id)
     // The list this read continues, as it stands now: a page that lands after
     // the list was restarted is not an answer to it, however the ref and the
     // offset compare by then.
@@ -299,7 +322,12 @@ export function FilesBody({
     void readHistory(tab.id, root, request, read).then((answer) => {
       if (historyListRead.current === controller) historyListRead.current = undefined
       if (signal.aborted || controller.signal.aborted || !answer.current) return
-      if (answer.value === undefined) actions.historyFailed(tab.id)
+      if (answer.value === undefined) {
+        // A missed quiet read leaves the drawn rows and their failure state alone.
+        if (!quiet) actions.historyFailed(tab.id)
+        return
+      }
+      if (quiet) actions.historyPageRefreshed(tab.id, ref, answer.value)
       else actions.historyLoaded(tab.id, ref, skip, epoch, answer.value)
     })
   }
@@ -316,17 +344,16 @@ export function FilesBody({
         actions.historyRefsFailed(tab.id)
         return
       }
-      // The ref the list walks once this answer is applied: the picked one
-      // while the repository still reports it, `HEAD` otherwise. A pick made
-      // while the refs were being read started its own page read, and an
-      // unchanged ref keeps that read instead of aborting it.
-      const picked = historyState.current?.ref
-      const walked = picked !== undefined && answer.value.some(ref => ref.refname === picked)
-        ? picked
-        : undefined
-      actions.historyRefsLoaded(tab.id, answer.value)
+      // The ref the list walks once this answer is applied: the reader's pick
+      // while the repository still reports it, and the attached branch
+      // otherwise, so a first read opens on the branch that is checked out. A
+      // pick made while the refs were being read started its own page read, and
+      // an unchanged ref keeps that read instead of aborting it.
+      const current = historyState.current
+      const walked = resolveHistoryRef(answer.value, current?.ref, current?.refPicked === true)
+      actions.historyRefsLoaded(tab.id, answer.value, walked)
       /* v8 ignore next 2 -- the picked ref's own page read replaces the old one; the guard covers that race. */
-      if (walked === picked && historyListRead.current !== undefined) return
+      if (walked === current?.ref && historyListRead.current !== undefined) return
       if (!historyOpen.current) {
         // The slice states the page it owes, so returning to the container
         // shows the list's loading state rather than an empty one.
@@ -337,6 +364,66 @@ export function FilesBody({
       requestHistoryPage(root, 0, walked)
     })
   }
+  /**
+   * Refresh the history view in place: the working tree's status (the list's
+   * uncommitted-changes row), then the refs, then the walked ref's first page
+   * when the refs answer moved or the drawn list still states a failure. Every
+   * settlement writes only what changed, so an unchanged repository costs no
+   * render and never blanks the rows. A read already in flight owns its route,
+   * so a poll starts no second read of the same kind.
+   * @param root - the Session working directory.
+   */
+  const probeHistory = (root: string): void => {
+    // The status keeps the uncommitted-changes row current; the comparison
+    // belongs to the git container the reader is not looking at.
+    probeGit(root, { quiet: true, comparison: false })
+    if (historyRefsRead.current !== undefined) return
+    const controller = new AbortController()
+    historyRefsRead.current = controller
+    const read = AbortSignal.any([signal, controller.signal])
+    void historyRefs(tab.id, root, read).then((answer) => {
+      if (historyRefsRead.current === controller) historyRefsRead.current = undefined
+      if (signal.aborted || controller.signal.aborted || !answer.current) return
+      // A missed quiet read leaves the drawn view alone: the reader's own reload
+      // and its retry own the failure states.
+      if (answer.value === undefined) return
+      // The reader left while the read ran; the return reads at once.
+      if (!historyOpen.current) return
+      const current = historyState.current
+      const walked = resolveHistoryRef(answer.value, current?.ref, current?.refPicked === true)
+      const restarted = walked !== current?.ref
+      const moved = !sameGitRefs(current?.refs, answer.value)
+      // The all-refs scope has a tip only while a branch is attached; a detached
+      // HEAD is absent from the refs answer, so its page is read on every poll
+      // rather than waiting for a ref to move.
+      const tipKnown = walked !== undefined || answer.value.some(ref => ref.head === true)
+      actions.historyRefsLoaded(tab.id, answer.value, walked)
+      if (!restarted && !moved && tipKnown && current?.failure !== true) return
+      // A restarted walk replaced the list, so its first page is read even when
+      // a page read was in flight; otherwise the reader's read owns the list.
+      if (!restarted && historyListRead.current !== undefined) return
+      requestHistoryPage(root, 0, walked, !restarted)
+    })
+  }
+  // The latest committed probe, reached through a ref because the timer
+  // outlives one render.
+  const probeHistoryLatest = useRef(probeHistory)
+  useEffect(() => { probeHistoryLatest.current = probeHistory })
+  // The history view refreshes itself while it is the one on screen, like the
+  // git view. A hidden panel keeps its tab bodies mounted, so the view has to
+  // ask whether it is on screen: a collapsed Sidebar or a hidden tab must not
+  // keep reading, and a returning one reads at once.
+  const historyRoot = historyContainer && onScreen ? state.root : undefined
+  const historyPolled = useRef(false)
+  useEffect(() => {
+    if (historyRoot === undefined) return undefined
+    // The first activation already read the refs while seeding; coming back on
+    // screen after a collapse refreshes at once, then the interval keeps it fresh.
+    if (historyPolled.current) probeHistoryLatest.current(historyRoot)
+    historyPolled.current = true
+    const timer = setInterval(() => { probeHistoryLatest.current(historyRoot) }, HISTORY_SILENT_REFRESH_MS)
+    return () => { clearInterval(timer) }
+  }, [historyRoot])
   const selectHistoryRef = (ref: string | undefined): void => {
     /* v8 ignore next -- the filter that reports the pick only renders with a seeded state. */
     if (state === undefined) return

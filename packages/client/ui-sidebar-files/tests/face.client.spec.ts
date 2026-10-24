@@ -59,7 +59,7 @@ describe('filesFace', () => {
         scrollTop: 0, diff: undefined, diffMode: 'unified', diffComplete: false, ratio: 0.58, pageOpen: false, groups: { changed: true, untracked: true },
       },
       history: {
-        refs: undefined, refsLoading: false, refsFailure: false, ref: undefined,
+        refs: undefined, refsLoading: false, refsFailure: false, ref: undefined, refPicked: false,
         commits: [], listEpoch: 0, hasMore: false, loading: false, failure: false,
         selected: undefined, file: undefined, filesOpen: true,
         detail: undefined, diff: undefined, diffMode: 'unified', diffComplete: false,

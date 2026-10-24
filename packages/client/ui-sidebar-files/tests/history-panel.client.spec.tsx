@@ -222,7 +222,7 @@ describe('HistoryPanel navigator', () => {
     expect(hands.onRetryList).toHaveBeenCalledOnce()
   })
 
-  it('shows the uncommitted-changes row only while walking all refs, and hands it to the git view', () => {
+  it('shows the uncommitted-changes row above the scope that starts at HEAD, and hands it to the git view', () => {
     const shown = mountHistory({ refs: REFS, commits: COMMITS }, 3)
     const dirty = shown.container.querySelector('[data-files-history-dirty]')!
     expect(dirty.textContent).toContain(zh['history.dirty'])
@@ -230,8 +230,13 @@ describe('HistoryPanel navigator', () => {
     fireEvent.click(dirty)
     expect(shown.hands.onDirty).toHaveBeenCalledOnce()
     cleanup()
-    // Walking one ref hides the working tree's row; so does a clean tree.
-    const filtered = mountHistory({ refs: REFS, commits: COMMITS, ref: 'dev' }, 3)
+    // The attached branch's list starts at HEAD too, so its working tree still
+    // sits above the newest commit.
+    const attached = mountHistory({ refs: REFS, commits: COMMITS, ref: 'refs/heads/dev' }, 3)
+    expect(attached.container.querySelector('[data-files-history-dirty]')).not.toBeNull()
+    cleanup()
+    // Another ref's history and a clean tree keep the row away.
+    const filtered = mountHistory({ refs: REFS, commits: COMMITS, ref: 'refs/heads/release' }, 3)
     expect(filtered.container.querySelector('[data-files-history-dirty]')).toBeNull()
     cleanup()
     const clean = mountHistory({ refs: REFS, commits: COMMITS }, 0)

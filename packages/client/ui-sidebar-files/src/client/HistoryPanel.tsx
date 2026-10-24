@@ -30,7 +30,7 @@ import { RefPills } from './RefPills.tsx'
 import { SplitView } from './SplitView.tsx'
 import { useNarrowLayout } from './layout.ts'
 import { useNow } from './use-now.ts'
-import { absoluteTime, commitRefPills, historyTime, refsByCommit } from './history.ts'
+import { absoluteTime, commitRefPills, historyTime, refsByCommit, walksHead } from './history.ts'
 import { layoutGraph } from './history-graph.ts'
 import type { GraphLayout, GraphRow } from './history-graph.ts'
 import bodyCss from './FilesBody.module.css'
@@ -240,6 +240,9 @@ function Navigator({
   }, [history.ref])
 
   const refsPending = history.refs === undefined && !history.refsFailure
+  // The uncommitted-changes row belongs above the list only while the list
+  // starts at `HEAD`: walking all refs, or the branch `HEAD` is attached to.
+  const headScope = walksHead(history.refs ?? NO_REFS, history.ref)
   let rows: ReactNode
   if (history.commits.length === 0) {
     if (history.refsFailure && history.refs === undefined) {
@@ -272,7 +275,7 @@ function Navigator({
             <Button size="sm" data-files-history-retry onClick={onRetryList}>{t('retry')}</Button>
           </div>
         )}
-        {dirtyCount > 0 && history.ref === undefined && (
+        {dirtyCount > 0 && headScope && (
           <button type="button" className={css.dirtyRow} data-files-history-dirty onClick={onDirty}>
             <span className={css.dirtyDot} />
             <span>{t('history.dirty')}</span>

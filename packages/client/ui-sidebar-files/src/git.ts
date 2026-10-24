@@ -188,6 +188,22 @@ export function sameGitStatus(left: WorkspaceGitStatus | undefined, right: Works
 }
 
 /**
+ * Whether two refs answers describe the same refs at the same commits.
+ * @param left - the refs the view holds, if it has read any.
+ * @param right - the refs the repository just reported.
+ * @returns whether every ref the filter and the row pills draw is identical, so
+ * the answer repeats the drawn history scope.
+ */
+export function sameGitRefs(left: readonly WorkspaceGitRef[] | undefined, right: readonly WorkspaceGitRef[]): boolean {
+  if (left === undefined || left.length !== right.length) return false
+  return left.every((ref, at) => {
+    const other = right[at]
+    return other !== undefined && ref.name === other.name && ref.refname === other.refname
+      && ref.kind === other.kind && ref.hash === other.hash && ref.head === other.head
+  })
+}
+
+/**
  * Whether a decoded JSON value is one file comparison the view can draw.
  * @param value - decoded JSON.
  * @returns whether it is a text comparison with hunks, or a binary/oversized marker.

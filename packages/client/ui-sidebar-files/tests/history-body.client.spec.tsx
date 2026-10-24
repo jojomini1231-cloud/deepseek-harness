@@ -84,7 +84,9 @@ describe('history through the body', () => {
     expect(mounted.instance.getSnapshot().byTab[TAB]?.container).toBe('history')
     expect(mounted.historyRefs).toHaveBeenCalledOnce()
     expect(mounted.history).toHaveBeenCalledOnce()
-    expect(mounted.history.mock.calls[0]!.slice(0, 3)).toEqual([TAB, ROOT, { skip: 0, limit: 50 }])
+    // The list opens on the branch HEAD is attached to, not on all refs.
+    expect(mounted.history.mock.calls[0]!.slice(0, 3))
+      .toEqual([TAB, ROOT, { ref: 'refs/heads/dev', skip: 0, limit: 50 }])
     // The first commit of the page opens with its first changed file.
     expect(mounted.commit).toHaveBeenCalledWith(TAB, ROOT, hash('a'), expect.anything())
     expect(mounted.commitDiff).toHaveBeenCalledWith(
@@ -92,6 +94,8 @@ describe('history through the body', () => {
     )
     const history = mounted.instance.getSnapshot().byTab[TAB]!.history
     expect(history.refs).toEqual(REFS)
+    expect(history.ref).toBe('refs/heads/dev')
+    expect(history.refPicked).toBe(false)
     expect(history.commits).toEqual(COMMITS)
     expect(history.selected).toBe(hash('a'))
     expect(history.file).toBe('packages/app/src/a.ts')
@@ -104,7 +108,9 @@ describe('history through the body', () => {
     expect(view.querySelectorAll('[data-files-history-file]')).toHaveLength(2)
     expect(view.querySelector('[data-files-history-diff]')).not.toBeNull()
     expect(view.querySelector('[data-review-view="unified"]')).not.toBeNull()
-    // The uncommitted-changes row names the working tree's change count.
+    // The chip names the walked branch, and the uncommitted-changes row stays
+    // above the list because the branch starts at HEAD.
+    expect(view.querySelector('[data-files-history-refs]')?.textContent).toBe('dev')
     expect(view.querySelector('[data-files-history-dirty]')?.textContent).toContain('2 个文件')
   })
 
@@ -167,17 +173,18 @@ describe('history through the body', () => {
     const filtered: WorkspaceGitHistory = { commits: [COMMITS[0]!], hasMore: false }
     mounted.history.mockResolvedValueOnce({ value: filtered, current: true })
     fireEvent.click(mounted.view.container.querySelector('[data-files-history-refs]')!)
-    fireEvent.click(document.querySelector('[data-files-history-ref="dev"]')!)
+    fireEvent.click(document.querySelector('[data-files-history-ref="release"]')!)
     await settleReads()
     expect(mounted.history).toHaveBeenLastCalledWith(
-      TAB, ROOT, { ref: 'refs/heads/dev', skip: 0, limit: 50 }, expect.anything(),
+      TAB, ROOT, { ref: 'refs/heads/release', skip: 0, limit: 50 }, expect.anything(),
     )
     const history = mounted.instance.getSnapshot().byTab[TAB]!.history
-    expect(history.ref).toBe('refs/heads/dev')
+    expect(history.ref).toBe('refs/heads/release')
+    expect(history.refPicked).toBe(true)
     expect(history.commits).toEqual(filtered.commits)
     // The replaced list keeps the commit page it already had.
     expect(history.selected).toBe(hash('a'))
-    expect(mounted.view.container.querySelector('[data-files-history-refs]')?.textContent).toBe('dev')
+    expect(mounted.view.container.querySelector('[data-files-history-refs]')?.textContent).toBe('release')
   })
 
   it('appends the next page by the commits already loaded', async () => {
@@ -189,7 +196,7 @@ describe('history through the body', () => {
     fireEvent.click(mounted.view.container.querySelector('[data-files-history-load]')!)
     await settleReads()
     expect(mounted.history).toHaveBeenLastCalledWith(
-      TAB, ROOT, { skip: 3, limit: 50 }, expect.anything(),
+      TAB, ROOT, { ref: 'refs/heads/dev', skip: 3, limit: 50 }, expect.anything(),
     )
     expect(mounted.instance.getSnapshot().byTab[TAB]?.history.commits).toHaveLength(4)
     expect(mounted.view.container.querySelectorAll('[data-files-history-commit]')).toHaveLength(4)
@@ -226,31 +233,28 @@ describe('history through the body', () => {
     await act(async () => {})
     mounted.history.mockResolvedValueOnce({ value: PAGE, current: true })
     fireEvent.click(mounted.view.container.querySelector('[data-files-history-refs]')!)
-    fireEvent.click(document.querySelector('[data-files-history-ref="dev"]')!)
+    fireEvent.click(document.querySelector('[data-files-history-ref="release"]')!)
     await settleReads()
-    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.ref).toBe('refs/heads/dev')
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.ref).toBe('refs/heads/release')
     // The settlement reads the picked ref rather than the one the reload began
     // with, so the list never falls back to the ref the reader left.
     await act(async () => { release({ value: REFS, current: true }) })
     await settleReads()
-    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.ref).toBe('refs/heads/dev')
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.ref).toBe('refs/heads/release')
     expect(mounted.history).toHaveBeenLastCalledWith(
-      TAB, ROOT, { ref: 'refs/heads/dev', skip: 0, limit: 50 }, expect.anything(),
+      TAB, ROOT, { ref: 'refs/heads/release', skip: 0, limit: 50 }, expect.anything(),
     )
-    expect(mounted.history.mock.calls.every(call => call[2].ref === 'refs/heads/dev' || call[2].ref === undefined))
-      .toBe(true)
+    expect(mounted.history.mock.calls.map(call => call[2].ref))
+      .toEqual(['refs/heads/dev', 'refs/heads/release', 'refs/heads/release'])
   })
 
   it('refreshes the refs, the page, and the shown commit from the header', async () => {
     const mounted = await seeded({ refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF })
     await openHistory(mounted)
-    // Walk one local branch first, so the refresh has a ref to fall back from.
-    mounted.history.mockResolvedValueOnce({ value: PAGE, current: true })
-    fireEvent.click(mounted.view.container.querySelector('[data-files-history-refs]')!)
-    fireEvent.click(document.querySelector('[data-files-history-ref="dev"]')!)
-    await settleReads()
+    // The defaulted walk starts at the attached branch.
     expect(mounted.instance.getSnapshot().byTab[TAB]?.history.ref).toBe('refs/heads/dev')
-    // A reload whose refs no longer report the walked ref falls back to HEAD.
+    // A reload whose refs report no attached branch returns the default scope
+    // to all refs at HEAD.
     mounted.historyRefs.mockResolvedValueOnce({ value: [REFS[1]!], current: true })
     fireEvent.click(mounted.view.container.querySelector('[data-files-history-refresh]')!)
     await settleReads()
@@ -335,36 +339,277 @@ describe('history through the body', () => {
     expect(mounted.view.container.querySelector('[data-files-history-list]')).not.toBeNull()
   })
 
-  it('reads nothing on a timer: history is gesture-driven', async () => {
+  it('refreshes itself quietly while the history view is open', async () => {
     vi.useFakeTimers()
     try {
-      const mounted = mountBody(ROOT, undefined, { status: REPOSITORY }, undefined, {
+      const mounted = await seeded({ refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF })
+      await openHistory(mounted)
+      const counts = {
+        refs: mounted.historyRefs.mock.calls.length,
+        list: mounted.history.mock.calls.length,
+        status: mounted.gitStatus.mock.calls.length,
+      }
+      // An unchanged repository: the status and refs polls run, the page is not
+      // reread, and nothing blanks out or reloads under the reader.
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+      expect(mounted.gitStatus.mock.calls.length).toBe(counts.status + 1)
+      expect(mounted.historyRefs.mock.calls.length).toBe(counts.refs + 1)
+      expect(mounted.history.mock.calls.length).toBe(counts.list)
+      expect(mounted.view.container.querySelector('[data-files-history-state="loading"]')).toBeNull()
+      // A commit lands outside the view: the next poll reads the moved branch's
+      // first page and puts the new row above the loaded ones.
+      const newer: WorkspaceGitCommit = {
+        hash: hash('d'), short: 'ddddddd', parents: [COMMITS[0]!.hash], author: 'lead',
+        authoredAt: '2026-10-20T08:00:00+08:00', subject: 'feat: land outside the view',
+      }
+      mounted.historyRefs.mockResolvedValueOnce({
+        value: [{ ...REFS[0]!, hash: newer.hash }, ...REFS.slice(1)], current: true,
+      })
+      mounted.history.mockResolvedValueOnce({
+        value: { commits: [newer, ...COMMITS], hasMore: true }, current: true,
+      })
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+      const history = mounted.instance.getSnapshot().byTab[TAB]!.history
+      expect(history.commits[0]).toEqual(newer)
+      expect(history.commits).toHaveLength(4)
+      expect(history.ref).toBe('refs/heads/dev')
+      // The quietly reloaded list keeps the commit page the reader is on.
+      expect(history.selected).toBe(hash('a'))
+      expect(mounted.view.container.querySelectorAll('[data-files-history-commit]')).toHaveLength(4)
+      expect(mounted.view.container.querySelector('[data-files-history-refs]')?.textContent).toBe('dev')
+      // Leaving the container stops the timer.
+      fireEvent.click(mounted.view.container.querySelector('[data-files-rail-item="files"]')!)
+      const after = { refs: mounted.historyRefs.mock.calls.length, status: mounted.gitStatus.mock.calls.length }
+      await act(async () => { await vi.advanceTimersByTimeAsync(9_000) })
+      expect({ refs: mounted.historyRefs.mock.calls.length, status: mounted.gitStatus.mock.calls.length })
+        .toEqual(after)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('refreshes at once when the history container returns on screen, and never while it is hidden', async () => {
+    vi.useFakeTimers()
+    try {
+      const mounted = await seeded({ refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF })
+      await openHistory(mounted)
+      // Switching containers and coming back reads at once rather than waiting
+      // for the next interval.
+      fireEvent.click(mounted.view.container.querySelector('[data-files-rail-item="git"]')!)
+      const before = mounted.historyRefs.mock.calls.length
+      fireEvent.click(mounted.view.container.querySelector('[data-files-rail-item="history"]')!)
+      await settleReads()
+      expect(mounted.historyRefs.mock.calls.length).toBe(before + 1)
+      cleanup()
+      // A collapsed Sidebar or a hidden tab keeps its body mounted but reads
+      // nothing: the reader is not looking at the list.
+      const hidden = mountBody(ROOT, undefined, { status: REPOSITORY }, { expanded: false }, {
+        refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF,
+      })
+      await act(() => hidden.script.watches.ready(ROOT))
+      await act(() => hidden.script.settle({ ok: true, value: { entries: [], truncated: false } }))
+      fireEvent.click(hidden.view.container.querySelector('[data-files-rail-item="history"]')!)
+      await settleReads()
+      const idle = hidden.historyRefs.mock.calls.length
+      await act(async () => { await vi.advanceTimersByTimeAsync(9_000) })
+      expect(hidden.historyRefs.mock.calls.length).toBe(idle)
+      cleanup()
+      const unshown = mountBody(ROOT, undefined, { status: REPOSITORY }, { expanded: true, visible: false }, {
+        refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF,
+      })
+      await act(() => unshown.script.watches.ready(ROOT))
+      await act(() => unshown.script.settle({ ok: true, value: { entries: [], truncated: false } }))
+      fireEvent.click(unshown.view.container.querySelector('[data-files-rail-item="history"]')!)
+      await settleReads()
+      const unshownIdle = unshown.historyRefs.mock.calls.length
+      await act(async () => { await vi.advanceTimersByTimeAsync(9_000) })
+      expect(unshown.historyRefs.mock.calls.length).toBe(unshownIdle)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('leaves an in-flight page or refs read to the gesture that started it', async () => {
+    vi.useFakeTimers()
+    try {
+      const mounted = await seeded({ refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF })
+      await openHistory(mounted)
+      // A load-more is in flight when the poll fires: the poll refreshes the
+      // refs, then leaves the list to the read the reader asked for.
+      let releasePage!: (answer: GitRead<WorkspaceGitHistory>) => void
+      mounted.history.mockImplementationOnce(() => new Promise((resolve) => { releasePage = resolve }))
+      fireEvent.click(mounted.view.container.querySelector('[data-files-history-load]')!)
+      const pageReads = mounted.history.mock.calls.length
+      const pageSignal = mounted.history.mock.calls.at(-1)![3]
+      // The walked branch moves while the load-more is in flight: the poll
+      // records the new refs but leaves the list to the read the reader asked for.
+      mounted.historyRefs.mockResolvedValueOnce({
+        value: [{ ...REFS[0]!, hash: hash('e') }, ...REFS.slice(1)], current: true,
+      })
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+      expect(pageSignal.aborted).toBe(false)
+      expect(mounted.history.mock.calls.length).toBe(pageReads)
+      expect(mounted.instance.getSnapshot().byTab[TAB]?.history.refs?.[0]?.hash).toBe(hash('e'))
+      const older: WorkspaceGitCommit = {
+        hash: hash('d'), short: 'ddddddd', parents: [], author: 'lead',
+        authoredAt: '2026-10-16T08:00:00+08:00', subject: 'release: 0.9',
+      }
+      await act(async () => { releasePage({ value: { commits: [older], hasMore: false }, current: true }) })
+      expect(mounted.instance.getSnapshot().byTab[TAB]?.history.commits).toHaveLength(4)
+      // A reload's own refs read is in flight: the poll starts no second one.
+      let releaseRefs!: (answer: GitRead<readonly (typeof REFS)[number][]>) => void
+      mounted.historyRefs.mockImplementationOnce(() => new Promise((resolve) => { releaseRefs = resolve }))
+      fireEvent.click(mounted.view.container.querySelector('[data-files-history-refresh]')!)
+      await act(async () => {})
+      const refsReads = mounted.historyRefs.mock.calls.length
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+      expect(mounted.historyRefs.mock.calls.length).toBe(refsReads)
+      await act(async () => { releaseRefs({ value: REFS, current: true }) })
+      // A reload supersedes a quiet reread still in flight: the quiet answer
+      // writes nothing when it lands.
+      let releaseQuiet!: (answer: GitRead<readonly (typeof REFS)[number][]>) => void
+      mounted.historyRefs.mockImplementationOnce(() => new Promise((resolve) => { releaseQuiet = resolve }))
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+      const drawn = mounted.instance.getSnapshot().byTab[TAB]!.history.refs
+      fireEvent.click(mounted.view.container.querySelector('[data-files-history-refresh]')!)
+      await act(async () => {
+        releaseQuiet({ value: [{ ...REFS[0]!, hash: hash('g') }, ...REFS.slice(1)], current: true })
+        await Promise.resolve()
+      })
+      expect(mounted.instance.getSnapshot().byTab[TAB]?.history.refs).toBe(drawn)
+      // A quiet refs answer a newer read of the same kind superseded is dropped.
+      mounted.historyRefs.mockResolvedValueOnce({ value: REFS, current: false })
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+      expect(mounted.instance.getSnapshot().byTab[TAB]?.history.refs).toBe(drawn)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps the drawn view on a missed quiet read and retries a failed list on the next one', async () => {
+    vi.useFakeTimers()
+    try {
+      // The first page read failed: the list states the failure it can retry.
+      const failed = mountBody(ROOT, undefined, { status: REPOSITORY }, undefined, { refs: REFS })
+      await act(() => failed.script.watches.ready(ROOT))
+      await act(() => failed.script.settle({ ok: true, value: { entries: [], truncated: false } }))
+      fireEvent.click(failed.view.container.querySelector('[data-files-rail-item="history"]')!)
+      await settleReads()
+      expect(failed.instance.getSnapshot().byTab[TAB]?.history.failure).toBe(true)
+      expect(failed.view.container.querySelector('[data-files-history-state="failed"]')).not.toBeNull()
+      // The unchanged refs would skip the page, but the failed list is retried:
+      // the rows arrive without a gesture and the banner goes.
+      failed.history.mockResolvedValueOnce({ value: PAGE, current: true })
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+      expect(failed.instance.getSnapshot().byTab[TAB]?.history.commits).toEqual(COMMITS)
+      expect(failed.view.container.querySelector('[data-files-history-state="failed"]')).toBeNull()
+      expect(failed.view.container.querySelectorAll('[data-files-history-commit]')).toHaveLength(3)
+      cleanup()
+      // The reader leaves while the quiet refs read runs: its answer writes
+      // nothing, and the return reads at once.
+      const mounted = await seeded({ refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF })
+      await openHistory(mounted)
+      // A quiet page read that fails keeps the drawn rows and their failure state.
+      const rows = mounted.instance.getSnapshot().byTab[TAB]!.history.commits
+      mounted.historyRefs.mockResolvedValueOnce({
+        value: [{ ...REFS[0]!, hash: hash('f') }, ...REFS.slice(1)], current: true,
+      })
+      mounted.history.mockResolvedValueOnce({ value: undefined, current: true })
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+      expect(mounted.instance.getSnapshot().byTab[TAB]?.history.commits).toBe(rows)
+      expect(mounted.view.container.querySelector('[data-files-history-state="failed"]')).toBeNull()
+      // A missed refs poll writes nothing.
+      const drawn = mounted.instance.getSnapshot().byTab[TAB]!.history.refs
+      mounted.historyRefs.mockResolvedValueOnce({ value: undefined, current: true })
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+      expect(mounted.instance.getSnapshot().byTab[TAB]?.history.refs).toBe(drawn)
+      let releaseQuiet!: (answer: GitRead<readonly (typeof REFS)[number][]>) => void
+      mounted.historyRefs.mockImplementationOnce(() => new Promise((resolve) => { releaseQuiet = resolve }))
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+      fireEvent.click(mounted.view.container.querySelector('[data-files-rail-item="files"]')!)
+      const refs = mounted.instance.getSnapshot().byTab[TAB]?.history.refs
+      await act(async () => {
+        releaseQuiet({ value: [{ ...REFS[0]!, hash: hash('d') }, ...REFS.slice(1)], current: true })
+        await Promise.resolve()
+      })
+      expect(mounted.instance.getSnapshot().byTab[TAB]?.history.refs).toBe(refs)
+      const before = mounted.historyRefs.mock.calls.length
+      fireEvent.click(mounted.view.container.querySelector('[data-files-rail-item="history"]')!)
+      await settleReads()
+      expect(mounted.historyRefs.mock.calls.length).toBe(before + 1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('follows a branch checked out elsewhere without a gesture', async () => {
+    vi.useFakeTimers()
+    try {
+      const mounted = await seeded({ refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF })
+      await openHistory(mounted)
+      // The repository checks out release outside the workbench: the defaulted
+      // list moves with it and restarts on that branch.
+      const switched: readonly (typeof REFS)[number][] = [
+        { name: 'dev', refname: 'refs/heads/dev', kind: 'local', hash: hash('a') },
+        { name: 'release', refname: 'refs/heads/release', kind: 'local', hash: hash('c'), head: true },
+        REFS[2]!, REFS[3]!,
+      ]
+      mounted.historyRefs.mockResolvedValueOnce({ value: switched, current: true })
+      mounted.history.mockResolvedValueOnce({ value: { commits: [COMMITS[2]!], hasMore: false }, current: true })
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+      const history = mounted.instance.getSnapshot().byTab[TAB]!.history
+      expect(history.ref).toBe('refs/heads/release')
+      expect(history.refPicked).toBe(false)
+      expect(history.commits).toEqual([COMMITS[2]])
+      expect(mounted.view.container.querySelector('[data-files-history-refs]')?.textContent).toBe('release')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reads the first page on every poll while HEAD is detached', async () => {
+    vi.useFakeTimers()
+    try {
+      const detached = REFS.filter(ref => ref.head !== true)
+      const mounted = await seeded({ refs: detached, history: PAGE, commit: DETAIL, commitDiff: DIFF })
+      await openHistory(mounted)
+      // No ref carries HEAD's tip, so an unchanged refs answer cannot prove the
+      // walk still holds: the page is reread.
+      const reads = mounted.history.mock.calls.length
+      mounted.history.mockResolvedValueOnce({ value: PAGE, current: true })
+      await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
+      expect(mounted.history.mock.calls.length).toBe(reads + 1)
+      expect(mounted.instance.getSnapshot().byTab[TAB]?.history.commits).toEqual(COMMITS)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('polls only the working-tree status for the history view, never the git comparison', async () => {
+    vi.useFakeTimers()
+    try {
+      const mounted = mountBody(ROOT, undefined, { status: REPOSITORY, diff: DIFF }, undefined, {
         refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF,
       })
       await act(() => mounted.script.watches.ready(ROOT))
       await act(() => mounted.script.settle({ ok: true, value: { entries: [], truncated: false } }))
+      fireEvent.click(mounted.view.container.querySelector('[data-files-rail-item="git"]')!)
+      await act(async () => {
+        fireEvent.click(mounted.view.container.querySelector('[data-files-git-entry="src/a.ts"]')!)
+      })
       fireEvent.click(mounted.view.container.querySelector('[data-files-rail-item="history"]')!)
       await settleReads()
-      const counts = {
-        refs: mounted.historyRefs.mock.calls.length,
-        list: mounted.history.mock.calls.length,
-        commit: mounted.commit.mock.calls.length,
-        diff: mounted.commitDiff.mock.calls.length,
-        status: mounted.gitStatus.mock.calls.length,
+      const diffs = mounted.gitDiff.mock.calls.length
+      // A changed working tree updates the uncommitted-changes row's source
+      // without reading the comparison of a path the reader cannot see.
+      const changed = {
+        ...REPOSITORY,
+        entries: [...REPOSITORY.entries, { path: 'src/c.ts', display: 'src/c.ts', kind: 'modified' as const }],
       }
-      await act(async () => { await vi.advanceTimersByTimeAsync(9_000) })
-      expect({
-        refs: mounted.historyRefs.mock.calls.length,
-        list: mounted.history.mock.calls.length,
-        commit: mounted.commit.mock.calls.length,
-        diff: mounted.commitDiff.mock.calls.length,
-        status: mounted.gitStatus.mock.calls.length,
-      }).toEqual(counts)
-      // Selecting the git container resumes its quiet working-tree polling.
-      fireEvent.click(mounted.view.container.querySelector('[data-files-rail-item="git"]')!)
-      const before = mounted.gitStatus.mock.calls.length
+      mounted.gitStatus.mockResolvedValueOnce({ value: changed, current: true })
       await act(async () => { await vi.advanceTimersByTimeAsync(3_000) })
-      expect(mounted.gitStatus.mock.calls.length).toBe(before + 1)
+      expect(mounted.instance.getSnapshot().byTab[TAB]?.git.status).toEqual(changed)
+      expect(mounted.gitDiff.mock.calls.length).toBe(diffs)
     } finally {
       vi.useRealTimers()
     }
@@ -579,16 +824,87 @@ describe('history through the body', () => {
     expect(diffPending.instance.getSnapshot().byTab[TAB]).toBeUndefined()
   })
 
-  it('keeps the walked ref across a refresh whose refs still report it', async () => {
+  it('keeps the picked ref across a refresh whose refs still report it', async () => {
     const mounted = await seeded({ refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF })
     await openHistory(mounted)
     mounted.history.mockResolvedValueOnce({ value: PAGE, current: true })
     fireEvent.click(mounted.view.container.querySelector('[data-files-history-refs]')!)
-    fireEvent.click(document.querySelector('[data-files-history-ref="dev"]')!)
+    fireEvent.click(document.querySelector('[data-files-history-ref="release"]')!)
     await settleReads()
-    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.ref).toBe('refs/heads/dev')
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.ref).toBe('refs/heads/release')
     fireEvent.click(mounted.view.container.querySelector('[data-files-history-refresh]')!)
     await settleReads()
+    expect(mounted.history).toHaveBeenLastCalledWith(
+      TAB, ROOT, { ref: 'refs/heads/release', skip: 0, limit: 50 }, expect.anything(),
+    )
+  })
+
+  it('follows the branch that becomes checked out while no ref is picked', async () => {
+    const mounted = await seeded({ refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF })
+    await openHistory(mounted)
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.ref).toBe('refs/heads/dev')
+    // The repository checks out release outside the workbench; the next refs
+    // read moves the defaulted list with it.
+    const checkedOut: readonly (typeof REFS)[number][] = [
+      { name: 'dev', refname: 'refs/heads/dev', kind: 'local', hash: hash('a') },
+      { name: 'release', refname: 'refs/heads/release', kind: 'local', hash: hash('c'), head: true },
+      REFS[2]!, REFS[3]!,
+    ]
+    mounted.historyRefs.mockResolvedValueOnce({ value: checkedOut, current: true })
+    mounted.history.mockResolvedValueOnce({ value: PAGE, current: true })
+    fireEvent.click(mounted.view.container.querySelector('[data-files-history-refresh]')!)
+    await settleReads()
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.ref).toBe('refs/heads/release')
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.refPicked).toBe(false)
+    expect(mounted.history).toHaveBeenLastCalledWith(
+      TAB, ROOT, { ref: 'refs/heads/release', skip: 0, limit: 50 }, expect.anything(),
+    )
+  })
+
+  it('walks all refs when HEAD is detached', async () => {
+    const detached = REFS.filter(ref => ref.head !== true)
+    const mounted = await seeded({ refs: detached, history: PAGE, commit: DETAIL, commitDiff: DIFF })
+    await openHistory(mounted)
+    // No branch is attached, so the default scope is HEAD across all refs.
+    expect(mounted.history.mock.calls[0]!.slice(0, 3)).toEqual([TAB, ROOT, { skip: 0, limit: 50 }])
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.ref).toBeUndefined()
+    expect(mounted.view.container.querySelector('[data-files-history-refs]')?.textContent).toBe(zh['history.refs.all'])
+  })
+
+  it('keeps an explicit all-refs pick across a refresh', async () => {
+    const mounted = await seeded({ refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF })
+    await openHistory(mounted)
+    mounted.history.mockResolvedValueOnce({ value: PAGE, current: true })
+    fireEvent.click(mounted.view.container.querySelector('[data-files-history-refs]')!)
+    fireEvent.click(document.querySelector('[data-files-history-ref=":all"]')!)
+    await settleReads()
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.ref).toBeUndefined()
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.refPicked).toBe(true)
+    // A later refs read keeps the reader's all-refs scope even though a branch
+    // is attached by then, rather than pulling the list back to that branch.
+    mounted.historyRefs.mockResolvedValueOnce({ value: REFS, current: true })
+    mounted.history.mockResolvedValueOnce({ value: PAGE, current: true })
+    fireEvent.click(mounted.view.container.querySelector('[data-files-history-refresh]')!)
+    await settleReads()
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.ref).toBeUndefined()
+    expect(mounted.history).toHaveBeenLastCalledWith(TAB, ROOT, { skip: 0, limit: 50 }, expect.anything())
+  })
+
+  it('returns to the attached branch when the picked ref disappears', async () => {
+    const mounted = await seeded({ refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF })
+    await openHistory(mounted)
+    mounted.history.mockResolvedValueOnce({ value: PAGE, current: true })
+    fireEvent.click(mounted.view.container.querySelector('[data-files-history-refs]')!)
+    fireEvent.click(document.querySelector('[data-files-history-ref="release"]')!)
+    await settleReads()
+    // The release branch is deleted outside the workbench.
+    const withoutRelease = REFS.filter(ref => ref.refname !== 'refs/heads/release')
+    mounted.historyRefs.mockResolvedValueOnce({ value: withoutRelease, current: true })
+    mounted.history.mockResolvedValueOnce({ value: PAGE, current: true })
+    fireEvent.click(mounted.view.container.querySelector('[data-files-history-refresh]')!)
+    await settleReads()
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.ref).toBe('refs/heads/dev')
+    expect(mounted.view.container.querySelector('[data-files-history-refs]')?.textContent).toBe('dev')
     expect(mounted.history).toHaveBeenLastCalledWith(
       TAB, ROOT, { ref: 'refs/heads/dev', skip: 0, limit: 50 }, expect.anything(),
     )
@@ -639,7 +955,7 @@ describe('history through the body', () => {
     fireEvent.click(mounted.view.container.querySelector('[data-files-history-refresh]')!)
     await act(async () => {})
     fireEvent.click(mounted.view.container.querySelector('[data-files-history-refs]')!)
-    fireEvent.click(document.querySelector('[data-files-history-ref="dev"]')!)
+    fireEvent.click(document.querySelector('[data-files-history-ref="release"]')!)
     await act(async () => {})
     expect(pending).toHaveLength(2)
     pending[1]!({ value: PAGE, current: true })
@@ -647,7 +963,7 @@ describe('history through the body', () => {
     // The superseded read settles after the page it replaced.
     pending[0]!({ value: PAGE, current: false })
     await act(async () => {})
-    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.ref).toBe('refs/heads/dev')
+    expect(mounted.instance.getSnapshot().byTab[TAB]?.history.ref).toBe('refs/heads/release')
     expect(mounted.instance.getSnapshot().byTab[TAB]?.history.commits).toEqual(COMMITS)
   })
 

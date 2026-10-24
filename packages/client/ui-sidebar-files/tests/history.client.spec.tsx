@@ -4,9 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceGitCommit, WorkspaceGitHistory, WorkspaceGitRef } from '@deepseek-ai/dsh-workspace-changes/types'
 import { filesFace } from '../src/client/face.ts'
 import {
-  absoluteTime, commitRefPills, historyTime, pickHistoryFile, refDisplayName, refsByCommit, renameOrigin,
+  absoluteTime, attachedBranch, commitRefPills, historyPageChange, historyTime, pickHistoryFile,
+  refDisplayName, refsByCommit, renameOrigin, resolveHistoryRef, walksHead,
 } from '../src/client/history.ts'
-import { isGitCommitDetail, isGitHistory, isGitRefs } from '../src/git.ts'
+import { isGitCommitDetail, isGitHistory, isGitRefs, sameGitRefs } from '../src/git.ts'
 import { zh } from '../src/client/locales.ts'
 import { createFilesStore } from '../src/client/store.ts'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
@@ -45,6 +46,61 @@ describe('history helpers', () => {
       shown: [refs[3], refs[4]], more: 2,
     })
     expect(commitRefPills([], 2)).toEqual({ shown: [], more: 0 })
+  })
+
+  it('follows the attached branch by default and keeps a pick while the repository reports it', () => {
+    expect(attachedBranch(REFS)).toBe('refs/heads/dev')
+    // A detached HEAD reports no attached branch to follow.
+    expect(attachedBranch([REFS[1]!])).toBeUndefined()
+    // Nothing picked yet: the list follows the branch that is checked out now,
+    // whichever ref the earlier read walked.
+    expect(resolveHistoryRef(REFS, undefined, false)).toBe('refs/heads/dev')
+    expect(resolveHistoryRef(REFS, 'refs/heads/release', false)).toBe('refs/heads/dev')
+    // Detached, the all-refs scope is the default.
+    expect(resolveHistoryRef([REFS[1]!], undefined, false)).toBeUndefined()
+    // A pick survives a refs read while the repository still reports it, and an
+    // explicit all-refs pick needs no ref name.
+    expect(resolveHistoryRef(REFS, 'refs/heads/release', true)).toBe('refs/heads/release')
+    expect(resolveHistoryRef(REFS, undefined, true)).toBeUndefined()
+    // A picked ref the answer no longer reports returns to the default scope.
+    expect(resolveHistoryRef(REFS, 'refs/heads/gone', true)).toBe('refs/heads/dev')
+    expect(resolveHistoryRef([REFS[1]!], 'refs/heads/dev', true)).toBeUndefined()
+  })
+
+  it('places the uncommitted-changes row only in the scope that starts at HEAD', () => {
+    expect(walksHead(REFS, undefined)).toBe(true)
+    expect(walksHead(REFS, 'refs/heads/dev')).toBe(true)
+    expect(walksHead(REFS, 'refs/heads/release')).toBe(false)
+    // A detached HEAD walks all refs; any named ref is another history.
+    expect(walksHead([REFS[1]!], undefined)).toBe(true)
+    expect(walksHead([REFS[1]!], 'refs/heads/release')).toBe(false)
+  })
+
+  it('reads a quiet first page as prepended commits, an unchanged list, or a rewrite', () => {
+    const newer: WorkspaceGitCommit = {
+      hash: hash('d'), short: 'ddddddd', parents: [COMMITS[0]!.hash], author: 'lead',
+      authoredAt: '2026-10-20T08:00:00+08:00', subject: 'feat: land outside the view',
+    }
+    // The page repeats the loaded history, however much of it each holds.
+    expect(historyPageChange(COMMITS, COMMITS)).toEqual({ kind: 'unchanged' })
+    expect(historyPageChange(COMMITS, COMMITS.slice(0, 2))).toEqual({ kind: 'unchanged' })
+    // A commit landed at the tip: only the commits above the loaded list move.
+    expect(historyPageChange(COMMITS, [newer, ...COMMITS]))
+      .toEqual({ kind: 'prepended', commits: [newer] })
+    // The list may hold a shorter prefix than the page; fresh commits still prepend.
+    expect(historyPageChange(COMMITS.slice(0, 2), [newer, ...COMMITS.slice(0, 2)]))
+      .toEqual({ kind: 'prepended', commits: [newer] })
+    // An empty list takes the whole page, and an empty page is no change at all.
+    expect(historyPageChange([], [])).toEqual({ kind: 'unchanged' })
+    expect(historyPageChange([], [newer, ...COMMITS])).toEqual({ kind: 'replaced' })
+    // A rewritten tip no longer reaches the loaded rows, or disagrees with them
+    // behind the fresh commits.
+    expect(historyPageChange(COMMITS, [{ ...COMMITS[0]!, hash: hash('e') }, ...COMMITS.slice(1)]))
+      .toEqual({ kind: 'replaced' })
+    expect(historyPageChange(COMMITS, [newer, COMMITS[0]!, { ...COMMITS[1]!, hash: hash('e') }]))
+      .toEqual({ kind: 'replaced' })
+    // A page that goes on past the loaded list carries commits it never read.
+    expect(historyPageChange(COMMITS.slice(0, 2), COMMITS)).toEqual({ kind: 'replaced' })
   })
 
   it('strips the bidi controls a ref name may carry', () => {
@@ -121,7 +177,7 @@ describe('history slice', () => {
     expect(failed.refsFailure).toBe(true)
     expect(failed.refs).toBeUndefined()
     actions.historyRefsLoading(TAB)
-    actions.historyRefsLoaded(TAB, REFS)
+    actions.historyRefsLoaded(TAB, REFS, undefined)
     const loaded = store.getSnapshot().byTab[TAB]!.history
     expect(loaded.refsLoading).toBe(false)
     expect(loaded.refsFailure).toBe(false)
@@ -132,7 +188,7 @@ describe('history slice', () => {
     const store = createFilesStore().create()
     const { actions } = store
     actions.start(TAB, ROOT)
-    actions.historyRefsLoaded(TAB, REFS)
+    actions.historyRefsLoaded(TAB, REFS, undefined)
     actions.historyLoading(TAB)
     actions.historyLoaded(TAB, undefined, 0, 0, PAGE)
     actions.historyCommitSelected(TAB, hash('a'))
@@ -145,7 +201,7 @@ describe('history slice', () => {
     // A different ref restarts the list: pages, selection, and its page go.
     actions.historyRefSelected(TAB, 'dev')
     expect(store.getSnapshot().byTab[TAB]?.history).toMatchObject({
-      ref: 'dev', commits: [], hasMore: false, loading: true, failure: false,
+      ref: 'dev', refPicked: true, commits: [], hasMore: false, loading: true, failure: false,
       selected: undefined, file: undefined, detail: undefined, diff: undefined,
       listScrollTop: 0, pageOpen: false,
     })
@@ -155,28 +211,88 @@ describe('history slice', () => {
     expect(store.getSnapshot().byTab[TAB]?.history.commits).toEqual(COMMITS)
   })
 
-  it('returns to walking HEAD when the selected ref disappears from the answer', () => {
+  it('restarts the list when a refs answer walks another ref, and keeps it when the ref holds', () => {
     const store = createFilesStore().create()
     const { actions } = store
     actions.start(TAB, ROOT)
-    actions.historyRefsLoaded(TAB, REFS)
-    actions.historyRefSelected(TAB, 'dev')
-    actions.historyLoaded(TAB, 'dev', 0, 0, PAGE)
+    actions.historyRefsLoaded(TAB, REFS, 'refs/heads/dev')
+    actions.historyLoading(TAB)
+    actions.historyLoaded(TAB, 'refs/heads/dev', 0, 0, PAGE)
     actions.historyCommitSelected(TAB, hash('a'))
     actions.historyDetailLoaded(TAB, hash('a'), DETAIL)
-    const withoutDev: readonly WorkspaceGitRef[] = [REFS[1]!]
-    actions.historyRefsLoaded(TAB, withoutDev)
+    // The same walk keeps the loaded page and the shown commit.
+    actions.historyRefsLoaded(TAB, REFS, 'refs/heads/dev')
     expect(store.getSnapshot().byTab[TAB]?.history).toMatchObject({
-      ref: undefined, commits: [], hasMore: false, loading: false,
-      selected: undefined, file: undefined, detail: undefined, pageOpen: false,
+      ref: 'refs/heads/dev', commits: COMMITS, selected: hash('a'), detail: DETAIL,
     })
+    // Another walk restarts the list, clearing the page it no longer reaches.
+    actions.historyRefsLoaded(TAB, [REFS[1]!], 'refs/heads/release')
+    expect(store.getSnapshot().byTab[TAB]?.history).toMatchObject({
+      ref: 'refs/heads/release', commits: [], hasMore: false,
+      selected: undefined, file: undefined, detail: undefined, diff: undefined, pageOpen: false,
+    })
+  })
+
+  it('applies a quiet first-page reread without dropping the loaded pages or the shown commit', () => {
+    const store = createFilesStore().create()
+    const { actions } = store
+    actions.start(TAB, ROOT)
+    actions.historyRefsLoaded(TAB, REFS, 'refs/heads/dev')
+    actions.historyLoading(TAB)
+    actions.historyLoaded(TAB, 'refs/heads/dev', 0, 0, PAGE)
+    actions.historyCommitSelected(TAB, hash('a'))
+    actions.historyDetailLoaded(TAB, hash('a'), DETAIL)
+    const before = store.getSnapshot()
+    // The same page, and an answer for another walk, write nothing.
+    actions.historyPageRefreshed(TAB, 'refs/heads/dev', PAGE)
+    expect(store.getSnapshot()).toBe(before)
+    actions.historyPageRefreshed(TAB, 'refs/heads/release', PAGE)
+    expect(store.getSnapshot()).toBe(before)
+    // A commit landed: it joins the top, and the loaded list and shown page stay.
+    const newer: WorkspaceGitCommit = {
+      hash: hash('d'), short: 'ddddddd', parents: [COMMITS[0]!.hash], author: 'lead',
+      authoredAt: '2026-10-20T08:00:00+08:00', subject: 'feat: land outside the view',
+    }
+    actions.historyPageRefreshed(TAB, 'refs/heads/dev', { commits: [newer, ...COMMITS], hasMore: true })
+    expect(store.getSnapshot().byTab[TAB]?.history).toMatchObject({
+      ref: 'refs/heads/dev', commits: [newer, ...COMMITS], hasMore: true,
+      selected: hash('a'), detail: DETAIL,
+    })
+    // A rewritten ref replaces the rows, and the page's hasMore follows it.
+    actions.historyPageRefreshed(TAB, 'refs/heads/dev', { commits: [COMMITS[1]!], hasMore: false })
+    expect(store.getSnapshot().byTab[TAB]?.history).toMatchObject({
+      commits: [COMMITS[1]], hasMore: false, selected: hash('a'),
+    })
+    // A successful reread clears a failed one's banner even when the page holds
+    // the rows already drawn.
+    actions.historyLoading(TAB)
+    actions.historyFailed(TAB)
+    expect(store.getSnapshot().byTab[TAB]?.history.failure).toBe(true)
+    actions.historyPageRefreshed(TAB, 'refs/heads/dev', { commits: [COMMITS[1]!], hasMore: false })
+    expect(store.getSnapshot().byTab[TAB]?.history.failure).toBe(false)
+  })
+
+  it('records an unchanged refs answer without writing the store', () => {
+    const store = createFilesStore().create()
+    const { actions } = store
+    actions.start(TAB, ROOT)
+    actions.historyRefsLoaded(TAB, REFS, 'refs/heads/dev')
+    const before = store.getSnapshot()
+    // The quiet reread repeats the drawn refs and walk: no state changes, so no
+    // observer hears about it.
+    actions.historyRefsLoaded(TAB, REFS.map(ref => ({ ...ref })), 'refs/heads/dev')
+    expect(store.getSnapshot()).toBe(before)
+    // A tip that moved is a change the rows' pills must follow.
+    actions.historyRefsLoaded(TAB, [{ ...REFS[0]!, hash: hash('d') }, ...REFS.slice(1)], 'refs/heads/dev')
+    expect(store.getSnapshot()).not.toBe(before)
+    expect(store.getSnapshot().byTab[TAB]?.history.refs?.[0]?.hash).toBe(hash('d'))
   })
 
   it('replaces the first page and appends only the page that continues the list', () => {
     const store = createFilesStore().create()
     const { actions } = store
     actions.start(TAB, ROOT)
-    actions.historyRefsLoaded(TAB, REFS)
+    actions.historyRefsLoaded(TAB, REFS, undefined)
     actions.historyLoading(TAB)
     // An answer for another ref never lands in this list.
     actions.historyLoaded(TAB, 'dev', 0, 0, PAGE)
@@ -220,7 +336,7 @@ describe('history slice', () => {
     const store = createFilesStore().create()
     const { actions } = store
     actions.start(TAB, ROOT)
-    actions.historyRefsLoaded(TAB, REFS)
+    actions.historyRefsLoaded(TAB, REFS, undefined)
     actions.historyLoaded(TAB, undefined, 0, 0, PAGE)
     // A load-more for skip 3 starts, then the reader walks another ref and
     // comes back: the same ref and the same offset hold again, at a new epoch.
@@ -344,7 +460,7 @@ describe('history slice', () => {
     actions.start(TAB, ROOT)
     actions.start('tab-2' as TabId, ROOT)
     actions.containerSelected(TAB, 'history')
-    actions.historyRefsLoaded(TAB, REFS)
+    actions.historyRefsLoaded(TAB, REFS, undefined)
     // A failed or unavailable read keeps the history container retryable; a
     // directory that stops being a repository returns the workbench to files.
     actions.gitStatusLoaded(TAB, { kind: 'unavailable', entries: [], total: 0 })
@@ -357,6 +473,21 @@ describe('history slice', () => {
 })
 
 describe('history route validators', () => {
+  it('compares refs answers by every field the filter and the pills draw', () => {
+    expect(sameGitRefs(undefined, REFS)).toBe(false)
+    expect(sameGitRefs(REFS, REFS)).toBe(true)
+    expect(sameGitRefs(REFS, REFS.map(ref => ({ ...ref })))).toBe(true)
+    // A moved tip, a ref kind, the attached branch, and the list length all
+    // change what the view draws.
+    expect(sameGitRefs(REFS, [{ ...REFS[0]!, hash: hash('d') }, ...REFS.slice(1)])).toBe(false)
+    expect(sameGitRefs(REFS, [{ ...REFS[0]!, kind: 'remote' }, ...REFS.slice(1)])).toBe(false)
+    expect(sameGitRefs(REFS, [{ name: 'dev', refname: 'refs/heads/dev', kind: 'local', hash: hash('a') }, ...REFS.slice(1)]))
+      .toBe(false)
+    expect(sameGitRefs(REFS, REFS.slice(1))).toBe(false)
+    expect(sameGitRefs(REFS, [...REFS, { name: 'x', refname: 'refs/heads/x', kind: 'local', hash: hash('e') }]))
+      .toBe(false)
+  })
+
   it('accepts well-formed refs and rejects malformed ones', () => {
     expect(isGitRefs(REFS)).toBe(true)
     expect(isGitRefs([])).toBe(true)

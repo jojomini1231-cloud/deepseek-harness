@@ -70,7 +70,7 @@ export const DIFF: TextDiff = {
 /** A tab's history slice with every field defaulted, overridable per case. */
 export function historyState(overrides: Partial<HistoryTabState> = {}): HistoryTabState {
   return {
-    refs: undefined, refsLoading: false, refsFailure: false, ref: undefined,
+    refs: undefined, refsLoading: false, refsFailure: false, ref: undefined, refPicked: false,
     commits: [], listEpoch: 0, hasMore: false, loading: false, failure: false,
     selected: undefined, file: undefined, filesOpen: true,
     detail: undefined, diff: undefined, diffMode: 'unified', diffComplete: false,
