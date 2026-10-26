@@ -118,12 +118,6 @@ async function mockPlatform() {
       } } })
       return
     }
-    if (url.pathname === '/api/v0/users/get_api_keys') {
-      reply({ code: 0, data: { biz_code: 0, biz_data: {
-        api_keys: [{ tracking_id: 'dsh-test', key_type: 'DSH', created_at: 1 }],
-      } } })
-      return
-    }
     if (url.pathname === '/api/v0/usage/by_api_key/cost') {
       reply({ code: 0, data: { biz_code: 0, biz_data: { data: [] } } })
       return

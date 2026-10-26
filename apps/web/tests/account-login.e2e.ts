@@ -83,10 +83,6 @@ async function mockPlatform() {
       reply({ normal_wallets: [{ currency: 'CNY', balance: '1.00' }], bonus_wallets: [] })
       return
     }
-    if (url.pathname === '/api/v0/users/get_api_keys') {
-      reply({ api_keys: [{ tracking_id: 'dsh-test', key_type: 'DSH', created_at: 1 }] })
-      return
-    }
     if (url.pathname === '/api/v0/usage/by_api_key/cost') {
       reply({ data: [] })
       return

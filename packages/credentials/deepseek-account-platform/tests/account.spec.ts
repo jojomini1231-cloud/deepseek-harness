@@ -74,12 +74,8 @@ async function fixture(
     start: string | null
     end: string | null
     tz: string | null
-    apiKeyTrackingId: string | null
     authorization: string | undefined
   }> = []
-  let usageApiKeys: unknown = { api_keys: [{ tracking_id: 'dsh-tracking', key_type: 'DSH', created_at: 1 }] }
-  let usageApiKeyStatus = 200
-  let usageApiKeysRejected = false
   let usageCost: unknown = {
     data: [{ currency: 'CNY',
       series: [{ buckets: [{ time: 1, cost: '0.25' }] }],
@@ -116,14 +112,6 @@ async function fixture(
       res.end(JSON.stringify({ code: logoutFailed ? 50000 : 0, data: { biz_code: 0, biz_data: null } }))
       return
     }
-    if (req.method === 'GET' && req.url === '/api/v0/users/get_api_keys') {
-      if (usageApiKeyStatus !== 200) { res.writeHead(usageApiKeyStatus).end(); return }
-      res.setHeader('content-type', 'application/json')
-      res.end(JSON.stringify(usageApiKeysRejected
-        ? { code: 40003 }
-        : { code: 0, data: { biz_code: 0, biz_data: usageApiKeys } }))
-      return
-    }
     if (req.method === 'GET' && req.url?.startsWith('/api/v0/usage/')) {
       const url = new URL(req.url, origin)
       usageRequests.push({
@@ -131,7 +119,6 @@ async function fixture(
         start: url.searchParams.get('start'),
         end: url.searchParams.get('end'),
         tz: url.searchParams.get('tz'),
-        apiKeyTrackingId: url.searchParams.get('api_key_tracking_id'),
         authorization: req.headers['x-dsh-auth-token'] as string | undefined,
       })
       usageStarted.resolve(undefined)
@@ -232,9 +219,6 @@ async function fixture(
     invalidateSummary: () => { normalWallets = [{ currency: 'CNY', balance: 'not-a-decimal' }] },
     normalWallets: (value: unknown) => { normalWallets = value },
     usageRequests, usageStarted, holdUsage: () => { usageHold = true },
-    setUsageApiKeys: (value: unknown) => { usageApiKeys = value },
-    failUsageApiKeys: (status: number) => { usageApiKeyStatus = status },
-    rejectUsageApiKeys: () => { usageApiKeysRejected = true },
     setUsageCost: (value: unknown) => { usageCost = value },
     failUsage: (status: number) => { usageStatus = status },
     failUsageBiz: () => { usageFailed = true },
@@ -512,8 +496,7 @@ it('reads usage for the current local day', async () => {
   const start = String(Date.UTC(2026, 9, 18) / 1000 - 28_800)
   const end = String(Date.UTC(2026, 9, 19) / 1000 - 28_800)
   expect(f.usageRequests).toEqual([
-    { path: '/api/v0/usage/by_api_key/cost', start, end, tz: '28800',
-      apiKeyTrackingId: 'dsh-tracking', authorization: 'test-platform-grant' },
+    { path: '/api/v0/usage/by_api_key/cost', start, end, tz: '28800', authorization: 'test-platform-grant' },
   ])
   const identity = (header: (typeof f.receivedHeaders)[number]) => ({
     clientPlatform: header.clientPlatform, bundleId: header.bundleId, version: header.version,
@@ -523,44 +506,8 @@ it('reads usage for the current local day', async () => {
     clientPlatform: 'web', bundleId: '', version: '1.2.3', locale: 'zh_CN', timezoneOffset: '28800',
     authorization: 'test-platform-grant',
   }
-  expect(f.receivedHeaders.filter(header => header.path === '/api/v0/users/get_api_keys').map(identity))
-    .toEqual([expected])
   expect(f.receivedHeaders.filter(header => header.path?.startsWith('/api/v0/usage/by_api_key/cost?')).map(identity))
     .toEqual([expected])
-})
-
-it('reports every key when the account has no Harness key', async () => {
-  const f = await fixture()
-  await storeAccount(f)
-  f.setUsageApiKeys({ api_keys: [{ tracking_id: 'normal-tracking', key_type: 'NORMAL', created_at: 1 }] })
-  f.setUsageCost({ data: [{ currency: 'CNY',
-    series: [{ buckets: [{ time: 1, cost: '1.50' }] }],
-    function_series: [] }] })
-  expect(await f.account.getUsage(clientMetadata())).toEqual({ status: 'ready', value: {
-    cost: [{ currency: 'CNY', amount: '1.5' }],
-  } })
-  expect(f.usageRequests.map(request => request.apiKeyTrackingId)).toEqual([null])
-})
-
-it('fails usage when the API key list cannot be read', async () => {
-  const f = await fixture()
-  await storeAccount(f)
-  f.failUsageApiKeys(500)
-  expect(await f.account.getUsage(clientMetadata())).toEqual({ status: 'failed' })
-  expect(f.usageRequests).toEqual([])
-  expect((await f.account.getState()).status).toBe('credential-stored')
-})
-
-it('clears the credential when the API key list rejects it', async () => {
-  const f = await fixture()
-  await storeAccount(f)
-  const expired = vi.fn()
-  f.ctx.on('deepseek-account/session-expired', expired)
-  f.rejectUsageApiKeys()
-  expect(await f.account.getUsage(clientMetadata())).toBeNull()
-  expect(expired).toHaveBeenCalledOnce()
-  expect((await f.account.getState()).status).toBe('signed-out')
-  expect(await f.ctx.credentials.readRecord(credentialKey('deepseek-account-platform', 'default'))).toBeUndefined()
 })
 
 it.each([

@@ -116,28 +116,12 @@ export function requestAccount(origin: string, path: '/auth-api/v0/users/current
   return platformRequest(`${origin}${path}`, { method: 'GET', headers: accountHeaders(headers, token) }, signal)
 }
 
-/**
- * Read the account's API key list with the grant kept in Host request headers.
- * @param origin - configured and grant-matched origin.
- * @param token - account grant.
- * @param signal - credential lifetime and request timeout.
- * @param headers - validated deployment headers for this origin.
- * @returns successful business payload; the caller retains only key metadata it uses.
- */
-export function requestApiKeys(origin: string, token: string,
-  signal: AbortSignal, headers: Record<string, string>): Promise<unknown> {
-  return platformRequest(`${origin}/api/v0/users/get_api_keys`,
-    { method: 'GET', headers: accountHeaders(headers, token) }, signal)
-}
-
-/** Window, bucketing zone, and optional API key filter for the usage cost query. */
+/** Window and bucketing zone for the usage cost query. */
 export interface PlatformUsageQuery {
   readonly start: number
   readonly end: number
   /** Whole-hour UTC offset expected by the usage endpoint. */
   readonly tz: number
-  /** Platform tracking id of the DeepSeek Harness key; absent reports every key. */
-  readonly trackingId?: string | undefined
 }
 
 const USAGE_COST_PATH = '/api/v0/usage/by_api_key/cost'
@@ -145,7 +129,7 @@ const USAGE_COST_PATH = '/api/v0/usage/by_api_key/cost'
 /**
  * Read the account's usage cost for one window with the grant kept in Host request headers.
  * @param origin - configured and grant-matched origin.
- * @param query - window start, exclusive end, bucketing offset, and optional key filter.
+ * @param query - window start, exclusive end, and bucketing offset.
  * @param token - account grant.
  * @param signal - credential lifetime and request timeout.
  * @param headers - validated deployment headers for this origin.
@@ -157,7 +141,6 @@ export function requestUsage(origin: string, query: PlatformUsageQuery,
   url.searchParams.set('start', String(query.start))
   url.searchParams.set('end', String(query.end))
   url.searchParams.set('tz', String(query.tz))
-  if (query.trackingId !== undefined) url.searchParams.set('api_key_tracking_id', query.trackingId)
   return platformRequest(url.href, { method: 'GET', headers: accountHeaders(headers, token) }, signal, USAGE_BODY_LIMIT)
 }
 

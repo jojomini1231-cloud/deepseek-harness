@@ -1,7 +1,7 @@
 /** Platform usage window and aggregation. */
 import { expect, it } from 'vitest'
 import { PlatformAuthError } from '../src/protocol.ts'
-import { dshTrackingId, summarizeUsageCost, usageWindow } from '../src/usage.ts'
+import { summarizeUsageCost, usageWindow } from '../src/usage.ts'
 
 const now = Date.UTC(2026, 9, 18, 3, 44, 20) / 1000
 
@@ -57,24 +57,6 @@ it('rejects a cost total that overflows to a non-finite number', () => {
   expect(() => summarizeUsageCost({
     data: [{ currency: 'CNY', series: [{ buckets: [{ cost: '1e999' }] }], function_series: [] }],
   })).toThrow(PlatformAuthError)
-})
-
-it.each([
-  [{ api_keys: [{ tracking_id: 'older', key_type: 'DSH', created_at: 1 },
-    { tracking_id: 'newer', key_type: 'DSH', created_at: 2 }] }, 'newer'],
-  [{ api_keys: [{ tracking_id: 'newer', key_type: 'DSH', created_at: 2 },
-    { tracking_id: 'older', key_type: 'DSH', created_at: 1 }] }, 'newer'],
-  [{ api_keys: [{ tracking_id: 'fallback', key_type: 'DSH' }] }, 'fallback'],
-  [{ api_keys: [{ tracking_id: 'normal', key_type: 'NORMAL', created_at: 2 }] }, undefined],
-  [{ api_keys: [{ tracking_id: null, key_type: 'DSH', created_at: 2 }] }, undefined],
-  [{ api_keys: [] }, undefined],
-])('selects the newest Harness key tracking id when one exists', (apiKeys, expected) => {
-  expect(dshTrackingId(apiKeys)).toBe(expected)
-})
-
-it('rejects a malformed API key list before querying usage', () => {
-  expect(() => dshTrackingId({ api_keys: [{ tracking_id: 1, key_type: 'DSH' }] })).toThrow(PlatformAuthError)
-  expect(() => dshTrackingId({ api_keys: 'invalid' })).toThrow(PlatformAuthError)
 })
 
 it.each([

@@ -1,18 +1,11 @@
 /** Platform usage-window queries and totals for the account menu. */
 import { z } from 'zod'
 import type { AccountUsage, AccountUsageCost, AccountUsageOutcome } from '@deepseek-ai/dsh-deepseek-account/types'
-import { AccountUnauthorizedError, PlatformAuthError, requestApiKeys, requestUsage } from './protocol.ts'
+import { AccountUnauthorizedError, PlatformAuthError, requestUsage } from './protocol.ts'
 import { platformDecimal } from './decimal.ts'
 
 const DAY_SECONDS = 86_400
 
-const apiKeysPayload = z.object({
-  api_keys: z.array(z.object({
-    tracking_id: z.string().nullish(),
-    key_type: z.string().nullish(),
-    created_at: z.number().nullish(),
-  })),
-})
 const costValue = z.union([z.string().regex(platformDecimal), z.number()])
 const costSeries = z.object({ buckets: z.array(z.object({ cost: costValue })) })
 const costPayload = z.object({
@@ -39,8 +32,7 @@ export function usageWindow(nowSeconds: number, offsetSeconds: number): { start:
 }
 
 /**
- * Sum the Platform cost response. The response is already filtered to the
- * requested key by the Platform endpoint.
+ * Sum the account-wide Platform cost response.
  * @param value - `/api/v0/usage/by_api_key/cost` business payload.
  * @returns per-currency consumption over the reporting window.
  * @throws PlatformAuthError when the payload does not match the endpoint schema.
@@ -60,24 +52,6 @@ export function summarizeUsageCost(value: unknown): AccountUsage {
 }
 
 /**
- * Select the DeepSeek Harness API key used by the usage filter. The newest DSH
- * key wins when Platform reports more than one; no DSH key leaves usage unfiltered.
- * @param value - `/api/v0/users/get_api_keys` business payload.
- * @returns the DSH key's tracking id or undefined when the account has none.
- * @throws PlatformAuthError when the payload does not match the endpoint schema.
- */
-export function dshTrackingId(value: unknown): string | undefined {
-  const parsed = decode(apiKeysPayload, value, 'api-keys')
-  let selected: { id: string; createdAt: number } | undefined
-  for (const key of parsed.api_keys) {
-    if (key.key_type !== 'DSH' || !key.tracking_id) continue
-    const createdAt = key.created_at ?? 0
-    if (selected === undefined || createdAt > selected.createdAt) selected = { id: key.tracking_id, createdAt }
-  }
-  return selected?.id
-}
-
-/**
  * Read the account's usage cost for the caller's current local day.
  * @param origin - configured origin matching the stored grant issuer.
  * @param token - stored account grant.
@@ -92,9 +66,7 @@ export async function readAccountUsage(origin: string, token: string, offsetSeco
   signal: AbortSignal, timeoutMs: number, headers: Record<string, string>): Promise<AccountUsageOutcome> {
   const window = usageWindow(Date.now() / 1000, offsetSeconds)
   try {
-    const trackingId = dshTrackingId(await requestApiKeys(origin, token, requestSignal(signal, timeoutMs), headers))
-    const query = { ...window, trackingId }
-    const cost = await requestUsage(origin, query, token, requestSignal(signal, timeoutMs), headers)
+    const cost = await requestUsage(origin, window, token, requestSignal(signal, timeoutMs), headers)
     return { status: 'ready', value: summarizeUsageCost(cost) }
   } catch (error) {
     if (error instanceof AccountUnauthorizedError) throw error
@@ -107,7 +79,7 @@ function requestSignal(lifetime: AbortSignal, timeoutMs: number): AbortSignal {
   return AbortSignal.any([lifetime, AbortSignal.timeout(timeoutMs)])
 }
 
-function decode<T>(schema: z.ZodType<T>, value: unknown, field: 'api-keys' | 'usage-cost'): T {
+function decode<T>(schema: z.ZodType<T>, value: unknown, field: 'usage-cost'): T {
   const parsed = schema.safeParse(value)
   if (!parsed.success) {
     console.error('[deepseek-account] usage schema rejected', {

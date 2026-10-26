@@ -2,7 +2,6 @@ import { expect, it, vi } from 'vitest'
 import { browserUrl, logoutAccount, requestAccount, requestBonusNotified, requestPlatform, requestUnnotifiedBonuses, requestUsage } from '../src/protocol.ts'
 import type { AccountBonusOrderId } from '@deepseek-ai/dsh-deepseek-account/types'
 import { readAccountDetail, readUnnotifiedBonuses } from '../src/details.ts'
-import { dshTrackingId } from '../src/usage.ts'
 
 it.each(['/dsh/authorize', '/dsh/authorized'])('maps %s to the configured development origin and preserves query bytes', (path) => {
   const origin = 'http://localhost:8081'
@@ -183,22 +182,6 @@ it.each([
   } finally {
     fetcher.mockRestore()
     info.mockRestore()
-    output.mockRestore()
-  }
-})
-
-it('reports invalid API key fields without logging key data', () => {
-  const output = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-  try {
-    expect(() => dshTrackingId({ api_keys: [{ tracking_id: ['private-id'], key_type: 'DSH' }] }))
-      .toThrow('account: protocol')
-    expect(output.mock.calls[0]?.[0]).toBe('[deepseek-account] usage schema rejected')
-    const logged = JSON.stringify(output.mock.calls)
-    expect(logged).toContain('api-keys')
-    expect(logged).toContain('tracking_id')
-    expect(logged).toContain('invalid_type')
-    expect(logged).not.toContain('private-')
-  } finally {
     output.mockRestore()
   }
 })
