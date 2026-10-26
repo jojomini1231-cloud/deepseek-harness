@@ -21,16 +21,18 @@ it('joins wallet balances and omits an empty wallet list', () => {
 
 it.each([
   ['100', '0', 'success', 0],
-  ['100', '50', 'success', 50],
-  ['100', '50.05', 'success', 50],
-  ['100', '50.1', 'warn', 50.1],
-  ['100', '80', 'warn', 80],
-  ['100', '80.04', 'warn', 80],
-  ['100', '80.1', 'error', 80.1],
-  ['100', '150', 'error', 100],
+  ['100', '50', 'success', 33.3],
+  ['50', '50', 'success', 50],
+  ['49', '51', 'warn', 51],
+  ['20', '80', 'warn', 80],
+  ['19', '81', 'error', 81],
+  ['100', '150', 'warn', 60],
+  ['100', '400', 'warn', 80],
+  ['100', '500', 'error', 83.3],
+  ['100', '900', 'error', 90],
   ['0', '0', 'success', 0],
   ['0', '1', 'error', 100],
-])('maps balance %s and used %s to a %s meter at %s percent', (balance, used, level, percent) => {
+])('maps remaining balance %s and used %s to a %s meter at %s percent', (balance, used, level, percent) => {
   expect(usageMeter([{ currency: 'CNY', amount: used }], [{ currency: 'CNY', balance }]))
     .toEqual({ level, percent })
 })

@@ -39,8 +39,8 @@ export function usageMeter(cost: readonly AccountUsageCost[], wallets: readonly 
   const reported = cost.length === 0 ? '0' : cost.find(item => item.currency === wallet.currency)?.amount
   if (reported === undefined) return undefined
   const used = new Big(reported)
-  const balance = new Big(wallet.balance)
-  const ratio = balance.lte(0) ? (used.gt(0) ? new Big(1) : new Big(0)) : used.div(balance)
+  const total = new Big(wallet.balance).plus(used)
+  const ratio = total.lte(0) ? new Big(0) : used.div(total)
   const percent = Math.round(Math.min(1, Math.max(0, ratio.toNumber())) * 1000) / 10
   const level = percent <= 50 ? 'success' : percent <= 80 ? 'warn' : 'error'
   return { percent, level }
