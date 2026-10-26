@@ -152,9 +152,34 @@ describe('worktreeStatus', () => {
       'src/changed.ts', 'src/gone.ts', 'src/staged.ts', 'src/untracked.ts',
     ])
     expect(status.total).toBe(4)
+    // The cap holds per group, so the untracked file survives beside the two
+    // kept changes.
     const capped = await worktreeStatus(runner, cwd, signal, { ...LIMITS, maxFiles: 2 })
-    expect(capped.entries.map(entry => entry.path)).toEqual(['src/changed.ts', 'src/gone.ts'])
+    expect(capped.entries.map(entry => entry.path))
+      .toEqual(['src/changed.ts', 'src/gone.ts', 'src/untracked.ts'])
     expect(capped.total).toBe(4)
+  })
+
+  it('caps tracked changes and untracked files separately so neither group disappears', async () => {
+    const cwd = await scratchDir('dsh-worktree-groups-', cleanups)
+    git(cwd, 'init', '-q', '-b', 'main')
+    await mkdir(join(cwd, 'src'))
+    for (const name of ['a.ts', 'b.ts', 'c.ts']) await writeFile(join(cwd, 'src', name), 'before\n')
+    git(cwd, 'add', '.')
+    git(cwd, 'commit', '-q', '-m', 'seed')
+    for (const name of ['a.ts', 'b.ts', 'c.ts']) await writeFile(join(cwd, 'src', name), 'after\n')
+    // Untracked output sorts before the changed paths, so one shared budget
+    // would spend every entry here and hide all tracked changes.
+    await mkdir(join(cwd, 'dist'))
+    for (let index = 0; index < 4; index += 1) await writeFile(join(cwd, 'dist', `o${index}.js`), 'out\n')
+    const status = await worktreeStatus((await harness()).git, cwd, signal, { ...LIMITS, maxFiles: 2 })
+    expect(status.entries).toEqual([
+      { path: 'dist/o0.js', display: 'dist/o0.js', kind: 'untracked' },
+      { path: 'dist/o1.js', display: 'dist/o1.js', kind: 'untracked' },
+      { path: 'src/a.ts', display: 'src/a.ts', kind: 'modified' },
+      { path: 'src/b.ts', display: 'src/b.ts', kind: 'modified' },
+    ])
+    expect(status.total).toBe(7)
   })
 
   it('reports paths relative to a nested working directory', async () => {

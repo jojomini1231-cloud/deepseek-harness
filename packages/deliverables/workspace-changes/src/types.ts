@@ -98,7 +98,11 @@ export interface WorkspaceGitStatus {
   kind: 'repository' | 'not-a-repository' | 'unavailable'
   /** Branch name; absent when HEAD is detached. */
   branch?: string
-  /** Changed paths in `display` order, capped at the plugin's `maxFiles`. */
+  /**
+   * Changed paths in `display` order, capped at the plugin's `maxFiles` for the
+   * tracked changes and for the untracked files separately, so neither group
+   * can hide the other.
+   */
   entries: readonly WorkspaceGitEntry[]
   /** Complete changed-path count, including entries omitted by the cap. */
   total: number

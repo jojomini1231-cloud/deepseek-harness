@@ -37,7 +37,7 @@ kind: "package-reference"
 |---|---|---|
 | `timeoutMs` | `30000` | 单条 git 命令允许运行的毫秒数，超时则放弃本轮记录或该次历史读取 |
 | `outputMaxBytes` | `8388608` | 每条命令保留的 git 输出字节数，diff 列表更大时放弃本轮记录，历史输出更大时该次读取失败 |
-| `maxFiles` | `500` | 单份摘要或单份提交详情携带的最大文件数；`total` 仍报告完整数量 |
+| `maxFiles` | `500` | 单份摘要或单份提交详情携带的最大文件数，以及工作区状态视图两个分组各自的最大条目数；`total` 仍报告完整数量 |
 | `maxCommits` | `100` | 单页历史携带的最大提交数；请求更大的页时按此上限截断 |
 | `maxFileBytes` | `2097152` | 文件在文件工具编辑前后被捕获、或从快照读出做对比所允许的最大字节数；更大的文件不提供对比，其中在文件工具编辑前后被捕获的也不带行数 |
 | `diffTimeoutMs` | `100` | 逐行对比允许运行的毫秒数，超时后退化为整文件替换 |
@@ -48,7 +48,7 @@ kind: "package-reference"
 
 每个文件携带持久的 `path`——位于工作目录内时为相对路径，否则为绝对路径——以及用于排序和标签的 `display` 路径：相对路径，仓库内位于工作目录之上的文件为 `../` 路径，家目录下的文件为 `~` 路径，其余为绝对路径。文件按 `display` 的码元顺序排序，因此上级路径和绝对路径排在工作目录自身文件之前。`workspace/changes` 事件只携带轮号；`ctx.workspaceChanges.summary(sessionId, seq)` 返回该序号的事件宣告的摘要，Session 已释放或本 Host 进程从未记录时返回 undefined。`ctx.workspaceChanges.diff(sessionId, seq, index, signal)` 对比该下标所列的文件：从两棵快照树或两份副本得出带三行上下文的 hunk；git 报告为二进制或某一侧含 NUL 字节时返回 `binary`；某一侧超过 `maxFileBytes` 时返回 `oversized`。逐行对比运行超过 `diffTimeoutMs` 时退化为一个替换全部行的 hunk，并标记 `coarse`。因此 Host 重启后重新打开的对话，先前轮次既没有卡片也没有对比。
 
-`ctx.workspaceChanges.workingTree(cwd, signal)` 读取工作目录本身而不是某个已记录的轮次，供 Files 工作台的 git 视图使用：一次限定在 `cwd` 的 `git -c core.fsmonitor=false status --porcelain=v1 --branch -z --untracked-files=all`，路径相对 `cwd`，条目上限为 `maxFiles`，`total` 保留完整数量，重命名或复制的原路径放在 `from`。不在 git 工作树内的工作目录返回 `not-a-repository`；没有 git，或刷新无法完成时返回 `unavailable`。`ctx.workspaceChanges.workingDiff(cwd, { path, from?, complete? }, signal)` 返回 git 针对一个改动路径与 `HEAD` 的自身补丁，因此重命名、行尾与 clean 过滤器、符号链接都按 git 的方式读取，`coarse` 始终为 false。其 hunk 在每处改动周围带三行上下文；`complete: true` 则让对比覆盖整个文件，未改动的每一行都以上下文行返回。这些读取不运行仓库配置的程序：状态探测禁用 `core.fsmonitor`，对比禁用外部 diff 驱动和 textconv。`HEAD` 不包含的路径与 `/dev/null` 对比，覆盖未跟踪文件和没有提交的仓库；链接按其文本而不是目标对比。任意一侧超过 `maxFileBytes`，或补丁超过 `outputMaxBytes` 时，对比为 `oversized`；git 报告二进制补丁时为 `binary`。路径或原路径位于 `cwd` 之外——无论是直接拼写还是经由目录链接到达——或 git 失败时返回 undefined。
+`ctx.workspaceChanges.workingTree(cwd, signal)` 读取工作目录本身而不是某个已记录的轮次，供 Files 工作台的 git 视图使用：一次限定在 `cwd` 的 `git -c core.fsmonitor=false status --porcelain=v1 --branch -z --untracked-files=all`，路径相对 `cwd`，已跟踪的改动与未跟踪文件各自最多 `maxFiles` 条，`total` 保留完整数量，重命名或复制的原路径放在 `from`。不在 git 工作树内的工作目录返回 `not-a-repository`；没有 git，或刷新无法完成时返回 `unavailable`。`ctx.workspaceChanges.workingDiff(cwd, { path, from?, complete? }, signal)` 返回 git 针对一个改动路径与 `HEAD` 的自身补丁，因此重命名、行尾与 clean 过滤器、符号链接都按 git 的方式读取，`coarse` 始终为 false。其 hunk 在每处改动周围带三行上下文；`complete: true` 则让对比覆盖整个文件，未改动的每一行都以上下文行返回。这些读取不运行仓库配置的程序：状态探测禁用 `core.fsmonitor`，对比禁用外部 diff 驱动和 textconv。`HEAD` 不包含的路径与 `/dev/null` 对比，覆盖未跟踪文件和没有提交的仓库；链接按其文本而不是目标对比。任意一侧超过 `maxFileBytes`，或补丁超过 `outputMaxBytes` 时，对比为 `oversized`；git 报告二进制补丁时为 `binary`。路径或原路径位于 `cwd` 之外——无论是直接拼写还是经由目录链接到达——或 git 失败时返回 undefined。
 
 `ctx.workspaceChanges.historyRefs(cwd, signal)` 列出 Files 工作台历史视图可选的 ref：本地分支、远程分支和标签，按 git 的顺序排列，去掉远程仓库的符号 `HEAD`；附注标签剥离到它指向的提交，当前检出的本地分支带 `head: true`。`ctx.workspaceChanges.history(cwd, { ref?, skip, limit }, signal)` 读取一页：ref 必须命名上述 ref 之一，省略时走 `HEAD`；`skip` 与 `limit` 必须是安全整数，大于 `maxCommits` 的请求按该上限截断，提交按 git 的拓扑顺序从新到旧排列，`hasMore` 报告本页之后是否还有提交。没有任何提交的仓库返回空页。拓扑遍历读取的是提交图，而不是在本页最后一个提交处停止，因此开销取决于仓库的历史长度而非页大小；git 从 `git clone`、`git gc` 与 `git commit-graph write` 生成的 commit-graph 文件作答，没有该文件的仓库每次翻页和刷新都要付出一次完整的图遍历。
 

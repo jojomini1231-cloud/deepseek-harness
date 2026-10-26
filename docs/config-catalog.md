@@ -4571,13 +4571,16 @@ export interface Config {
 - `source`: [`packages/deliverables/workspace-changes/src/index.ts:39`](../packages/deliverables/workspace-changes/src/index.ts)
 
 ```ts config-catalog
-/** Snapshot, capture, and comparison bounds. Invalid values fail plugin load. */
+/** Snapshot, capture, comparison, and history bounds. Invalid values fail plugin load. */
 export interface Config {
-  /** Milliseconds one git command may run before the turn's record is abandoned. */
+  /** Milliseconds one git command may run before the turn's record or the history read is abandoned. */
   timeoutMs: number
-  /** Bytes of git output retained per command; a larger diff listing abandons the record. */
+  /** Bytes of git output retained per command; a larger diff listing abandons the record and a larger history output fails the read. */
   outputMaxBytes: number
-  /** Maximum files carried by one summary or one commit detail; `total` still reports the complete count. */
+  /**
+   * Maximum files carried by one summary or one commit detail, and by each of the
+   * working-tree status view's two groups; `total` still reports the complete count.
+   */
   maxFiles: number
   /** Maximum commits carried by one history page; a larger page request is clamped to it. */
   maxCommits: number

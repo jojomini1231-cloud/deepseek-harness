@@ -28,7 +28,7 @@ import type {
 
 /** Bounds the worktree reads share with the turn recorder. */
 export interface WorktreeLimits {
-  /** Changed entries one status read carries; `total` still reports the complete count. */
+  /** Changed entries one status read carries per view group; `total` still reports the complete count. */
   maxFiles: number
   /** Bytes a file may hold to be compared; a larger one is listed without lines. */
   maxFileBytes: number
@@ -143,10 +143,15 @@ export async function worktreeStatus(
   // A truncated listing would silently drop changed paths.
   if (status.exitCode !== 0 || status.truncated) return { kind: 'unavailable', entries: [], total: 0 }
   const parsed = parsePorcelain(status.stdout, prefix)
+  // The view draws tracked changes and untracked files as two groups, so the
+  // cap applies to each group: a large untracked tree — build output, a copied
+  // directory — must not consume the whole budget and hide every tracked change.
+  const changed = parsed.entries.filter(entry => entry.kind !== 'untracked').slice(0, limits.maxFiles)
+  const untracked = parsed.entries.filter(entry => entry.kind === 'untracked').slice(0, limits.maxFiles)
   return {
     kind: 'repository',
     ...(parsed.branch === undefined ? {} : { branch: parsed.branch }),
-    entries: parsed.entries.slice(0, limits.maxFiles),
+    entries: [...changed, ...untracked].sort(compareDisplay),
     total: parsed.entries.length,
   }
 }
