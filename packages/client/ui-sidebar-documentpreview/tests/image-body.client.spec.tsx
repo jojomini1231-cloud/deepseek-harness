@@ -42,6 +42,7 @@ function props(path = 'asset.png', data: Uint8Array<ArrayBuffer> = new Uint8Arra
     return selector(useSyncExternalStore(subscribe, snapshot))
   }
   return {
+    fileDrag,
     resourceAddress: `dsh-resource://file/session/image/${path}`,
     content: { kind: 'bytes', data },
     wrap: false,
@@ -82,13 +83,13 @@ describe('ImageBody', () => {
     expect(revoke).toHaveBeenCalledExactlyOnceWith('blob:https://preview.invalid/1')
   })
 
-  it('keeps the image non-draggable, then shows it after decoding succeeds', async () => {
+  it('allows a contained image to drag, then shows it after decoding succeeds', async () => {
     render(<ImageBody {...props('photo.svg')} />)
     const image = await screen.findByRole('img', { hidden: true })
     Object.defineProperty(image, 'naturalWidth', { configurable: true, value: 50 })
     expect(image.getAttribute('alt')).toBe('Image preview: photo.svg')
     expect(image.getAttribute('decoding')).toBe('async')
-    expect(image.getAttribute('draggable')).toBe('false')
+    expect(image.getAttribute('draggable')).toBe('true')
     expect(image.getAttribute('referrerpolicy')).toBe('no-referrer')
     expect(image.parentElement?.hasAttribute('hidden')).toBe(true)
     fireEvent.load(image)
@@ -150,3 +151,5 @@ describe('ImageBody', () => {
     expect(instance.getSnapshot().byView['image-tab']).toEqual({ kind: 'fit-width' })
   })
 })
+
+const fileDrag = { prepare: vi.fn(async () => ({ start: () => true, release: () => {} })), reportFailure: vi.fn() }

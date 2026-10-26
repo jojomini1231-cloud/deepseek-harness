@@ -9,6 +9,9 @@ export function localUnsignedPackageEnvironment(environment?: NodeJS.ProcessEnv)
 
 /**
  * Read a machine preset when selected, otherwise the target's required dotenv; no ambient release fallback.
+ * PACKAGE_MACOS_ZIP_COMPRESSION_LEVEL overrides the Mac file setting with 3 or 7; an empty value is invalid.
+ * PACKAGE_WINDOWS_COMPRESSION_LEVEL selects 3 or 7 for Windows workflow builds; blank retains the file setting.
+ * Any defined Mac ZIP override rejects Windows, including an empty value; nonempty Windows overrides reject macOS.
  * PACKAGE_TEST_RELEASE_ID overrides the test preset only; blank retains its configured ID.
  * Linux builds never read a dotenv file; they always use local unsigned-build defaults.
  * @param platform Target platform.

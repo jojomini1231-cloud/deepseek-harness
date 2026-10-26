@@ -31,6 +31,7 @@ const LISTING_DEADLINE_MS = 8_000
 const LISTING_PAGE_SIZE = 1000
 
 /** Artifact name electron-builder writes for one build, on any platform; unsigned and unnotarized builds add a suffix. */
+// oxlint-disable-next-line @stylistic/max-len -- A regex literal cannot wrap without changing the pattern.
 const ARTIFACT = /(?:^|\/)deepseek-harness-(?<version>.+)-(?:mac|win|linux)-(?:arm64|x64|x86_64)(?:-unsigned|-unnotarized)?\.(?:exe|dmg|zip|AppImage)$/u
 
 /** Inputs that decide which versions are already taken. */

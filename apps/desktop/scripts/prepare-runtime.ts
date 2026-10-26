@@ -61,9 +61,18 @@ async function main(): Promise<void> {
   const target = desktopTargetPlatform(resolveDesktopBuildTarget())
   rmSync(RUNTIME_ROOT, { recursive: true, force: true })
   mkdirSync(RUNTIME_ROOT, { recursive: true })
-  const electron = await prepareElectron(target)
-  await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'prepare:primary-runtime',
+  const preparePrimary = () => packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'prepare:primary-runtime',
     () => preparePrimaryRuntime({ deferSmoke: values['defer-primary-runtime-smoke'] }))
+  let electron: string
+  if (target.platform === 'win32') {
+    const [preparedElectron, primary] = await Promise.allSettled([prepareElectron(target), preparePrimary()])
+    if (preparedElectron.status === 'rejected') throw preparedElectron.reason
+    if (primary.status === 'rejected') throw primary.reason
+    electron = preparedElectron.value
+  } else {
+    electron = await prepareElectron(target)
+    await preparePrimary()
+  }
   const primaryRuntime = join(RUNTIME_ROOT, 'primary-runtime')
   const { node, pnpm } = await readPrimaryRuntime(primaryRuntime)
   if (node === undefined) throw new Error('desktop runtime: primary-runtime manifest has no Node version')

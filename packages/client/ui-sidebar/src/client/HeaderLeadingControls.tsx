@@ -21,12 +21,15 @@ export type HeaderLeadingControlsProps =
  * controls off screen; this occupant puts them back beside the traffic
  * lights. The frame mounts the seat only in that state and owns its
  * placement, so the occupant renders unconditionally.
- * @param props - Injected sidebar actions plus the sidebar locale seat.
- * @returns the window-chrome controls.
+ * @param props - Injected sidebar actions, the global access Hook, and the sidebar locale seat.
+ * @returns the sidebar toggle, plus the New Session and New temporary session controls while the access snapshot
+ *   allows `session/create`.
  */
 export function HeaderLeadingControls({
-  toggleSidebar, startSession, startTemporarySession, useShortcuts, t,
+  toggleSidebar, startSession, startTemporarySession, trackEntryClick, useRemoteAccess, useShortcuts, t,
 }: HeaderLeadingControlsProps) {
+  // A page whose access snapshot excludes starting a Session keeps only the sidebar toggle here.
+  const canStartSession = useRemoteAccess('session/create')
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'sidebar.left.toggle'))
   const newShortcut = useShortcuts(rows => rows.find(row => row.id === 'session.new'))
   return (
@@ -42,27 +45,34 @@ export function HeaderLeadingControls({
           <IconPanelLeftOutlineRegular size={16} />
         </button>
       </Tooltip>
-      <Tooltip label={t('session.new.label')} shortcutKeys={newShortcut?.keys} delayMs={500}>
-        <button
-          type="button"
-          className={css.iconButton}
-          aria-label={t('session.new.label')}
-          aria-keyshortcuts={newShortcut?.aria}
-          onClick={() => { startSession() }}
-        >
-          <IconNewChatOutlineRegular size={16} />
-        </button>
-      </Tooltip>
-      <Tooltip label={t('session.new.temporary.label')} delayMs={500}>
-        <button
-          type="button"
-          className={css.iconButton}
-          aria-label={t('session.new.temporary.label')}
-          onClick={() => { startTemporarySession() }}
-        >
-          <IconNewChatOutlineRegular size={16} />
-        </button>
-      </Tooltip>
+      {canStartSession && (
+        <>
+          <Tooltip label={t('session.new.label')} shortcutKeys={newShortcut?.keys} delayMs={500}>
+            <button
+              type="button"
+              className={css.iconButton}
+              aria-label={t('session.new.label')}
+              aria-keyshortcuts={newShortcut?.aria}
+              onClick={() => {
+                trackEntryClick({ menu_name: 'new_session', position: 'titlebar' })
+                startSession()
+              }}
+            >
+              <IconNewChatOutlineRegular size={16} />
+            </button>
+          </Tooltip>
+          <Tooltip label={t('session.new.temporary.label')} delayMs={500}>
+            <button
+              type="button"
+              className={css.iconButton}
+              aria-label={t('session.new.temporary.label')}
+              onClick={() => { startTemporarySession() }}
+            >
+              <IconNewChatOutlineRegular size={16} />
+            </button>
+          </Tooltip>
+        </>
+      )}
     </div>
   )
 }

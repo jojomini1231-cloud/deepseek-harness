@@ -26,7 +26,7 @@ import type { DocumentContent, DocumentView } from './document/contract.ts'
 import { binaryDocumentPath, matchingDocumentPreviews } from './document/registry.ts'
 import { unviewableBinaryPath } from './document/unviewable.ts'
 import { PLAIN_BODY_ID } from './text/index.ts'
-import { loadedPages, lastLineLoaded, scrollToLine } from './text/lines.ts'
+import { clearLineMark, loadedPages, lastLineLoaded, markLine, scrollToLine } from './text/lines.ts'
 import css from './TextPreview.module.css'
 
 /** The preview Factory's complete props: the host's view input plus the framework's shares. */
@@ -123,8 +123,8 @@ export function DocumentPreview({
 
   // Answer a navigation once: a line the pages do not reach yet loads the next
   // page (again, until the pages cover it or the file ends); a line they hold
-  // is scrolled to and marked. The store remembers the answer, so a remount
-  // restores the reader's place instead.
+  // is scrolled to and marked with a fading band. The store remembers the
+  // answer, so a remount restores the reader's place instead.
   useEffect(() => {
     const body = scrollportRef.current
     if (current === undefined || body === null || current.revision === navigation.revision) return
@@ -138,8 +138,9 @@ export function DocumentPreview({
       }
       return
     }
-    const landed = scrollToLine(body, line)
-    if (!landed && line <= loadedThrough) return
+    const row = scrollToLine(body, line)
+    if (row === undefined && line <= loadedThrough) return
+    if (row !== undefined) markLine(body, row, line)
     actions.navigated(viewKey, navigation.revision)
     // Recorded here as well as by the scroll event, so the store holds the
     // landing before any later navigation reads it.
@@ -282,7 +283,13 @@ export function DocumentPreview({
               aria-pressed={state.wrap}
               aria-label={t('wrap.aria')}
               data-textpreview-tool="wrap"
-              onClick={() => { actions.toggledWrap(viewKey) }}
+              onClick={() => {
+                actions.toggledWrap(viewKey)
+                // Wrapping reflows the lines under a line mark without resizing its scrollport.
+                const body = scrollportRef.current
+                /* v8 ignore next -- callback refs bind the scrollport during commit, before user input. */
+                if (body !== null) clearLineMark(body)
+              }}
             >
               {state.wrap ? <IconNowrapFillRegular /> : <IconWrapFillRegular />}
             </button>

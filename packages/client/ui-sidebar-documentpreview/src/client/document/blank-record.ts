@@ -7,5 +7,5 @@
  * @returns an empty record whose prototype is `null`.
  */
 export function blankRecord<V>(): Record<string, V> {
-  return Object.create(null)
+  return Object.create(null) as Record<string, V>
 }

@@ -4,7 +4,8 @@
  * persistence, the projection registry, the Agent plane (LLM, model default,
  * Agent registry and loop, tools, system prompt, working directory), the
  * attachment and file-upload owners, the Session query engine, the Workspace
- * registry, and both Host controllers — boot through the vendored Loader.
+ * registry, the access-policy service, and both Host controllers — boot
+ * through the vendored Loader.
  *
  * One `session.create({ temporary })` then leaves the durable, user-visible
  * results the feature promises: a per-Session directory under the configured
@@ -23,6 +24,7 @@ import Include from '@deepseek-ai/cordis-plugin-include'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentDefaultModelConfig from '@deepseek-ai/dsh-agent-default-model'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import RemoteAccess from '@deepseek-ai/dsh-api-remote-access'
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import FileUploads from '@deepseek-ai/dsh-client-file-upload'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
@@ -115,6 +117,7 @@ describe('temporary Session creation under real Loader composition', () => {
       "    path: ':memory:'",
       '    openAt: never',
       "- name: '@deepseek-ai/dsh-workspace'",
+      "- name: '@deepseek-ai/dsh-api-remote-access'",
       "- name: '@deepseek-ai/dsh-api-workspace-controller'",
       '  config:',
       `    documentsDirectory: ${JSON.stringify(documents)}`,
@@ -154,6 +157,7 @@ describe('temporary Session creation under real Loader composition', () => {
       ['@deepseek-ai/dsh-client-file-upload', FileUploads],
       ['@deepseek-ai/dsh-session-query-sqlite', SqliteSessionQueryEngine],
       ['@deepseek-ai/dsh-workspace', WorkspaceRegistry],
+      ['@deepseek-ai/dsh-api-remote-access', RemoteAccess],
       ['@deepseek-ai/dsh-api-workspace-controller', WorkspaceController],
       ['@deepseek-ai/dsh-api-session-controller', SessionController],
     ])

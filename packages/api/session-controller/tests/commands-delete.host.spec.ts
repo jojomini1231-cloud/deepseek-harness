@@ -38,7 +38,7 @@ function agentController(overrides: object = {}): { disposeAgent: ReturnType<typ
   return {
     disposeAgent: vi.fn(async () => {}),
     ...overrides,
-  } as { disposeAgent: ReturnType<typeof vi.fn> }
+  }
 }
 
 interface DeleteContextOptions {

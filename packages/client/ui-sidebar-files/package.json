@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-sidebar-files",
   "description": "Workspace files workbench for the right Sidebar: lazy directory listing over the workspaceFiles Remote namespace, open-file chips beside the tree, and previews through the shared document preview Factory",
-  "version": "0.2.1-rc.2",
+  "version": "0.2.1-rc.3",
   "publishConfig": {
     "access": "public"
   },
