@@ -164,6 +164,13 @@
   }
 }
 
+/* A row's menu is anchored on the press point and its list is portalled, so the
+   element the primitive wraps around it carries no box of its own: an inline
+   wrapper would otherwise add a line box under the tree's last row. */
+.rowMenu {
+  display: contents;
+}
+
 .note {
   margin: 0;
   padding: 3px 10px;

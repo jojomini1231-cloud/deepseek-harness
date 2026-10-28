@@ -28,6 +28,16 @@ function names(root: HTMLElement): string[] {
 }
 
 /**
+ * Record the text a copy gesture writes to the host clipboard.
+ * @returns the write spy and the cleanup that puts the host's clipboard back.
+ */
+function stubClipboard() {
+  const writeText = vi.fn<(text: string) => Promise<void>>(async () => {})
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+  return { writeText, restore: () => { Reflect.deleteProperty(navigator, 'clipboard') } }
+}
+
+/**
  * A ResizeObserver the spec fires by hand, found by the element it watches.
  * @returns the class to stub and a lookup for the observer of one element.
  */
@@ -356,6 +366,129 @@ describe('FilesBody', () => {
     await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
     fireEvent.click(view.container.querySelector(`[data-files-path="${ROOT}/README.md"] > button`)!)
     fireEvent.contextMenu(view.container.querySelector<HTMLElement>(`[data-files-tab="${ROOT}/README.md"]`)!)
+    expect(renderSlot.mock.calls.map(call => String(call[0]))).toContain('sidebar.right.tab.files.chip.actions')
+    const row = document.querySelector<HTMLElement>(`[data-chip-row="${ROOT}/README.md"]`)
+    expect(row).not.toBeNull()
+    fireEvent.click(row!)
+    expect(document.querySelector('[role="menuitem"]')).toBeNull()
+  })
+
+  it('opens a file row menu on a secondary press and runs its arms', async () => {
+    const { view, script } = mountBody()
+    await act(() => script.watches.ready(ROOT))
+    await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
+    const { writeText, restore } = stubClipboard()
+    try {
+      const row = view.container.querySelector<HTMLElement>(`[data-files-path="${ROOT}/README.md"] > button`)!
+      fireEvent.contextMenu(row, { clientX: 120, clientY: 240 })
+      // The workbench's own arms first, then whatever other plugins contribute.
+      expect([...document.querySelectorAll('[role="menuitem"]')].map(item => item.textContent)).toEqual([
+        zh['entry.menu.open'], zh['entry.menu.copyPath'], zh['entry.menu.copyRelative'], 'Show file location',
+      ])
+      // The list opens where the press landed rather than at the row's edge.
+      const list = document.querySelector<HTMLElement>('[role="menu"]')!
+      expect([list.style.left, list.style.top]).toEqual(['120px', '244px'])
+      fireEvent.click(screen.getByRole('menuitem', { name: zh['entry.menu.copyPath'] }))
+      expect(writeText).toHaveBeenCalledWith(`${ROOT}/README.md`)
+      expect(document.querySelector('[role="menu"]')).toBeNull()
+      // Copying the relative path drops the workspace root, so it pastes into a prompt.
+      fireEvent.contextMenu(row, { clientX: 120, clientY: 240 })
+      fireEvent.click(screen.getByRole('menuitem', { name: zh['entry.menu.copyRelative'] }))
+      expect(writeText).toHaveBeenLastCalledWith('README.md')
+      // The open arm is the row's own gesture.
+      fireEvent.contextMenu(row, { clientX: 120, clientY: 240 })
+      fireEvent.click(screen.getByRole('menuitem', { name: zh['entry.menu.open'] }))
+      expect(view.container.querySelector(`[data-files-tab="${ROOT}/README.md"]`)).not.toBeNull()
+      expect(document.querySelector('[role="menu"]')).toBeNull()
+    } finally {
+      restore()
+    }
+  })
+
+  it('opens a directory row menu on a secondary press and names the toggle it would run', async () => {
+    const { view, script } = mountBody()
+    await act(() => script.watches.ready(ROOT))
+    await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
+    const row = view.container.querySelector<HTMLElement>(`[data-files-path="${ROOT}/src"] > button`)!
+    fireEvent.contextMenu(row)
+    fireEvent.click(screen.getByRole('menuitem', { name: zh['entry.menu.expand'] }))
+    await act(() => script.watches.ready(`${ROOT}/src`))
+    await act(() => script.settle({ ok: true, value: { entries: [{ name: 'a.ts', type: 'file' }], truncated: false } }))
+    expect(row.getAttribute('aria-expanded')).toBe('true')
+    expect(document.querySelector('[role="menu"]')).toBeNull()
+    // An open directory's menu offers the collapse instead.
+    fireEvent.contextMenu(row)
+    fireEvent.click(screen.getByRole('menuitem', { name: zh['entry.menu.collapse'] }))
+    expect(row.getAttribute('aria-expanded')).toBe('false')
+    expect(view.container.querySelector(`[data-files-path="${ROOT}/src/a.ts"]`)).toBeNull()
+    // A directory's paths copy exactly as a file's do.
+    const { writeText, restore } = stubClipboard()
+    try {
+      fireEvent.contextMenu(row)
+      fireEvent.click(screen.getByRole('menuitem', { name: zh['entry.menu.copyPath'] }))
+      expect(writeText).toHaveBeenCalledWith(`${ROOT}/src`)
+      fireEvent.contextMenu(row)
+      fireEvent.click(screen.getByRole('menuitem', { name: zh['entry.menu.copyRelative'] }))
+      expect(writeText).toHaveBeenLastCalledWith('src')
+    } finally {
+      restore()
+    }
+  })
+
+  it('opens a row menu without adding anything to the row it came from', async () => {
+    const { view, script } = mountBody()
+    await act(() => script.watches.ready(ROOT))
+    await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
+    const row = view.container.querySelector<HTMLElement>(`[data-files-path="${ROOT}/README.md"]`)!
+    const before = [...row.children]
+    fireEvent.contextMenu(row.querySelector('button')!)
+    expect(document.querySelector('[role="menu"]')).not.toBeNull()
+    // The menu draws beside the rows, so an open menu leaves the row's box alone.
+    expect([...row.children]).toEqual(before)
+    expect(row.querySelector('[role="menu"]')).toBeNull()
+  })
+
+  it('anchors a row menu beside the row when the press names no point', async () => {
+    const { view, script } = mountBody()
+    await act(() => script.watches.ready(ROOT))
+    await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
+    const row = view.container.querySelector<HTMLElement>(`[data-files-path="${ROOT}/README.md"] > button`)!
+    // A keyboard context-menu press carries no pointer, so the row's box stands in.
+    Object.defineProperty(row, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ left: 40, right: 400, top: 60, bottom: 84, width: 360, height: 24, x: 40, y: 60, toJSON: () => ({}) }),
+    })
+    fireEvent.contextMenu(row)
+    const list = document.querySelector<HTMLElement>('[role="menu"]')!
+    expect([list.style.left, list.style.top]).toEqual(['40px', '88px'])
+  })
+
+  it('keeps one row menu at a time and closes it on a second press or an outside press', async () => {
+    const { view, script } = mountBody()
+    await act(() => script.watches.ready(ROOT))
+    await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
+    const file = view.container.querySelector<HTMLElement>(`[data-files-path="${ROOT}/README.md"] > button`)!
+    const directory = view.container.querySelector<HTMLElement>(`[data-files-path="${ROOT}/src"] > button`)!
+    // A second press on the same row closes what the first opened.
+    fireEvent.contextMenu(file)
+    expect(document.querySelectorAll('[role="menu"]')).toHaveLength(1)
+    fireEvent.contextMenu(file)
+    expect(document.querySelector('[role="menu"]')).toBeNull()
+    // Another row's press takes the menu over instead of adding one.
+    fireEvent.contextMenu(file)
+    fireEvent.contextMenu(directory)
+    expect(document.querySelectorAll('[role="menu"]')).toHaveLength(1)
+    expect(screen.queryByRole('menuitem', { name: zh['entry.menu.expand'] })).not.toBeNull()
+    // A press anywhere outside dismisses it.
+    act(() => { fireEvent.pointerDown(view.container.querySelector('[data-files-tree-header]')!) })
+    expect(document.querySelector('[role="menu"]')).toBeNull()
+  })
+
+  it('renders the contributed rows in a row menu and lets them dismiss it', async () => {
+    const { view, script, renderSlot } = mountBody()
+    await act(() => script.watches.ready(ROOT))
+    await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
+    fireEvent.contextMenu(view.container.querySelector(`[data-files-path="${ROOT}/README.md"] > button`)!)
     expect(renderSlot.mock.calls.map(call => String(call[0]))).toContain('sidebar.right.tab.files.chip.actions')
     const row = document.querySelector<HTMLElement>(`[data-chip-row="${ROOT}/README.md"]`)
     expect(row).not.toBeNull()

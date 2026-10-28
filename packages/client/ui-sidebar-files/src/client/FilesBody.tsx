@@ -5,9 +5,10 @@
  * Everything the workbench keeps lives in its store, keyed by tab; everything it
  * asks for goes through its injected face. The body decides only what to draw and
  * what a gesture means: a directory row toggles, a file row opens a chip and
- * shows that file, a chip shows or closes its file, and the divider settles a
- * ratio. The file itself is drawn by the reusable `sidebar.document.preview`
- * Factory, so this package owns no document format.
+ * shows that file, a secondary press on either row opens that row's menu, a chip
+ * shows or closes its file, and the divider settles a ratio. The file itself is
+ * drawn by the reusable `sidebar.document.preview` Factory, so this package owns
+ * no document format.
  *
  * The body owns one lifetime per open chip: the store's bucket — chips, ratio,
  * scroll — belongs to the tab, while each chip's preview state belongs to a
@@ -552,6 +553,19 @@ export function FilesBody({
     actions.historyFileSelected(tab.id, autoFilePath)
     requestCommitDiff(autoFileRoot, autoFileHash, autoFilePath, autoFileFrom, autoFileComplete)
   }, [autoFileRoot, autoFileHash, autoFilePath, autoFileFrom, autoFileComplete])
+  /**
+   * Rows other plugins contribute to a file's menu — a chip's or a tree row's,
+   * which share the seat — rendered with the menu so they join its keyboard
+   * walk; picking one dismisses it.
+   * @param path - absolute path of the file whose menu is open.
+   * @param onPicked - the menu's dismiss callback.
+   * @returns the contributed rows, or nothing when none registered.
+   */
+  const renderMenuRow = useMemo(
+    () => (path: string, onPicked: () => void): ReactNode =>
+      renderSlot('sidebar.right.tab.files.chip.actions', { path, onPicked }),
+    [renderSlot],
+  )
   const tree = useMemo((): TreeContext | undefined => state === undefined ? undefined : {
     state,
     onToggle: (parent, path) => { toggle(tab.id, parent, path, state.expanded, signal) },
@@ -562,24 +576,13 @@ export function FilesBody({
       if (!narrow) return
       actions.filesPageOpened(tab.id, true)
     },
+    renderMenuRow,
     t,
-  }, [state, tab.id, sessionId, toggle, actions, signal, t, narrow])
+  }, [state, tab.id, sessionId, toggle, actions, signal, t, narrow, renderMenuRow])
   // The two columns are memoized so a divider drag re-renders neither the tree
   // nor the document behind it. The chip lifetimes are minted at memo time:
   // `chipSignal` hands back the same composed signal for a chip already open,
   // so the memo re-running never re-keys the preview's state.
-  /**
-   * Rows other plugins contribute to a chip's menu, rendered with the menu so
-   * they join its keyboard walk; picking one dismisses it.
-   * @param path - absolute path of the file whose chip menu is open.
-   * @param onPicked - the menu's dismiss callback.
-   * @returns the contributed rows, or nothing when none registered.
-   */
-  const renderMenuRow = useMemo(
-    () => (path: string, onPicked: () => void): ReactNode =>
-      renderSlot('sidebar.right.tab.files.chip.actions', { path, onPicked }),
-    [renderSlot],
-  )
   const contentColumn = useMemo((): ReactNode => {
     if (state === undefined) return null
     const value = state

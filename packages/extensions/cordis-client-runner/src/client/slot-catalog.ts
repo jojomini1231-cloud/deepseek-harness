@@ -4310,8 +4310,8 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     key: 'sidebar.right.tab.files.chip.actions',
     kind: 'list',
     scope: 'session',
-    summary: 'Rows a chip\'s secondary-press menu offers after the workbench\'s own arms, for gestures the workbench does not own — handing a file\'s folder to the desktop file manager, for instance.',
-    doc: 'Rows a chip\'s secondary-press menu offers after the workbench\'s own arms,\nfor gestures the workbench does not own — handing a file\'s folder to the\ndesktop file manager, for instance.',
+    summary: 'Rows a file\'s secondary-press menu offers after the workbench\'s own arms, for gestures the workbench does not own — handing a file\'s folder to the desktop file manager, for instance.',
+    doc: 'Rows a file\'s secondary-press menu offers after the workbench\'s own arms,\nfor gestures the workbench does not own — handing a file\'s folder to the\ndesktop file manager, for instance. A tree row and an open file\'s chip\nshare this seat: both name one file and offer the same gestures on it.',
     registerOptions: [
       {
         name: 'id',
@@ -4363,7 +4363,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     replaceRisk: 'none',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'sidebar.right.tab.files.chip.actions\', () => ctx.slots.register(\n      { name: \'sidebar.right.tab.files.chip.actions\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/client/ui-sidebar-files/src/client/index.ts:47',
+    source: 'packages/client/ui-sidebar-files/src/client/index.ts:48',
   },
   {
     key: 'sidebar.right.tab.guide',

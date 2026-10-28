@@ -40,15 +40,16 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       }
     }
     /**
-     * Rows a chip's secondary-press menu offers after the workbench's own arms,
+     * Rows a file's secondary-press menu offers after the workbench's own arms,
      * for gestures the workbench does not own — handing a file's folder to the
-     * desktop file manager, for instance.
+     * desktop file manager, for instance. A tree row and an open file's chip
+     * share this seat: both name one file and offer the same gestures on it.
      */
     'sidebar.right.tab.files.chip.actions': {
       kind: 'list'
       scope: 'session'
       owner: {
-        /** Absolute path of the file whose chip menu is open. */
+        /** Absolute path of the file whose menu is open. */
         readonly path: string
         /** Dismiss the menu after the row's gesture settles, so a failure the row announces outlives the menu. */
         readonly onPicked: () => void
