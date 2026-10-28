@@ -140,7 +140,10 @@ describe('temporary Session deletion', () => {
     expect(h.forgotten).toEqual([])
   })
 
-  it('refuses a Session that still owns subagent descendants', async () => {
+  it('deletes the subagent descendants before the Session that owns them', async () => {
+    // A subagent descendant is reachable only through the lineage the deletion
+    // removes, and no surface deletes one on its own, so it goes with its root.
+    const agents = agentController()
     const h = deleteContext({
       temporarySessionIds: ['parent'],
       sessions: [
@@ -148,10 +151,33 @@ describe('temporary Session deletion', () => {
         { id: 'child', parentSession: 'parent', origin: 'subagent' },
         { id: 'grandchild', parentSession: 'child', origin: 'subagent' },
       ],
+      agents,
+    })
+    await expect(h.controller.delete({ sessionId: 'parent' as SessionId })).resolves.toEqual({ deleted: true })
+    // Deepest first, so a failure leaves the root — and with it the temporary
+    // classification that makes a retry reachable — in place.
+    expect(h.deleted).toEqual(['grandchild', 'child', 'parent'])
+    expect(agents.disposeAgent.mock.calls).toEqual([['grandchild'], ['child'], ['parent']])
+    expect(h.forgotten).toEqual(['grandchild', 'child', 'parent'])
+  })
+
+  it('leaves the temporary root in place when a descendant cannot be removed', async () => {
+    const attempts: string[] = []
+    const h = deleteContext({
+      temporarySessionIds: ['parent'],
+      sessions: [
+        { id: 'parent' },
+        { id: 'child', parentSession: 'parent', origin: 'subagent' },
+      ],
+      deleteSession: (id: string) => {
+        attempts.push(id)
+        return id === 'child' ? Promise.reject(new Error('storage offline')) : Promise.resolve()
+      },
     })
     await expect(h.controller.delete({ sessionId: 'parent' as SessionId }))
-      .rejects.toMatchObject({ code: 'session/descendants', details: { descendants: ['child', 'grandchild'] } })
-    expect(h.deleted).toEqual([])
+      .rejects.toMatchObject({ code: 'session/delete-failed' })
+    expect(attempts).toEqual(['child'])
+    expect(h.forgotten).toEqual([])
   })
 
   it('treats a fork as an independent conversation, not a descendant', async () => {

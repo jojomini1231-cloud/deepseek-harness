@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-10-27-temporary-session-delete-descendants.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-27-temporary-session-delete-descendants.md
+/agent-note-deleting-a-temporary-session-removes-its-subagent-descendants:
+  en: 6cdd17906ac0499a
+  zh: 7022ed32d8b714d4
+/agent-note-deleting-a-temporary-session-removes-its-subagent-descendants/problem:
+  en: 8d284f21079b6144
+  zh: 19f1a2855682d88c
+/agent-note-deleting-a-temporary-session-removes-its-subagent-descendants/decision:
+  en: cc8ca19f5cfa0597
+  zh: 87d1461df5558289
+/agent-note-deleting-a-temporary-session-removes-its-subagent-descendants/alternatives-considered:
+  en: a88d6655a5fbdc33
+  zh: dbefd02ff8be2b71
+/agent-note-deleting-a-temporary-session-removes-its-subagent-descendants/verification:
+  en: 2d8c2e7efc47d5a6
+  zh: 20b503f5da08bcc6
+/agent-note-deleting-a-temporary-session-removes-its-subagent-descendants/consequences:
+  en: c847a3e22d3f3d75
+  zh: 70fd0c8dae43ac55

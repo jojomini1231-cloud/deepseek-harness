@@ -194,8 +194,6 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
      * deletion this verb performs does not apply to it.
      */
     'session/not-temporary': { readonly sessionId: SessionId }
-    /** The Session has subagent descendants, which a deletion would orphan. */
-    'session/descendants': { readonly sessionId: SessionId; readonly descendants: readonly SessionId[] }
     /**
      * The Session still has running work — its own turn, a subagent, a
      * background job, or an active schedule — so the deletion was refused

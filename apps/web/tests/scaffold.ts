@@ -1448,7 +1448,7 @@ function seedStreamEnd(
  * @param fixtureText - raw recorded session.jsonl contents.
  * @param id - the seeded session id.
  * @param agentPreset - preset recorded by scenarios that assert resumed composition.
- * @param options - deterministic metadata overrides and a cwd override for scenarios seeding outside the scaffold workspace.
+ * @param options - deterministic metadata overrides, a cwd override, and the subagent lineage that classifies the seeded Session.
  * @returns the seeded id.
  */
 export async function seedSession(
@@ -1456,7 +1456,12 @@ export async function seedSession(
   fixtureText: string,
   id: string,
   agentPreset?: string,
-  options: { readonly createdAt?: number; readonly cwd?: string } = {},
+  options: {
+    readonly createdAt?: number
+    readonly cwd?: string
+    /** Record the seeded Session as a subagent of another one, at that child's delegation depth. */
+    readonly subagentOf?: { readonly parentSession: SessionId; readonly delegationDepth: number }
+  } = {},
 ): Promise<SessionId> {
   const decoded = parseSeedFixture(realizeSeedFixture(scaffold, fixtureText, id))
   const events = decoded.events
@@ -1472,7 +1477,10 @@ export async function seedSession(
     createdAt,
     isSeeded: false,
     cwd: options.cwd ?? scaffold.workspaceCwd,
-    delegationDepth: 0,
+    delegationDepth: options.subagentOf?.delegationDepth ?? 0,
+    ...options.subagentOf === undefined
+      ? {}
+      : { parentSession: options.subagentOf.parentSession, origin: 'subagent' as const },
     ...agentPreset === undefined ? {} : { agentPreset },
   }
   const fixtureCreatedAt = decoded.header.createdAt

@@ -873,10 +873,10 @@ resolveAgent(sessionId: SessionId): Promise<ApiSessionAgentResult>
 
 /**
  * Permanently delete one temporary Session: its stored log, its
- * Session-local directory under the temporary root, and its classification.
- * Refused for a Session outside the temporary set, for one with subagent
- * descendants, and — unless `stopActivity` asks for the stops first — for
- * one with running work.
+ * Session-local directory under the temporary root, its classification, and
+ * its subagent descendants. Refused for a Session outside the temporary set,
+ * and — unless `stopActivity` asks for the stops first — for one with running
+ * work, including work a subagent descendant is running.
  * @param request - Session identity and whether to stop its running work.
  * @param signal - caller lifetime; cancels the temporary root's native Documents lookup.
  * @returns deletion confirmation.

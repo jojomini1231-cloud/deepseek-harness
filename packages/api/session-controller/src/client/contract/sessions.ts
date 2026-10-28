@@ -96,9 +96,9 @@ export interface ISessions {
   }): Promise<SessionId>
   /**
    * Permanently delete one temporary Session: its stored log, its
-   * Session-local directory, and its classification. Irreversible, and
-   * refused for a Session outside the temporary set or one with subagent
-   * descendants.
+   * Session-local directory, its classification, and its subagent
+   * descendants. Irreversible, and refused for a Session outside the
+   * temporary set or one with running work.
    * @param sessionId - the temporary Session to delete.
    * @param options - `stopActivity` asks the Host to stop the Session's running work instead of refusing.
    * @throws {SessionDeleteError} when the Host refuses; `session/active` means

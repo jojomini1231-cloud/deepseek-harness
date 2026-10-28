@@ -332,7 +332,7 @@ describe('SessionDeleteConfirmDialog', () => {
     const { settleSessionDelete, ask } = deleteDialog(deleteSession)
     ask()
     const dialog = screen.getByRole('dialog', { name: '永久删除此临时会话？' })
-    expect(dialog.textContent).toContain('“Draft notes”的会话记录与临时工作目录都会被永久删除')
+    expect(dialog.textContent).toContain('“Draft notes”的会话记录、其子代理会话与临时工作目录都会被永久删除')
     expect(screen.getByRole('note').textContent).toBe('此操作不可撤销。')
     // Nothing was reported running yet, so no work list and no stop step.
     expect(screen.queryByRole('list')).toBeNull()

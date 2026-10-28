@@ -96,7 +96,7 @@ describe('web e2e: temporary workspace', () => {
     expect(tripwire.pageErrors).toEqual([])
   })
 
-  it('deletes the temporary Session, its log, and its directory from the row menu', async () => {
+  it('deletes the temporary Session, its subagent, its log, and its directory from the row menu', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-temporary-workspace-delete'))
     const sidebar = page.locator('[class*="treeBody"]')
     const temporaryTree = sidebar.getByRole('tree', { name: 'Temporary workspaces' })
@@ -131,6 +131,19 @@ describe('web e2e: temporary workspace', () => {
     // Deletion is permanent, so it asks first and says so.
     const dialog = page.getByRole('dialog', { name: 'Permanently delete this temporary session?' })
     await dialog.waitFor({ timeout: 10_000 })
+
+    // The Session under test owns a subagent: its header carries the parent and
+    // the subagent origin, and it holds no temporary classification of its own,
+    // so this deletion is the only surface that can remove it. It is seeded
+    // behind the UI, after the row was resolved, so the tree keeps one row with
+    // the seeded title.
+    const childId = brandString<SessionId>('temporary-workspace-delete-child-web-e2e')
+    await seedSession(scaffold, await readFile(SEED, 'utf8'), childId, undefined, {
+      cwd: directory,
+      subagentOf: { parentSession: sessionId, delegationDepth: 1 },
+    })
+    expect((await scaffold.ctx.sessionPersistence.stat(childId))?.header.parentSession).toBe(sessionId)
+
     await dialog.getByRole('button', { name: 'Delete session' }).click()
 
     // The row leaves the Temporary section and the Host removes both the
@@ -141,6 +154,9 @@ describe('web e2e: temporary workspace', () => {
     expect(scaffold.ctx.workspaceRegistry.temporarySessionIds).not.toContain(sessionId)
     await expect.poll(() => existsSync(directory)).toBe(false)
     await expect.poll(async () => (await scaffold.ctx.sessionPersistence.stat(sessionId)) === undefined)
+      .toBe(true)
+    // The child Session went with its root instead of stranding the deletion.
+    await expect.poll(async () => (await scaffold.ctx.sessionPersistence.stat(childId)) === undefined)
       .toBe(true)
 
     await compareOrRefreshGolden(

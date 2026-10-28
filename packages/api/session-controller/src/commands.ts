@@ -193,14 +193,15 @@ export class SessionCommandController {
 
   /**
    * Permanently delete one temporary Session: its stored log, its
-   * Session-local directory under the temporary root, and its classification
-   * in the Workspace registry.
+   * Session-local directory under the temporary root, its classification in
+   * the Workspace registry, and every subagent descendant it owns.
    *
-   * Only a temporary Session may be deleted. A Session with subagent
-   * descendants is refused, because the deletion would leave children that no
-   * surface can reach. Running work is reported by the Workspace registry's
-   * providers and refused as `session/active` unless `stopActivity` asks for
-   * the stops first.
+   * Only a temporary Session may be deleted. Its subagent descendants go with
+   * it: they exist only through the lineage this deletion removes, and no
+   * surface can reach or delete one on its own. Running work is reported by
+   * the Workspace registry's providers — for the whole lineage, so a running
+   * subagent counts — and refused as `session/active` unless `stopActivity`
+   * asks for the stops first.
    * @param request - Session identity and whether to stop its running work.
    * @param signal - caller lifetime; cancels the temporary root's native Documents lookup.
    * @returns deletion confirmation.
@@ -215,13 +216,6 @@ export class SessionCommandController {
       )
     }
     const descendants = await this.descendantSessions(sessionId, signal)
-    if (descendants.length > 0) {
-      throw new RemoteError(
-        'session/descendants',
-        `session "${sessionId}" still owns subagent sessions: ${descendants.join(', ')}`,
-        { sessionId, descendants },
-      )
-    }
     if (request.stopActivity !== true) {
       const activity = await this.ctx.waterfall(
         'workspace/session-activity', { sessionId }, () => Promise.resolve([]),
@@ -240,6 +234,9 @@ export class SessionCommandController {
     // stored working directory, and the log that carries it is about to go.
     const directory = await this.storedCwdOf(sessionId, signal)
     try {
+      // Descendants before the root: a failure then leaves the root, and with
+      // it the temporary classification that makes the retry reachable.
+      for (const descendant of [...descendants].reverse()) await this.removeSubagentSession(descendant, signal)
       // The Agent must be gone before its log is removed: its persistence
       // write handle would otherwise recreate the artifact this call deletes.
       await this.agents.disposeAgent(sessionId)
@@ -278,10 +275,29 @@ export class SessionCommandController {
   }
 
   /**
+   * Remove one deleted Session's subagent descendant: its live Agent, its
+   * stored log, and any classification membership a deleted id must not keep.
+   *
+   * No directory removal belongs here. A descendant's stored working directory
+   * is its root's, whose leaf name the root's own removal proves, so this step
+   * never claims a path for a child.
+   * @param sessionId - the descendant to remove.
+   * @param signal - caller lifetime.
+   */
+  private async removeSubagentSession(sessionId: SessionId, signal: AbortSignal): Promise<void> {
+    await this.agents.disposeAgent(sessionId)
+    await this.deleteStoredLog(sessionId, signal)
+    await this.ctx.workspaceRegistry.forgetSession(sessionId)
+  }
+
+  /**
    * The live or stored subagent descendants of one Session, by durable
    * lineage. A fork shares the parent field without the subagent origin and
    * is an independent conversation, so only the origin-bearing children
    * count — the same rule the Subagent runtime's archive admission applies.
+   * @param rootId - the Session whose lineage is walked.
+   * @param signal - caller lifetime.
+   * @returns every descendant, parents before their own children.
    */
   private async descendantSessions(rootId: SessionId, signal: AbortSignal): Promise<readonly SessionId[]> {
     const descendants: SessionId[] = []
