@@ -80,3 +80,11 @@
   font-size: 12px;
   line-height: 18px;
 }
+
+/* Touch: the chip keeps its label and glyph and takes the 44px hit floor. */
+@media (pointer: coarse) {
+  .chip {
+    height: 44px;
+    min-width: 44px;
+  }
+}

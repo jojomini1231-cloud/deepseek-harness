@@ -164,3 +164,10 @@
     transition: none;
   }
 }
+
+/* Touch: the process group header is one full-width 44px hit. */
+@media (pointer: coarse) {
+  .title {
+    min-height: max(44px, calc(24px + var(--dsh-content-font-delta, 0px)));
+  }
+}

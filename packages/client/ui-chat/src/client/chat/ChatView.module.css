@@ -407,3 +407,18 @@
   margin: 0;
   width: max-content;
 }
+
+/* Touch: the finished-Turn actions row is 44px, so the running status sharing
+   its tail slot takes the same height, and the floating back-to-bottom control
+   grows to the touch floor. */
+@media (pointer: coarse) {
+  .runningContent {
+    height: max(44px, calc(28px + var(--dsh-content-font-delta, 0px)));
+  }
+
+  .toBottom {
+    width: 44px;
+    height: 44px;
+    margin-top: -44px;
+  }
+}

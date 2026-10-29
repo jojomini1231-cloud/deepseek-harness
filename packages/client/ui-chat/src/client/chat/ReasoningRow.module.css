@@ -75,3 +75,16 @@
   padding: 4px 0 4px calc(22px + var(--dsh-content-font-delta, 0px));
   min-width: 0;
 }
+
+/* Touch: the Think header reaches the 44px hit floor at full width, collapsed
+   and expanded alike. The disclosure row is ui-primitives' own box, so the
+   height floor lands on it through its stable data attribute. */
+@media (pointer: coarse) {
+  .root:not([data-expanded]) {
+    height: max(44px, calc(24px + var(--dsh-content-font-delta, 0px)));
+  }
+
+  .root :global([data-disclosure-row]) {
+    min-height: max(44px, calc(24px + var(--dsh-content-font-delta, 0px)));
+  }
+}

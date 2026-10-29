@@ -371,3 +371,10 @@
   height: 12px;
   color: var(--dsw-alias-menu-icon);
 }
+
+/* Touch: the trigger keeps its chip typography and takes the 44px hit floor. */
+@media (pointer: coarse) {
+  .trigger {
+    height: 44px;
+  }
+}
