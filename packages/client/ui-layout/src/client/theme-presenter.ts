@@ -27,7 +27,7 @@ export const DARK_ATTRIBUTE = 'data-ds-dark-theme'
  */
 export const THEME_SOURCE_ATTRIBUTE = 'data-ds-theme-source'
 
-/** Body variable carrying the content font-size axis: the user's size, floored on phones. */
+/** Body variable carrying the user's content font size in px. */
 export const CONTENT_FONT_SIZE_VARIABLE = '--dsh-content-font-size'
 
 /** Body variables carrying the user's font sizes in px by role. */
@@ -38,15 +38,19 @@ const FONT_SIZE_VARIABLES = {
 } as const satisfies Record<FontRole, string>
 
 /**
- * Mobile typography floors by role: ui-theme's mobile sheet raises these below
- * 600px, and every size is written as `max(preference, floor)` so a larger user
- * preference still wins and a desktop frame (floor 0px) keeps today's pixels.
+ * Phone typography floors by role: below {@link MOBILE_TYPOGRAPHY_QUERY} a
+ * preference under the floor is raised to it, while a larger preference still
+ * wins. The viewport is read here rather than expressed in CSS so the body
+ * variables stay plain pixels for every consumer and test.
  */
-const FONT_SIZE_FLOORS = {
-  text: '--dsh-mobile-content-floor',
-  code: '--dsh-mobile-code-floor',
-  terminal: '--dsh-mobile-code-floor',
-} as const satisfies Record<FontRole, string>
+const MOBILE_FONT_SIZE_FLOORS = {
+  text: 15,
+  code: 12,
+  terminal: 12,
+} as const satisfies Record<FontRole, number>
+
+/** Viewport query matching the frame's phone presentation (ui-layout's 600px breakpoint). */
+export const MOBILE_TYPOGRAPHY_QUERY = '(max-width: 599px)'
 
 /** Body variables carrying the user's normalized font lists; absent selects the built-in stack. */
 const FONT_FAMILY_VARIABLES = {
@@ -85,8 +89,12 @@ export class ThemePresenter {
     const body = document.body
     if (scheme === 'dark') body.setAttribute(DARK_ATTRIBUTE, '')
     else body.removeAttribute(DARK_ATTRIBUTE)
+    const phone = typeof window.matchMedia === 'function' && window.matchMedia(MOBILE_TYPOGRAPHY_QUERY).matches
     for (const [role, name] of Object.entries(FONT_SIZE_VARIABLES)) {
-      body.style.setProperty(name, `max(${snapshot.fontSizes[role as FontRole]}px, var(${FONT_SIZE_FLOORS[role as FontRole]}, 0px))`)
+      const roleFont = role as FontRole
+      const size = snapshot.fontSizes[roleFont]
+      const floor = phone ? MOBILE_FONT_SIZE_FLOORS[roleFont] : 0
+      body.style.setProperty(name, `${Math.max(size, floor)}px`)
     }
     for (const [kind, name] of Object.entries(FONT_FAMILY_VARIABLES)) {
       const list = snapshot.fontFamilies[kind as FontRole]

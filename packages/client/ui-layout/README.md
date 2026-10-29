@@ -50,7 +50,7 @@ The root publishes `--dsh-frame-top-clearance` for the reserved strip (48px on m
 
 ### Theme presentation
 
-The presenter consumes resolved theme snapshots and projects them onto the document: `html { color-scheme }` for native UA chrome, `body[data-ds-dark-theme]` from the active color scheme, the theme's alias tokens, `--dsh-content-font-size`, `--dsh-code-font-size`, `--dsh-terminal-font-size` (each written as `max(<preference>, var(--dsh-mobile-content-floor, 0px))`, with `--dsh-mobile-code-floor` for the code roles, so a phone raises the default 14px body size to 15px while a larger preference still wins), and each non-empty `--dsh-font-family-<role>` list as inline variables on body, plus one owned `<meta name="theme-color">` whose content follows the computed body background. Disposing the presenter removes its metadata node with its other global writes.
+The presenter consumes resolved theme snapshots and projects them onto the document: `html { color-scheme }` for native UA chrome, `body[data-ds-dark-theme]` from the active color scheme, the theme's alias tokens, `--dsh-content-font-size`, `--dsh-code-font-size`, `--dsh-terminal-font-size` (each projected as plain pixels, raised to the phone floors of 15px body and 12px code while the viewport is under 600px so a larger preference still wins, and re-projected when the viewport crosses that width), and each non-empty `--dsh-font-family-<role>` list as inline variables on body, plus one owned `<meta name="theme-color">` whose content follows the computed body background. Disposing the presenter removes its metadata node with its other global writes.
 
 -----
 

@@ -200,11 +200,15 @@ export function AppFrame({
   }, [drawerOpen])
 
   // Escape closes the phone drawer only while it is open; the listener goes
-  // away with the drawer.
+  // away with the drawer. A modal above the frame owns Escape while it is open
+  // (settings, confirmations), so the drawer stays open underneath rather than
+  // consuming the same key press.
   useEffect(() => {
     if (!drawerOpen) return
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') actions.toggleSidebar()
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      if (document.querySelector('[aria-modal="true"]') !== null) return
+      actions.toggleSidebar()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => { window.removeEventListener('keydown', onKeyDown) }

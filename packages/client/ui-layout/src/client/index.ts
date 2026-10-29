@@ -19,7 +19,7 @@ import { createLayoutStore } from './stores.ts'
 import { LayoutController } from './service.ts'
 import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/client'
 import { en, ja, es, fr, de, ru, pt, zh } from './shortcut-locales.ts'
-import { ThemePresenter } from './theme-presenter.ts'
+import { MOBILE_TYPOGRAPHY_QUERY, ThemePresenter } from './theme-presenter.ts'
 import { trackVisualViewport } from './visual-viewport.ts'
 
 // Contract exports only (export-convergence rule: cross-package consumers
@@ -218,9 +218,16 @@ export function apply(ctx: ClientContext): void {
   // state through the getter once, then event-driven only; no React path.
   ctx.effect(() => {
     const presenter = new ThemePresenter()
-    presenter.apply(ctx.theme.getTheme())
+    const theme = ctx.theme
+    presenter.apply(theme.getTheme())
     const off = ctx.on('theme/change', (snapshot) => { presenter.apply(snapshot) })
+    // The phone typography floors depend on the viewport, so a frame crossing
+    // the phone width re-projects the same resolved snapshot.
+    const phone = typeof window.matchMedia === 'function' ? window.matchMedia(MOBILE_TYPOGRAPHY_QUERY) : undefined
+    const onViewport = (): void => { presenter.apply(theme.getTheme()) }
+    phone?.addEventListener('change', onViewport)
     return () => {
+      phone?.removeEventListener('change', onViewport)
       off()
       presenter.dispose()
     }

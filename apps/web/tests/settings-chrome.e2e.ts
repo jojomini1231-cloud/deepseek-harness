@@ -278,6 +278,11 @@ describe('web e2e: settings modal and General preferences', () => {
     onTestFailed(() => saveSettingsFailureShot(phone, 'web-e2e-settings-phone'))
     const console = watchConsole(phone)
     await phone.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
+    // The phone shell keeps the sidebar closed: the account menu lives inside
+    // the drawer, so the settings entry starts by opening it.
+    const drawerTrigger = phone.getByRole('button', { name: '打开侧边栏', exact: true })
+    await drawerTrigger.click()
+    await phone.getByRole('button', { name: '账号菜单', exact: true }).waitFor({ timeout: 10_000 })
     await openSettings(phone, 'zh')
     const dialog = phone.getByRole('dialog', { name: '设置', exact: true })
     await dialog.waitFor({ timeout: 10_000 })

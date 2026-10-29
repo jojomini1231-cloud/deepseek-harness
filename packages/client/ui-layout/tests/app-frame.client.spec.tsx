@@ -739,6 +739,24 @@ describe('AppFrame phone drawer', () => {
     expect(frame.dataset.mobileDrawer).toBe('closed')
   })
 
+  it('leaves Escape to a modal that is open above the drawer', () => {
+    frameWidth = 390
+    const { frame, instance } = mountFrame(390)
+    act(() => { instance.actions.toggleSidebar() })
+    const modal = document.createElement('div')
+    modal.setAttribute('role', 'dialog')
+    modal.setAttribute('aria-modal', 'true')
+    document.body.append(modal)
+    try {
+      fireEvent.keyDown(window, { key: 'Escape' })
+      expect(frame.dataset.mobileDrawer).toBe('open')
+    } finally {
+      modal.remove()
+    }
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(frame.dataset.mobileDrawer).toBe('closed')
+  })
+
   it('returns focus to the opener on close and skips a disconnected opener', () => {
     frameWidth = 390
     const opener = document.createElement('button')

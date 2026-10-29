@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FontFamilies, ThemePreference, ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 import { fontFamilyVariable } from '@deepseek-ai/dsh-client-ui-theme/src/theme-settings.ts'
 import { DARK_ATTRIBUTE, THEME_SOURCE_ATTRIBUTE, ThemePresenter } from '@deepseek-ai/dsh-client-ui-layout/src/client/theme-presenter.ts'
@@ -80,21 +80,24 @@ describe('ThemePresenter', () => {
     expect(document.body.style.getPropertyValue('--dsw-alias-fg')).toBe('')
   })
 
-  it('publishes the content font size through its mobile floor and follows changes', () => {
+  it('publishes the content font size and follows changes', () => {
     const presenter = new ThemePresenter()
     presenter.apply(snapshot('light'))
-    // The floor is inert on desktop (var fallback 0px) and raised by ui-theme's
-    // mobile sheet below 600px, where 14px becomes 15px.
-    expect(document.body.style.getPropertyValue('--dsh-content-font-size'))
-      .toBe('max(14px, var(--dsh-mobile-content-floor, 0px))')
-    expect(document.body.style.getPropertyValue('--dsh-code-font-size'))
-      .toBe('max(11px, var(--dsh-mobile-code-floor, 0px))')
-    expect(document.body.style.getPropertyValue('--dsh-terminal-font-size'))
-      .toBe('max(13px, var(--dsh-mobile-code-floor, 0px))')
-    // A preference above the floor still wins on a phone.
+    expect(document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('14px')
+    expect(document.body.style.getPropertyValue('--dsh-code-font-size')).toBe('11px')
+    expect(document.body.style.getPropertyValue('--dsh-terminal-font-size')).toBe('13px')
     presenter.apply(snapshot('light', {}, 17))
-    expect(document.body.style.getPropertyValue('--dsh-content-font-size'))
-      .toBe('max(17px, var(--dsh-mobile-content-floor, 0px))')
+    expect(document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('17px')
+  })
+
+  it('raises a phone preference to the typography floor but keeps a larger one', () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: () => {}, removeEventListener: () => {} }) as unknown as MediaQueryList)
+    const presenter = new ThemePresenter()
+    presenter.apply(snapshot('light'))
+    expect(document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('15px')
+    expect(document.body.style.getPropertyValue('--dsh-code-font-size')).toBe('12px')
+    presenter.apply(snapshot('light', {}, 17))
+    expect(document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('17px')
   })
 
   it('publishes non-empty font lists and removes a list once it returns to the built-in stack', () => {

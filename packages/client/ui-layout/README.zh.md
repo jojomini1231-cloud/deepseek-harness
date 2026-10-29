@@ -35,7 +35,7 @@ kind: "package-reference"
 
 帧宽低于 600px 时框架切换为手机形态：单列堆叠，侧边栏不占网格轨道，改为以 `min(86vw, 328px)` 的固定覆盖式抽屉呈现，带抬升圆角与阴影、安全区内边距和 280ms 滑入（reduced-motion 下取消过渡）。抽屉的开合态复用既有的窄屏展开布局状态，因此打开桌面控制栏的同一个 `toggleSidebar` 操作也打开抽屉；装饰遮罩与 Esc 均可关闭，控件仍在 DOM 中时关闭会把焦点还给打开它的控件。抽屉关闭期间 `shell.leading` 座挂载在框架安全区左上角，ui-sidebar 既有的重新打开控件由此成为抽屉入口。手机形态不渲染列宽拖拽手柄。框架以自身的 `data-mobile-shell` 与 `html` 上的同名属性标记该形态，并以 `data-mobile-drawer="open|closed"` 发布开合态；各包样式依据这些标记分叉，而不是指针或 UA 查询。
 
-框架高度取自 `--dsh-viewport-height` 而非布局视口。布局插件用 `visualViewport` 的 resize/scroll 事件（以及 `window.resize`）维护该变量、`--dsh-keyboard-inset` 与 `html[data-keyboard-open]`，写入合并到一帧动画，浏览器不提供 visual viewport 时回退 `innerHeight`；停用追踪器时会还原它替换过的值。`--dsh-safe-top` 与 `--dsh-safe-bottom` 在 ui-theme 的 base 样式表中别名平台安全区，手机端字号下限位于其 mobile 样式表。
+框架高度取自 `--dsh-viewport-height` 而非布局视口。布局插件用 `visualViewport` 的 resize/scroll 事件（以及 `window.resize`）维护该变量、`--dsh-keyboard-inset` 与 `html[data-keyboard-open]`，写入合并到一帧动画，浏览器不提供 visual viewport 时回退 `innerHeight`；停用追踪器时会还原它替换过的值。`--dsh-safe-top` 与 `--dsh-safe-bottom` 在 ui-theme 的 base 样式表中别名平台安全区；手机端字号下限由本包的主题呈现器应用。
 
 root 作用域的单一 `shell.bottom` slot 横跨三列下方的整行。占用方控制自身高度与显隐；三列按该高度缩短，空内容不预留空间。切换主面板时保留底部组件。列宽拖拽手柄止于底部内容上方，`shell.overlay` 仍覆盖整个框架。默认组合不占用此 slot。
 
@@ -50,7 +50,7 @@ root 作用域的单一 `shell.bottom` slot 横跨三列下方的整行。占用
 
 ### 主题呈现
 
-呈现器消费解析后的主题快照，并投影到 document：`html { color-scheme }` 驱动原生 UA 控件，依据当前配色方案设置 `body[data-ds-dark-theme]`，把主题的别名 token、`--dsh-content-font-size`、`--dsh-code-font-size`、`--dsh-terminal-font-size`（均写作 `max(<用户值>, var(--dsh-mobile-content-floor, 0px))`，代码角色用 `--dsh-mobile-code-floor`；因此手机端默认 14px 正文提升为 15px，而更大的用户偏好仍然生效）以及每个非空的 `--dsh-font-family-<role>` 列表设为 body 上的内联变量，并持有一个 `<meta name="theme-color">`，其内容随计算后的 body 背景色更新。对呈现器执行 dispose（资源释放）时，它会连同其他全局写入一起移除自己的元数据节点。
+呈现器消费解析后的主题快照，并投影到 document：`html { color-scheme }` 驱动原生 UA 控件，依据当前配色方案设置 `body[data-ds-dark-theme]`，把主题的别名 token、`--dsh-content-font-size`、`--dsh-code-font-size`、`--dsh-terminal-font-size`（均写作纯像素值；视口宽度低于 600px 时正文下限 15px、代码下限 12px，低于下限的偏好被抬到下限而更大的偏好仍然生效，视口跨越该宽度时重新投影）以及每个非空的 `--dsh-font-family-<role>` 列表设为 body 上的内联变量，并持有一个 `<meta name="theme-color">`，其内容随计算后的 body 背景色更新。对呈现器执行 dispose（资源释放）时，它会连同其他全局写入一起移除自己的元数据节点。
 
 -----
 
