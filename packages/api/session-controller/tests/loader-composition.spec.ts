@@ -25,6 +25,7 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentDefaultModelConfig from '@deepseek-ai/dsh-agent-default-model'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import RemoteAccess from '@deepseek-ai/dsh-api-remote-access'
+import TypertGateway from '@deepseek-ai/dsh-api-gateway'
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import FileUploads from '@deepseek-ai/dsh-client-file-upload'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
@@ -118,6 +119,7 @@ describe('temporary Session creation under real Loader composition', () => {
       '    openAt: never',
       "- name: '@deepseek-ai/dsh-workspace'",
       "- name: '@deepseek-ai/dsh-api-remote-access'",
+      "- name: '@deepseek-ai/dsh-api-gateway'",
       "- name: '@deepseek-ai/dsh-api-workspace-controller'",
       '  config:',
       `    documentsDirectory: ${JSON.stringify(documents)}`,
@@ -158,6 +160,7 @@ describe('temporary Session creation under real Loader composition', () => {
       ['@deepseek-ai/dsh-session-query-sqlite', SqliteSessionQueryEngine],
       ['@deepseek-ai/dsh-workspace', WorkspaceRegistry],
       ['@deepseek-ai/dsh-api-remote-access', RemoteAccess],
+      ['@deepseek-ai/dsh-api-gateway', TypertGateway],
       ['@deepseek-ai/dsh-api-workspace-controller', WorkspaceController],
       ['@deepseek-ai/dsh-api-session-controller', SessionController],
     ])

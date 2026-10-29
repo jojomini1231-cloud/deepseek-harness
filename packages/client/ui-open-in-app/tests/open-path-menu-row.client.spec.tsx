@@ -9,7 +9,7 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { OpenPathMenuRow } from '../src/client/OpenPathMenuRow.tsx'
 import type { OpenPathMenuRowProps } from '../src/client/OpenPathMenuRow.tsx'
-import type { OpenInAppPathFailure } from '../src/client/open-path.ts'
+import type { OpenInAppOutcome } from '../src/client/outcome.ts'
 import { zh } from '../src/client/locales.ts'
 
 afterEach(() => {
@@ -25,18 +25,20 @@ interface Bench {
   onPicked: () => void
   openPath: OpenPathMenuRowProps['openPath']
   loadDesktop: OpenPathMenuRowProps['loadDesktop']
+  report: OpenPathMenuRowProps['report']
 }
 
 /**
  * Build the row's props over a desktop answer and a scripted gesture.
  * @param over - the desktop answer and the gesture the Host runs.
- * @returns the props, the dismiss callback, and the scripted gesture.
+ * @returns the props, the dismiss callback, the announcement seat, and the scripted gesture.
  */
 function bench(over: { desktop?: boolean | null; openPath?: Bench['openPath'] } = {}): Bench {
   const desktop = createSnapshotStore<boolean | null>(over.desktop === undefined ? true : over.desktop)
   const onPicked = vi.fn()
+  const report = vi.fn()
   const loadDesktop = vi.fn(async () => {})
-  const openPath = over.openPath ?? vi.fn(async () => null)
+  const openPath = over.openPath ?? vi.fn(async (): Promise<OpenInAppOutcome> => ({ kind: 'revealed' }))
   function useDesktop<R>(select: (value: boolean | null) => R): R {
     return select(desktop.getSnapshot())
   }
@@ -46,28 +48,29 @@ function bench(over: { desktop?: boolean | null; openPath?: Bench['openPath'] } 
     useOpenInAppDesktop: useDesktop,
     loadDesktop,
     openPath,
+    report,
     t,
   } as Bench['props']
-  return { props, onPicked, openPath, loadDesktop }
+  return { props, onPicked, openPath, loadDesktop, report }
 }
 
 describe('OpenPathMenuRow', () => {
-  it('renders the reveal row and dismisses the menu once the Host acknowledges', async () => {
+  it('renders the reveal row, dismisses the menu once the Host acknowledges, and reports the reveal', async () => {
     const b = bench()
     render(<OpenPathMenuRow {...b.props} />)
     const row = screen.getByRole('menuitem', { name: '显示文件位置' })
     await act(async () => { fireEvent.click(row) })
     expect(b.openPath).toHaveBeenCalledWith(ABSOLUTE_PATH, 'reveal')
     expect(b.onPicked).toHaveBeenCalledOnce()
-    expect(screen.queryByText('无法显示文件位置，请重试')).toBeNull()
+    expect(b.report).toHaveBeenCalledWith({ kind: 'revealed' })
   })
 
-  it('keeps the menu open and announces a failed reveal', async () => {
-    const b = bench({ openPath: vi.fn(async (): Promise<OpenInAppPathFailure | null> => 'revealError') })
+  it('keeps the menu open and reports a failed reveal', async () => {
+    const b = bench({ openPath: vi.fn(async (): Promise<OpenInAppOutcome> => ({ kind: 'failed', failure: 'revealError' })) })
     render(<OpenPathMenuRow {...b.props} />)
     await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: '显示文件位置' })) })
     expect(b.onPicked).not.toHaveBeenCalled()
-    expect(await screen.findByText('无法显示文件位置，请重试')).not.toBeNull()
+    expect(b.report).toHaveBeenCalledWith({ kind: 'failed', failure: 'revealError' })
   })
 
   it('offers nothing while the desktop answer is unknown and nothing without a desktop, asking only while unknown', () => {

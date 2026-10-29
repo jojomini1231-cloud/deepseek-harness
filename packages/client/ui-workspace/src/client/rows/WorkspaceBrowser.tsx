@@ -229,7 +229,7 @@ function ViewOptionsMenu({
  */
 function SectionHeader({
   label, wide, query, expanded, onExpandedChange, onQueryChange,
-  inputRef, rootRef, placeholder, searchLabel, shortcutKeys, shortcutAria, menu, actions, onCollapseAdd, t,
+  inputRef, rootRef, placeholder, searchLabel, shortcutKeys, shortcutAria, menu, actions, onCollapseAdd, motion, t,
 }: {
   /** Localized section title; hidden while the field is expanded. */
   label: string
@@ -256,10 +256,12 @@ function SectionHeader({
   actions: ReactNode
   /** Collapse any other surface's add popover before this field takes focus. */
   onCollapseAdd: () => void
+  /** Animate the spacing a search gesture changes; a layout change lands at its final geometry. */
+  motion: boolean
   t: WorkspaceBrowserProps['t']
 }) {
   return (
-    <div className={css.sectionHeader}>
+    <div className={clsx(css.sectionHeader, motion && css.searchSpacingMotion)}>
       {wide && (
         <span className={clsx(css.sectionLabel, css.wide, expanded && css.sectionLabelHidden)}>
           {label}
@@ -1286,6 +1288,24 @@ export function WorkspaceBrowser({
 
   const [query, setQuery] = useState('')
   const [searchExpanded, setSearchExpanded] = useState(false)
+  const [searchSpacingMotionEnabled, setSearchSpacingMotionEnabled] = useState(false)
+  const [searchOnExpand, setSearchOnExpand] = useState(false)
+  const [lastSearchRequest, setLastSearchRequest] = useState(0)
+  // Search state must commit before the effect expands the shell's external store.
+  if (lastSearchRequest !== shortcutState.searchRequest) {
+    setLastSearchRequest(shortcutState.searchRequest)
+    if (shortcutState.searchRequest !== 0) {
+      setSearchExpanded(true)
+      setSearchSpacingMotionEnabled(wide)
+      if (!wide) setSearchOnExpand(true)
+    }
+  }
+  // Search gestures animate spacing; entering wide layout from the rail lands at its final geometry.
+  if (!wide && searchSpacingMotionEnabled) setSearchSpacingMotionEnabled(false)
+  const changeSearchExpanded = (expanded: boolean): void => {
+    setSearchSpacingMotionEnabled(wide)
+    setSearchExpanded(expanded)
+  }
   const [revealSessionId, setRevealSessionId] = useState<SessionId | undefined>(undefined)
   const normalizedQuery = sanitizeSearchQuery(query).trim()
   const [remoteSearch, setRemoteSearch] = useState<RemoteSearchState>({
@@ -1340,7 +1360,7 @@ export function WorkspaceBrowser({
     }
     setRevealSessionId(sessionId)
     setQuery('')
-    setSearchExpanded(false)
+    changeSearchExpanded(false)
     open(sessionId)
   }
   const acknowledgeSessionReveal = (sessionId: SessionId): void => {
@@ -1352,7 +1372,6 @@ export function WorkspaceBrowser({
 
   // Rail search = expand + land in the search box: the flag arms before the
   // expand request; once the shell flips wide the input mounts and takes focus.
-  const [searchOnExpand, setSearchOnExpand] = useState(false)
   useEffect(() => {
     if (wide && searchOnExpand) {
       const timer = window.setTimeout(() => {
@@ -1365,11 +1384,8 @@ export function WorkspaceBrowser({
   useEffect(() => {
     if (shortcutState.searchRequest === 0) return
     closeAddWorkspace()
-    setSearchExpanded(true)
-    if (!wide) {
-      setSearchOnExpand(true)
-      expandSidebar()
-    } else searchInput.current?.focus({ preventScroll: true })
+    if (!wide) expandSidebar()
+    else searchInput.current?.focus({ preventScroll: true })
   }, [shortcutState.searchRequest])
 
   useEffect(() => {
@@ -1388,7 +1404,7 @@ export function WorkspaceBrowser({
       if (!(event.target instanceof Node) || searchRoot.current?.contains(event.target) === true) return
       searchInput.current?.blur()
       if (normalizedQuery !== '') return
-      setSearchExpanded(false)
+      changeSearchExpanded(false)
     }
     document.addEventListener('click', onClick)
     return () => { document.removeEventListener('click', onClick) }
@@ -1519,7 +1535,7 @@ export function WorkspaceBrowser({
       wide={wide}
       query={query}
       expanded={searchExpanded}
-      onExpandedChange={setSearchExpanded}
+      onExpandedChange={changeSearchExpanded}
       onQueryChange={setQuery}
       inputRef={searchInput}
       rootRef={searchRoot}
@@ -1559,6 +1575,7 @@ export function WorkspaceBrowser({
         )
         : null}
       onCollapseAdd={closeAddWorkspace}
+      motion={wide && searchSpacingMotionEnabled}
       t={t}
     />
   )
@@ -1601,6 +1618,7 @@ export function WorkspaceBrowser({
         </Tooltip>
       )}
       onCollapseAdd={closeAddWorkspace}
+      motion={false}
       t={t}
     />
   )

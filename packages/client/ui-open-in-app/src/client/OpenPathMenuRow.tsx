@@ -6,9 +6,9 @@
  * does with the same call and the same copy. The row serializes the gesture
  * through `useOpenTargetGesture`, the same guard the header control uses, so a
  * double activation before the Host answers launches the file manager once. A
- * row that succeeds dismisses the menu; a row that fails keeps the menu open
- * and announces from itself, so the failure is visible while the reader is
- * still where the gesture was made.
+ * row that succeeds dismisses the menu; a row that fails keeps the menu open,
+ * and the settled outcome reaches the feature-owned announcer that outlives the
+ * menu, so the failure stays visible after the chip dismisses it.
  */
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
@@ -34,10 +34,13 @@ export type OpenPathMenuRowProps =
 export function OpenPathMenuRow(props: OpenPathMenuRowProps): ReactNode {
   const desktop = props.useOpenInAppDesktop(value => value)
   const reveal: OpenTargetOperation = { kind: 'reveal' }
-  const { pending, toast, act } = useOpenTargetGesture(
+  const { pending, act } = useOpenTargetGesture(
     operation => props.openPath(props.path, operation.kind === 'reveal' ? 'reveal' : 'open')
-      .then(failure => failure === null ? (props.onPicked(), null) : failure),
-    props.t,
+      .then((outcome) => {
+        if (outcome.kind === 'opened' || outcome.kind === 'revealed') props.onPicked()
+        return outcome
+      }),
+    props.report,
   )
   useEffect(() => {
     if (desktop === null) void props.loadDesktop()
@@ -55,7 +58,6 @@ export function OpenPathMenuRow(props: OpenPathMenuRowProps): ReactNode {
       >
         {props.t('path.reveal')}
       </MenuItemButton>
-      {toast}
     </>
   )
 }
