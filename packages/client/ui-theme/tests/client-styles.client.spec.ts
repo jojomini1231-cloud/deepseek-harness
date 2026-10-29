@@ -40,6 +40,7 @@ describe('ui-theme client styles', () => {
     const styles = [...document.head.querySelectorAll<HTMLStyleElement>(`style[data-plugin="${PLUGIN_ID}"]`)]
     expect(styles.map(style => style.dataset.pluginCss)).toEqual([
       `${PLUGIN_ID}/base.css`,
+      `${PLUGIN_ID}/mobile.css`,
       `${PLUGIN_ID}/corner-shape.css`,
       `${PLUGIN_ID}/design-platform.css`,
       `${PLUGIN_ID}/focus.css`,
@@ -66,7 +67,7 @@ describe('ui-theme client styles', () => {
     try {
       const fiber = await mountStyles()
       expect(detached.defaultView).toBeNull()
-      expect(detached.head.querySelectorAll(`style[data-plugin="${PLUGIN_ID}"]`)).toHaveLength(8)
+      expect(detached.head.querySelectorAll(`style[data-plugin="${PLUGIN_ID}"]`)).toHaveLength(9)
       expect(detached.documentElement.style.getPropertyValue(HAIRLINE_WIDTH)).toBe('')
       await fiber.dispose()
       expect(detached.head.querySelectorAll(`style[data-plugin="${PLUGIN_ID}"]`)).toHaveLength(0)

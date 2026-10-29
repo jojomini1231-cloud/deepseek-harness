@@ -4,12 +4,12 @@
  * controls), `body[data-ds-dark-theme]` for the token palette, the active
  * theme's alias-token overrides as inline CSS variables on body, the content
  * font-size axis (`--dsh-content-font-size`), the code and terminal sizes
- * (`--dsh-code-font-size`, `--dsh-terminal-font-size`), the user font lists
- * (`--dsh-font-family-<role>`), `html[data-ds-theme-source]`
- * for native-chrome mirroring, and one presenter-owned
- * `meta[name="theme-color"]` for surrounding browser UI. Pure DOM writes, no
- * React involvement; the presenter only ever retracts what it wrote itself,
- * so foreign attributes, metadata, and inline styles survive.
+ * (`--dsh-code-font-size`, `--dsh-terminal-font-size`) floored by the mobile
+ * typography minimums, the user font lists (`--dsh-font-family-<role>`),
+ * `html[data-ds-theme-source]` for native-chrome mirroring, and one
+ * presenter-owned `meta[name="theme-color"]` for surrounding browser UI. Pure
+ * DOM writes, no React involvement; the presenter only ever retracts what it
+ * wrote itself, so foreign attributes, metadata, and inline styles survive.
  */
 import type { FontRole, ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 
@@ -27,7 +27,7 @@ export const DARK_ATTRIBUTE = 'data-ds-dark-theme'
  */
 export const THEME_SOURCE_ATTRIBUTE = 'data-ds-theme-source'
 
-/** Body variable carrying the user's content font size in px. */
+/** Body variable carrying the content font-size axis: the user's size, floored on phones. */
 export const CONTENT_FONT_SIZE_VARIABLE = '--dsh-content-font-size'
 
 /** Body variables carrying the user's font sizes in px by role. */
@@ -35,6 +35,17 @@ const FONT_SIZE_VARIABLES = {
   text: CONTENT_FONT_SIZE_VARIABLE,
   code: '--dsh-code-font-size',
   terminal: '--dsh-terminal-font-size',
+} as const satisfies Record<FontRole, string>
+
+/**
+ * Mobile typography floors by role: ui-theme's mobile sheet raises these below
+ * 600px, and every size is written as `max(preference, floor)` so a larger user
+ * preference still wins and a desktop frame (floor 0px) keeps today's pixels.
+ */
+const FONT_SIZE_FLOORS = {
+  text: '--dsh-mobile-content-floor',
+  code: '--dsh-mobile-code-floor',
+  terminal: '--dsh-mobile-code-floor',
 } as const satisfies Record<FontRole, string>
 
 /** Body variables carrying the user's normalized font lists; absent selects the built-in stack. */
@@ -75,7 +86,7 @@ export class ThemePresenter {
     if (scheme === 'dark') body.setAttribute(DARK_ATTRIBUTE, '')
     else body.removeAttribute(DARK_ATTRIBUTE)
     for (const [role, name] of Object.entries(FONT_SIZE_VARIABLES)) {
-      body.style.setProperty(name, `${snapshot.fontSizes[role as FontRole]}px`)
+      body.style.setProperty(name, `max(${snapshot.fontSizes[role as FontRole]}px, var(${FONT_SIZE_FLOORS[role as FontRole]}, 0px))`)
     }
     for (const [kind, name] of Object.entries(FONT_FAMILY_VARIABLES)) {
       const list = snapshot.fontFamilies[kind as FontRole]

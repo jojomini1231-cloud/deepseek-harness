@@ -20,6 +20,7 @@ import { LayoutController } from './service.ts'
 import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/client'
 import { en, ja, es, fr, de, ru, pt, zh } from './shortcut-locales.ts'
 import { ThemePresenter } from './theme-presenter.ts'
+import { trackVisualViewport } from './visual-viewport.ts'
 
 // Contract exports only (export-convergence rule: cross-package consumers
 // keep a symbol exported; test-only/package-internal symbols live off /src).
@@ -224,4 +225,8 @@ export function apply(ctx: ClientContext): void {
       presenter.dispose()
     }
   }, 'ui-layout: theme presenter')
+
+  // Visual viewport: the phone shell and keyboard-aware surfaces consume the
+  // published height and inset; the tracker retracts its own root writes.
+  ctx.effect(() => trackVisualViewport(), 'ui-layout: visual viewport')
 }

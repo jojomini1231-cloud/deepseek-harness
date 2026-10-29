@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { clampWidth, computeColumns } from '../src/client/columns.ts'
+import {
+  clampWidth, computeColumns, MOBILE_BREAKPOINT, MOBILE_DRAWER_WIDTH, SIDEBAR_AUTO_COLLAPSE,
+} from '../src/client/columns.ts'
 
 describe('clampWidth', () => {
   it('clamps into the range and rounds', () => {
@@ -49,5 +51,20 @@ describe('computeColumns', () => {
   it('leaves a closed right track closed when the frame widens', () => {
     expect(computeColumns(755, 0, 0).rightbar).toBe(0)
     expect(computeColumns(1920, 0, 0).rightbar).toBe(0)
+  })
+})
+
+describe('phone frame', () => {
+  it('exposes the breakpoint and drawer cap used by the mobile shell', () => {
+    expect(MOBILE_BREAKPOINT).toBe(600)
+    expect(MOBILE_DRAWER_WIDTH).toBe(328)
+    // The phone breakpoint always sits inside the sidebar auto-collapse range.
+    expect(MOBILE_BREAKPOINT).toBeLessThan(SIDEBAR_AUTO_COLLAPSE)
+  })
+
+  it('never keeps a normal right track at phone widths', () => {
+    for (const viewport of [390, 599, MOBILE_BREAKPOINT - 1]) {
+      expect(computeColumns(viewport, 280, 864).rightbar, `viewport ${viewport}`).toBe(0)
+    }
   })
 })

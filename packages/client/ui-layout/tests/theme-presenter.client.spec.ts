@@ -80,14 +80,21 @@ describe('ThemePresenter', () => {
     expect(document.body.style.getPropertyValue('--dsw-alias-fg')).toBe('')
   })
 
-  it('publishes the content font size and follows changes', () => {
+  it('publishes the content font size through its mobile floor and follows changes', () => {
     const presenter = new ThemePresenter()
     presenter.apply(snapshot('light'))
-    expect(document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('14px')
-    expect(document.body.style.getPropertyValue('--dsh-code-font-size')).toBe('11px')
-    expect(document.body.style.getPropertyValue('--dsh-terminal-font-size')).toBe('13px')
+    // The floor is inert on desktop (var fallback 0px) and raised by ui-theme's
+    // mobile sheet below 600px, where 14px becomes 15px.
+    expect(document.body.style.getPropertyValue('--dsh-content-font-size'))
+      .toBe('max(14px, var(--dsh-mobile-content-floor, 0px))')
+    expect(document.body.style.getPropertyValue('--dsh-code-font-size'))
+      .toBe('max(11px, var(--dsh-mobile-code-floor, 0px))')
+    expect(document.body.style.getPropertyValue('--dsh-terminal-font-size'))
+      .toBe('max(13px, var(--dsh-mobile-code-floor, 0px))')
+    // A preference above the floor still wins on a phone.
     presenter.apply(snapshot('light', {}, 17))
-    expect(document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('17px')
+    expect(document.body.style.getPropertyValue('--dsh-content-font-size'))
+      .toBe('max(17px, var(--dsh-mobile-content-floor, 0px))')
   })
 
   it('publishes non-empty font lists and removes a list once it returns to the built-in stack', () => {

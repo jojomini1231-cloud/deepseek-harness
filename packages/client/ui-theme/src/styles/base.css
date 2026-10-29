@@ -21,6 +21,10 @@
   --dsw-radius-lg: 16px;
   --dsw-radius-xl: 20px;
   --dsw-radius-panel: 28px;
+  /* Display-cutout and home-indicator insets: nonzero only where the document
+   * opts into the full screen with viewport-fit=cover. */
+  --dsh-safe-top: env(safe-area-inset-top, 0px);
+  --dsh-safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* User font lists (--dsh-font-family-text/-code, written on body by the theme

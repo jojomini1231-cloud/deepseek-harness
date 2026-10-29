@@ -3,7 +3,7 @@
 import type { GlobalStandardProps, RenderOpts } from '@deepseek-ai/dsh-client-ui-slots'
 import { allowAllAccess, bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { AppFrame } from '../src/client/AppFrame.tsx'
 import type { AppFrameProps } from '../src/client/AppFrame.tsx'
 import type { MainPanelId, RightbarOwnerProps, SidebarOwnerProps } from '../src/client/index.ts'
@@ -175,6 +175,7 @@ afterEach(() => {
     cleanup()
   } finally {
     delete document.documentElement.dataset.platform
+    delete document.documentElement.dataset.mobileShell
     for (const restore of restoreProperties.splice(0).reverse()) restore()
     document.title = originalTitle
     vi.restoreAllMocks()
@@ -318,7 +319,8 @@ describe('AppFrame normal width concessions', () => {
     expect(frame.querySelector('[data-side="rightbar"]')).toBeNull()
     expect(instance.getSnapshot().layoutInfo).toMatchObject({ rightbarShown: true, rightbar: 864 })
     act(() => { instance.actions.closeRightbar() })
-    resize(455)
+    // 600px is still a desktop frame; below 600 the phone shell takes over.
+    resize(600)
     expect(tracks(frame)).toEqual([56, 0])
     resize(1920)
     expect(tracks(frame)).toEqual([420, 0])
@@ -677,5 +679,100 @@ describe('AppFrame frame measurement lifecycle', () => {
     act(() => { observer.fire(); flushFrames() })
     expect(instance.getSnapshot().layoutInfo.viewportWidth).toBe(1920)
     expect(animationFrames.size).toBe(0)
+  })
+})
+
+describe('AppFrame phone drawer', () => {
+  it('renders the phone stack with a closed drawer and its trigger seat', () => {
+    frameWidth = 390
+    const { frame, getByTestId, sidebarOwner } = mountFrame(390)
+    expect(frame.style.gridTemplateColumns).toBe('0px minmax(0px, 1fr) 0px')
+    expect(frame.hasAttribute('data-mobile-shell')).toBe(true)
+    expect(document.documentElement.hasAttribute('data-mobile-shell')).toBe(true)
+    expect(frame.dataset.mobileDrawer).toBe('closed')
+    expect(sidebarOwner()).toEqual({ collapsed: true, width: 328 })
+    expect(frame.querySelector('[data-mobile-scrim]')).toBeNull()
+    expect(frame.querySelector('[data-side="sidebar"]')).toBeNull()
+    // ui-sidebar's reopen control takes the leading seat as the drawer trigger.
+    expect(getByTestId('shell.leading-content')).toBeTruthy()
+    expect(getByTestId('main-content')).toBeTruthy()
+  })
+
+  it('switches the phone presentation exactly below the breakpoint', () => {
+    frameWidth = 600
+    const { frame } = mountFrame(600)
+    expect(frame.hasAttribute('data-mobile-shell')).toBe(false)
+    expect(tracks(frame)).toEqual([56, 0])
+    resize(599)
+    expect(frame.hasAttribute('data-mobile-shell')).toBe(true)
+    expect(frame.style.gridTemplateColumns).toBe('0px minmax(0px, 1fr) 0px')
+    resize(1920)
+    expect(frame.hasAttribute('data-mobile-shell')).toBe(false)
+    expect(frame.dataset.mobileDrawer).toBeUndefined()
+    expect(document.documentElement.hasAttribute('data-mobile-shell')).toBe(false)
+  })
+
+  it('opens the narrow-expanded drawer with a scrim and closes it on the scrim', () => {
+    frameWidth = 390
+    const { frame, instance, queryByTestId, sidebarOwner } = mountFrame(390)
+    act(() => { instance.actions.toggleSidebar() })
+    expect(frame.dataset.mobileDrawer).toBe('open')
+    expect(sidebarOwner()).toEqual({ collapsed: false, width: 328 })
+    // The trigger seat is replaced by the drawer while the drawer is open.
+    expect(queryByTestId('shell.leading-content')).toBeNull()
+    const scrim = frame.querySelector<HTMLElement>('[data-mobile-scrim]')
+    expect(scrim?.getAttribute('aria-hidden')).toBe('true')
+    fireEvent.click(scrim!)
+    expect(frame.dataset.mobileDrawer).toBe('closed')
+    expect(frame.querySelector('[data-mobile-scrim]')).toBeNull()
+    expect(queryByTestId('shell.leading-content')).toBeTruthy()
+  })
+
+  it('closes the open drawer on Escape and ignores Escape while it is closed', () => {
+    frameWidth = 390
+    const { frame, instance } = mountFrame(390)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(frame.dataset.mobileDrawer).toBe('closed')
+    act(() => { instance.actions.toggleSidebar() })
+    expect(frame.dataset.mobileDrawer).toBe('open')
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(frame.dataset.mobileDrawer).toBe('closed')
+  })
+
+  it('returns focus to the opener on close and skips a disconnected opener', () => {
+    frameWidth = 390
+    const opener = document.createElement('button')
+    document.body.append(opener)
+    try {
+      const { instance } = mountFrame(390)
+      opener.focus()
+      act(() => { instance.actions.toggleSidebar() })
+      opener.blur()
+      act(() => { instance.actions.toggleSidebar() })
+      expect(document.activeElement).toBe(opener)
+      // A control removed while the drawer was open is not re-focused.
+      opener.focus()
+      act(() => { instance.actions.toggleSidebar() })
+      opener.remove()
+      act(() => { instance.actions.toggleSidebar() })
+      expect(document.activeElement).not.toBe(opener)
+    } finally {
+      opener.remove()
+    }
+  })
+
+  it('drops both resize handles on a phone', () => {
+    frameWidth = 390
+    const { frame, instance } = mountFrame(390)
+    act(() => { instance.actions.openRightbar(false, true) })
+    expect(frame.querySelector('[data-side]')).toBeNull()
+  })
+
+  it('removes the document marker when the frame leaves the phone presentation', () => {
+    frameWidth = 390
+    const { unmount } = mountFrame(390)
+    expect(document.documentElement.hasAttribute('data-mobile-shell')).toBe(true)
+    unmount()
+    expect(document.documentElement.hasAttribute('data-mobile-shell')).toBe(false)
   })
 })

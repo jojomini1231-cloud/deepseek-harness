@@ -15,17 +15,20 @@
   en: d152484eb41ac6b4
   zh: 09388d293f9be9cb
 /deepseek-ai-dsh-client-ui-layout/use-this-package:
-  en: cc6e9021ba3001bc
-  zh: 97444857762b4e8e
+  en: add1a67264c82be3
+  zh: c8b72b568d6daf2d
+/deepseek-ai-dsh-client-ui-layout/use-this-package/mobile-shell:
+  en: 4c3c2a6ccf1453b7
+  zh: 5a39919f525229f9
 /deepseek-ai-dsh-client-ui-layout/use-this-package/window-chrome-seat:
   en: 8b33c79f9d073504
   zh: f3b49a31afca83d5
 /deepseek-ai-dsh-client-ui-layout/use-this-package/theme-presentation:
-  en: 5ac34303ad90b484
-  zh: abcc4a1dcf28391e
+  en: 80c148d340a60ee3
+  zh: 3a3c49b9774eb7b6
 /deepseek-ai-dsh-client-ui-layout/understand-the-implementation:
-  en: 5ab6b311a912fb06
-  zh: d7e88894686b1682
+  en: 7ee858e3b43621e7
+  zh: 6945b4900e95e644
 /deepseek-ai-dsh-client-ui-layout/further-exploration:
   en: 74de780b4592e28e
   zh: a413f06f8ec406d0
@@ -36,8 +39,8 @@
   en: ca75c51c89c2c9b0
   zh: de54f3467ef3b9be
 /deepseek-ai-dsh-client-ui-layout/known-limitations-and-deferred-work:
-  en: da92b97ac60d989f
-  zh: 5816b861728f1a04
+  en: ea3f48be8d5e93d0
+  zh: b23d50da6adf074c
 /deepseek-ai-dsh-client-ui-layout/known-limitations-and-deferred-work/dev-note:
   en: e67f633dc6fe7773
   zh: 3bb0c20c93f16f98
