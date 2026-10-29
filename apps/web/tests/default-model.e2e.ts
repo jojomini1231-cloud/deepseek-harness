@@ -215,7 +215,9 @@ describe('web e2e: the composer model switch is the default for later sessions',
       await devicePage.getByRole('textbox', { name: '选择工作区' }).click()
       const composer = devicePage.locator('[data-composer-input][contenteditable="true"]').first()
       await composer.waitFor()
-      expect(await composer.evaluate(element => getComputedStyle(element).fontSize)).toBe(automatic ? '14px' : '16px')
+      // A narrow fine-pointer window is inside the phone shell, whose 15px body
+      // floor applies; a coarse pointer keeps the 16px iOS focus floor.
+      expect(await composer.evaluate(element => getComputedStyle(element).fontSize)).toBe(automatic ? '15px' : '16px')
       await composer.fill('/model')
       await devicePage.getByRole('option', { name: /^模型/ }).click()
       const search = devicePage.getByRole('textbox', { name: '筛选选项', exact: true })
