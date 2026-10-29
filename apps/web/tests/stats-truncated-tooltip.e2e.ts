@@ -92,7 +92,10 @@ describe('web e2e: truncated composer statistics', () => {
     const cut = () => label.evaluate(element => element.scrollWidth > element.clientWidth)
     expect(await cut()).toBe(false)
 
-    await page.setViewportSize({ width: 390, height: 900 })
+    // The phone shell reserves no sidebar track, so the composer keeps the
+    // frame's full width minus its gutters: 390px no longer truncates the pill.
+    // A 320px viewport (below the 360px Android baseline) still does.
+    await page.setViewportSize({ width: 320, height: 900 })
     await expect.poll(cut).toBe(true)
     await usagePill.hover()
     await expect.poll(() => tooltip.textContent()).toBe(USAGE_READING)
