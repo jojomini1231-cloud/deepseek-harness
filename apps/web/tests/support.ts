@@ -346,6 +346,11 @@ export function conversationContextKey(kind: string, id: string): string {
  */
 export async function openSettings(page: Page, locale: 'en' | 'zh' | 'ja'): Promise<void> {
   const labels = { en: ['Account menu', 'Settings'], zh: ['账号菜单', '设置'], ja: ['アカウントメニュー', '設定'] } as const
+  // On a phone the sidebar starts closed, so the account menu lives inside the
+  // drawer that the frame's leading seat opens.
+  const drawerLabels = { en: 'Open sidebar', zh: '打开侧边栏', ja: 'サイドバーを開く' } as const
+  const drawerTrigger = page.getByRole('button', { name: drawerLabels[locale], exact: true })
+  if (await drawerTrigger.count() > 0) await drawerTrigger.click()
   await page.getByRole('button', { name: labels[locale][0], exact: true }).click()
   await page.getByRole('menuitem', { name: labels[locale][1], exact: true }).click()
 }
