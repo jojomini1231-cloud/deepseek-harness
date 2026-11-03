@@ -9,6 +9,8 @@
   - button "More conversation views"
 - text: Reply with the single word LIGHTHOUSE and stop. {{clock}}
 - button "Copy"
+- button "Retract to this message"
+- button "Edit this message"
 - status: Completed
 - button "Completed in {{duration}}"
 - paragraph: LIGHTHOUSE

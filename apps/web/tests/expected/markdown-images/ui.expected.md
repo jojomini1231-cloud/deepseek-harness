@@ -8,6 +8,8 @@
   - button "More conversation views"
 - text: Show the Markdown image policy. {{clock}}
 - button "Copy"
+- button "Retract to this message"
+- button "Edit this message"
 - status: Completed
 - button "Completed in {{duration}}" [disabled]
 - heading "Markdown images" [level=2]

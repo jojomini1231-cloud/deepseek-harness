@@ -8,7 +8,7 @@ import type {
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { LlmAttemptId, MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { LlmModelBadge, TextBlock } from '@deepseek-ai/dsh-llm'
-import type { SessionId, SessionSeqCursor } from '@deepseek-ai/dsh-session/types'
+import type { SessionId, SessionSeq, SessionSeqCursor } from '@deepseek-ai/dsh-session/types'
 import type { SessionProjectionMap, SessionProjectionSummaryExcluded, SessionProjectionSummaryValues } from '@deepseek-ai/dsh-session-projection/types'
 import type { Principal } from '@deepseek-ai/dsh-typert-protocol'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
@@ -224,6 +224,12 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'session/queue-item-not-found': { readonly itemId: MessageId }
     'session/steer-unavailable': { readonly itemId: MessageId }
     'session/title-invalid': { readonly sessionId: SessionId }
+    /** The Session has a running turn or pending input, so a rewind could not be applied atomically. */
+    'session/busy': { readonly sessionId: SessionId }
+    /** The rewind target is not a plain user message of this Session. */
+    'session/rewind-unavailable': { readonly sessionId: SessionId; readonly targetSeq: number }
+    /** A conversation edit carried no non-whitespace text. */
+    'session/edit-empty': Record<string, never>
     'session/fork-unavailable': { readonly sessionId: SessionId }
     'session/migration-required': { readonly sessionId: SessionId }
     'subagent/not-found': {
@@ -365,6 +371,43 @@ export interface SessionForkValue {
   readonly sessionId: SessionId
 }
 
+/**
+ * Retract one conversation branch: everything from the target user message
+ * onward leaves the model-visible surface while the event log keeps it. The
+ * recorded `conversation-rewind` marker names the target in its message source,
+ * so consumers hide the range without reading the surface operation.
+ */
+export interface SessionRetractRequest {
+  readonly sessionId: SessionId
+  /**
+   * Seq of a plain user message of this Session. While it is still on the
+   * current surface the retraction starts at the message; a target an earlier
+   * surface replacement already shadowed starts just after that replacement, so
+   * a compaction summary stays and everything after it is retracted.
+   */
+  readonly targetSeq: number
+}
+
+/** Durable event that recorded one retraction. */
+export interface SessionRetractValue {
+  readonly seq: number
+}
+
+/**
+ * Edit one user message: the target and everything after it leave the surface
+ * through the same retraction marker, and the replacement text plus the target's
+ * non-text content blocks enter as the next turn's ordinary user message.
+ */
+export interface SessionEditRequest extends SessionRetractRequest {
+  /** Replacement text for the target's text content; surrounding whitespace is preserved. */
+  readonly text: string
+}
+
+/** Durable event that recorded the edited message. */
+export interface SessionEditValue {
+  readonly seq: number
+}
+
 /** Session prompt request. */
 export interface SessionPromptRequest {
   /** Client-minted identity persisted on the exact accepted user message. */
@@ -443,6 +486,16 @@ declare module '@deepseek-ai/dsh-llm' {
      * caller other than the owner, so an absent `principal` means the owner.
      */
     'user-rpc': { kind: 'user'; rpcId: SessionRequestId; clientTimeZone?: string; principal?: Principal }
+    /**
+     * Durable marker of one conversation retraction: a `developer/message`
+     * whose empty content derives no model-visible message and whose surface
+     * operation removes the retracted range. Retract and edit both record it,
+     * and its source names the target message, so consumers hide rendered rows
+     * from `targetSeq` through the marker's own sequence. A target an earlier
+     * compaction checkpoint shadowed keeps that summary in derived history,
+     * while the same hidden range also hides the rendered summary row.
+     */
+    'conversation-rewind': { kind: 'conversation-rewind'; targetSeq: SessionSeq }
   }
 }
 

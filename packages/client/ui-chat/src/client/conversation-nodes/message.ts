@@ -8,6 +8,7 @@ import type { InboxState } from './inbox.ts'
 import type { ProcessEvidenceState } from './turn-process.ts'
 import { chatNode, contextLocation } from './common.ts'
 import { contextForm, contextProducer } from './event-projection.ts'
+import { isConversationRewindSource, retractionTarget } from './surface-rewrite.ts'
 
 interface ReferencedUserMessageNode extends UserMessageNode {
   /** Labels cited by the immediately following session-reference context. */
@@ -165,6 +166,20 @@ export const developerMessageDefinition: ConversationNodeDefinition<MessageNode>
     const event = match.event
     if (event.type !== 'developer/message') throw new Error('developer-message start requires developer/message')
     return contextMessage(event, event.data.message)
+  },
+  buildViewNode: (context) => {
+    const state = context.state
+    if (state === undefined) return null
+    // A retraction marker records the message the reader retracted and never
+    // renders: the transcript already hides everything from it through this row.
+    if (state.kind === 'context' && isConversationRewindSource(state.source)) {
+      const targetSeq = retractionTarget(state.source)
+      return chatNode(context, 'context', state.seq, state, {
+        visibility: 'hidden',
+        retraction: targetSeq === undefined ? undefined : { targetSeq },
+      })
+    }
+    return messageDefinition.buildViewNode?.(context) ?? null
   },
 }
 

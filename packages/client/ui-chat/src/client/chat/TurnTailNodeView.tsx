@@ -34,7 +34,9 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
   const hasLaterChatNode = useChat(snapshot =>
     (lastContent(snapshot, data.turn, true)?.anchorSeq ?? -1) > (data.closing?.finalNode.seq ?? data.seq))
   const endsWithResponse = useChat((snapshot) => {
-    if (snapshot.timeline.turnOrder.at(-1) !== data.turn) return false
+    // Retracting the closing Turn leaves the previous Turn as the latest one
+    // with visible content, so its actions row becomes the resting tail again.
+    if (snapshot.latestTurn !== data.turn) return false
     const last = lastContent(snapshot, data.turn, false)
     const block = last?.kind === 'assistant-step' ? last.data.blocks.findLast(candidate =>
       (candidate.kind !== 'text' && candidate.kind !== 'reasoning') || candidate.text.trim() !== '') : undefined

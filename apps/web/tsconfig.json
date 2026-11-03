@@ -46,6 +46,7 @@
     "tests/search-empty-include.e2e.ts",
     "tests/code-card-layout.e2e.ts",
     "tests/code-language.snapshot.ts",
+    "tests/conversation-rewind.e2e.ts",
     "tests/scaffold.ts",
     "tests/clock.e2e.ts",
     "tests/connection-recovery.e2e.ts",

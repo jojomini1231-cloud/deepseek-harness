@@ -7,6 +7,7 @@ import type { GlobalStandardProps, PropsRenderFactories, PropsRenderSlots } from
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useEffect, useMemo } from 'react'
+import type { RetractMessageResult } from '../src/client/contract/slots.ts'
 import type {
   AssistantMessageNode, ChatFlowHookContext, ChatFlowOwnerProps, ChatFlowSlotProps,
   ChatNode, ChatNodeHookContext, ChatNodeOwnerProps, ChatSnapshot, UserBeforeOwnerProps,
@@ -282,6 +283,12 @@ type ToolOwner = Pick<ChatNodeOwnerProps, 'openFile' | 'inspectCall'> & {
 
 const renderCommandSlot: React.ComponentProps<typeof CommandNodeView>['renderSlot'] =
   (_key, _owner, opts) => opts?.fallback ?? null
+
+// Conversation-surface actions the flow registration injects in production;
+// component tests drive the rows through this harness instead.
+const retractMessage = vi.fn(async (_seq: number): Promise<RetractMessageResult> => ({ ok: true }))
+const editMessage = vi.fn(async (_seq: number, _text: string): Promise<boolean> => true)
+const focusComposer = vi.fn<() => void>()
 const renderTurnTailSlot: React.ComponentProps<typeof TurnTailNodeView>['renderSlot'] = () => null
 
 function HarnessChatFlow({ standard, owner, hookContext, renderSlot, useConnectionState }: {
@@ -297,6 +304,7 @@ function HarnessChatFlow({ standard, owner, hookContext, renderSlot, useConnecti
   }), [standard, hookContext])
   const { renderSlot: _rootRenderSlot, __renders: _rootRenders, ...shared } = standard
   return <ChatFlow {...shared} {...owner} {...hooks} renderSlot={renderSlot}
+    retractMessage={retractMessage} editMessage={editMessage} focusComposer={focusComposer}
     useConnectionState={useConnectionState} />
 }
 
@@ -3595,6 +3603,56 @@ describe('ChatView', () => {
     expect(buttons[0]!.getAttribute('aria-disabled')).toBeNull()
     fireEvent.click(buttons[0]!)
     expect(h.forkAt.mock.calls).toEqual([[3]])
+  })
+
+  it('reports an accepted retraction and returns focus to the composer', async () => {
+    focusComposer.mockClear()
+    retractMessage.mockClear()
+    const h = makeHarness({
+      nodes: [user(1, 'question'), assistant(2, 'answer')],
+      turnEnds: new Map([[1, 3]]),
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    fireEvent.click(view.getByRole('button', { name: '回退到这条消息' }))
+    await waitFor(() => { expect(retractMessage).toHaveBeenCalledWith(1) })
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe('已回退') })
+    expect(focusComposer).toHaveBeenCalledTimes(1)
+  })
+
+  it('joins a repeated retraction while the first request is in flight', async () => {
+    focusComposer.mockClear()
+    retractMessage.mockClear()
+    let settle: (result: RetractMessageResult) => void = () => {}
+    retractMessage.mockImplementationOnce(() => new Promise<RetractMessageResult>((resolve) => { settle = resolve }))
+    const h = makeHarness({
+      nodes: [user(1, 'question'), assistant(2, 'answer')],
+      turnEnds: new Map([[1, 3]]),
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const retract = view.getByRole('button', { name: '回退到这条消息' })
+    fireEvent.click(retract)
+    fireEvent.click(retract)
+    expect(retractMessage).toHaveBeenCalledTimes(1)
+    settle({ ok: true })
+    await waitFor(() => { expect(screen.getAllByRole('alert')).toHaveLength(1) })
+    expect(screen.getByRole('alert').textContent).toBe('已回退')
+    expect(focusComposer).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports the structured refusal reason when the retraction is refused', async () => {
+    focusComposer.mockClear()
+    retractMessage.mockResolvedValueOnce({ ok: false, reason: 'busy' })
+    const h = makeHarness({
+      nodes: [user(1, 'question'), assistant(2, 'answer')],
+      turnEnds: new Map([[1, 3]]),
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    fireEvent.click(view.getByRole('button', { name: '回退到这条消息' }))
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent)
+        .toBe('会话正忙（正在运行或仍有排队消息），暂时无法回退')
+    })
+    expect(focusComposer).not.toHaveBeenCalled()
   })
 
   it('disables fork when the indexed Turn has a later steering Node', () => {

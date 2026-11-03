@@ -10,6 +10,8 @@
   - button "More conversation views"
 - text: Clean up the stale build log. {{clock}}
 - button "Copy"
+- button "Retract to this message"
+- button "Edit this message"
 - status: Completed
 - button "Completed in {{duration}}" [expanded]
 - button "Called tools" [expanded]
@@ -36,6 +38,8 @@
   - button "More conversation views"
 - text: Clean up the stale build log. {{clock}}
 - button "Copy"
+- button "Retract to this message"
+- button "Edit this message"
 - status: Completed
 - button "Completed in {{duration}}" [expanded]
 - button "Called tools" [expanded]

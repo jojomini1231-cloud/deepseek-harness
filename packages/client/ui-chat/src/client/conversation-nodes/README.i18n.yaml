@@ -3,17 +3,17 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/ui-chat/src/client/conversation-nodes/README.md
 /:
-  en: d7bf1c268431c860
-  zh: dec11c9713bb28de
+  en: b45fb5feb093b669
+  zh: 7033f95abc7bf54a
 /chat-conversation-node-rules:
   en: 31db799cfabb71c0
   zh: dfcdaacbc093cbf6
 /chat-conversation-node-rules/summary:
-  en: 660130914d717369
-  zh: 7e0161dbfe788e96
+  en: a0ff20fa70546875
+  zh: b20b95b1a2eab490
 /chat-conversation-node-rules/table-of-contents:
-  en: a867dae21e71d327
-  zh: c33b815f08497a82
+  en: 7c6c2bbdaa5e1939
+  zh: f90b77249bf05019
 /chat-conversation-node-rules/how-one-turn-becomes-a-transcript:
   en: 8598bb1e29a37e02
   zh: d122146ab82568e9
@@ -60,5 +60,8 @@
   en: e7796e7ba825c3d6
   zh: c377d9eab0a8869f
 /chat-conversation-node-rules/activity-summaries/live-activity-and-detail:
-  en: e0ca09c305690be7
-  zh: fb35d0238b1a827b
+  en: 80a0ea1a7bf65733
+  zh: 5ed640989c7f54d7
+/chat-conversation-node-rules/retraction-projection:
+  en: 76d86cd663592277
+  zh: 943693e50c471258

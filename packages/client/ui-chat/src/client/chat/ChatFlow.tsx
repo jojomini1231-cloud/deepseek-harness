@@ -1,8 +1,9 @@
 /** Ordered Chat rows, local echoes, and running status share the flow slot's parent. */
-import { memo, type ReactElement } from 'react'
+import { memo, useCallback, useRef, useState, type ReactElement } from 'react'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
+import { IconWarningOutlineRegular, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
-import type { ChatFlowSlotProps } from '../contract/slots.ts'
+import type { ChatFlowSlotProps, RetractMessageResult } from '../contract/slots.ts'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
 import { ChatGroupSeat } from './ChatGroupSeat.tsx'
 import { PendingSteeringBubble, PendingSubmissionBubble } from './MessageItem.tsx'
@@ -22,16 +23,46 @@ function isTranscriptEcho(item: PendingInput): boolean {
   return isLocalSubmission(item) && item.placement === 'transcript'
 }
 
+/** A retract outcome the flow reports as one transient banner over the conversation. */
+interface MessageActionNotice {
+  /** Remounts the banner so a repeated outcome restarts its hold and fade. */
+  readonly key: number
+  readonly text: string
+  readonly tone: 'success' | 'failure'
+}
+
+/**
+ * State one retract failure reason in plain language.
+ * @param reason - the structured reason the Host returned.
+ * @param t - Chat locale seat.
+ * @returns the localized failure sentence.
+ */
+function retractFailureText(
+  reason: Extract<RetractMessageResult, { ok: false }>['reason'],
+  t: ChatFlowSlotProps['t'],
+): string {
+  switch (reason) {
+    case 'busy': return t('message.retract.failed.busy')
+    case 'unavailable': return t('message.retract.failed.unavailable')
+    case 'failed': return t('message.retract.failed')
+    default: return assertNever(reason)
+  }
+}
+
 /** Render the flow without adding a DOM parent or changing keyed row positions. */
 export const ChatFlow = memo(function ChatFlow({
   entries, pendingInputs, lastInputTurn, deferCollapse,
   useSession, useChat, useChatNode, useChatNodeBottom, useChatNodeProcess, useChatGroup, usePresentation, useConnectionState,
   useStore, actions, renderSlot, renderFactorySlot, t, useGroupAction, useGroupHeaderAction,
-  cwd, openFile, inspectCall, forkAt, loadImage, fileMentions,
+  cwd, openFile, inspectCall, forkAt, retractMessage, editMessage, focusComposer,
+  loadImage, fileMentions,
 }: ChatFlowSlotProps) {
   const nodeStore = useChat(snapshot => snapshot.nodes)
   const running = useSession(snapshot => snapshot.running)
   const disconnected = useConnectionState(state => state === 'disconnected' || state === 'connecting')
+  // Message actions explain only a lost connection; `connecting` still counts
+  // as the paused running clock above but not as a reason the surface is down.
+  const offline = useConnectionState(state => state === 'disconnected')
   const latestTurnAnchor = useChat(snapshot => snapshot.navigation.items().at(-1)?.anchorKey)
   const runningStartTime = useChatNode(latestTurnAnchor ?? '', (node) => {
     const location = node?.location
@@ -44,10 +75,41 @@ export const ChatFlow = memo(function ChatFlow({
     return (location?.kind === 'turn' || location?.kind === 'step') && location.turn.status === 'open'
   })
   const holding = !running && latestTurnOpen
+  // The banner outlives the row that reports the outcome: retracting removes
+  // that row, so the notice belongs to the flow above it.
+  const [notice, setNotice] = useState<MessageActionNotice | null>(null)
+  const noticeKey = useRef(0)
+  // One retraction per message at a time: a repeated click during the request
+  // joins it instead of racing a second outcome banner past the first.
+  const retractInFlight = useRef(new Map<number, Promise<RetractMessageResult>>())
+  const showNotice = useCallback((outcome: Omit<MessageActionNotice, 'key'>) => {
+    noticeKey.current += 1
+    setNotice({ ...outcome, key: noticeKey.current })
+  }, [])
+  const retract = useCallback((seq: number): Promise<RetractMessageResult> => {
+    const inFlight = retractInFlight.current.get(seq)
+    if (inFlight !== undefined) return inFlight
+    const request = (async (): Promise<RetractMessageResult> => {
+      const result = await retractMessage(seq)
+      if (result.ok) {
+        showNotice({ text: t('message.retract.done'), tone: 'success' })
+        // The retracted rows are gone; the composer is where the user continues.
+        focusComposer()
+      } else {
+        showNotice({ text: retractFailureText(result.reason, t), tone: 'failure' })
+      }
+      return result
+    })()
+    retractInFlight.current.set(seq, request)
+    const release = (): void => { retractInFlight.current.delete(seq) }
+    void request.then(release, release)
+    return request
+  }, [retractMessage, focusComposer, showNotice, t])
   const seatProps = {
     nodeStore, useChatNode, useChatNodeBottom, useChatNodeProcess, usePresentation,
     useStore, actions, renderSlot, t, useGroupAction, deferCollapse,
-    cwd, openFile, inspectCall, forkAt, loadImage, fileMentions,
+    cwd, openFile, inspectCall, forkAt, focusComposer,
+    retractMessage: retract, editMessage, disconnected: offline, loadImage, fileMentions,
   }
   const rows = entries.map((entry) => {
     switch (entry.kind) {
@@ -96,5 +158,13 @@ export const ChatFlow = memo(function ChatFlow({
     ...running || holding ? [<RunningStatus key="running" startTime={runningStartTime} paused={disconnected}
       holding={holding} t={t} />] : [],
     ...pendingRows,
+    ...notice === null ? [] : [
+      <Toast
+        key={`message-notice-${String(notice.key)}`}
+        text={notice.text}
+        {...notice.tone === 'success' ? { tone: 'success' as const } : { icon: <IconWarningOutlineRegular size={18} /> }}
+        onDone={() => { setNotice(null) }}
+      />,
+    ],
   ]
 })

@@ -1,5 +1,5 @@
 ---
-description: "Detailed business rules for Chat process grouping and activity summaries."
+description: "Detailed business rules for Chat row visibility, process grouping, and activity summaries."
 ---
 # Chat conversation node rules
 
@@ -7,7 +7,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-A Turn shows an answer and lets the reader inspect the work behind it. Start with the complete example below, then read the folding and display rules to understand what is visible. The later sections define exact group boundaries, every tool-name category, counting, and live-detail selection.
+A Turn shows an answer and lets the reader inspect the work behind it. Start with the complete example below, then read the folding and display rules to understand what is visible. The later sections define exact group boundaries, every tool-name category, counting, and live-detail selection. The final section defines the retraction projection that hides a rewound conversation suffix.
 
 ## Table of Contents
 
@@ -18,6 +18,7 @@ A Turn shows an answer and lets the reader inspect the work behind it. Start wit
 - [Replies after collapse](#folded-replies)
 - [Process grouping](#process-grouping)
 - [Activity summaries and tool rules](#activity-summaries)
+- [Retraction projection](#retraction-projection)
 
 -----
 
@@ -335,3 +336,14 @@ The priority list is shared by every tool, not specialized per category. For exa
 | No usable field yet | Empty while arguments can grow; otherwise the tool name. |
 
 All live detail collapses whitespace, trims its ends, and is limited to 160 grapheme clusters, including a final `…` when truncated. String arguments initially supply at most 512 decoded UTF-16 units; normalization expands that prefix only when whitespace or multi-unit clusters leave too little text to determine truncation. Each truncation pass reads at most 161 clusters. A closed group's published summary clears its live category and detail while retaining category counts.
+
+-----
+
+<a id="retraction-projection"></a>
+## Retraction projection
+
+[surface-rewrite.ts](surface-rewrite.ts) keeps the Chat transcript consistent with conversation rewinds. It changes no Node payload and never makes a Definition-hidden Node visible. The `conversation-rewind` `developer/message` Definition supplies a Node with `retraction: { targetSeq }` and stays hidden itself; the projector turns each such Node into the inclusive anchor interval `[targetSeq, marker anchorSeq]` and merges overlapping or adjacent intervals, so a later retraction can hide an earlier marker's interval again.
+
+Every Node whose `anchorSeq` falls inside a merged interval becomes hidden with `surfaceHidden: true` and loses its group-tree position, so a retracted Turn cannot keep the latest exchange or a group boundary. A Turn whose every content row an interval removed also loses its shell rows (`turn-tail`, `turn-process`, `turn-error`, `turn-max-tokens`): those rows anchor before the target and would otherwise leave an empty Turn control or action footer behind. Clearing `groupTree` on hidden rows keeps grouping, navigation, and Turn-action selection on the visible set.
+
+The projector rebuilds its intervals from a complete Node-set replacement and re-projects resident Nodes only when an upsert adds a marker, so replay, paging, and live appends agree. Hidden rows stay in the durable log and in Trajectory inspection; only Chat visibility changes. A target the Host already compacted still anchors the interval at the clicked message, so the compaction summary row is hidden with the rest and the transcript breaks where the reader asked.

@@ -15,6 +15,7 @@ import { isAtOrOutside } from '../contract/group-tree.ts'
 import { locationCoordinates } from './common.ts'
 import { sessionRecallLabels, skillInvocationName } from './event-projection.ts'
 import { GroupTreeSegments } from './group-tree-segments.ts'
+import { SurfaceRewriteProjector } from './surface-rewrite.ts'
 import { sameTurnNavigationItem, turnNavigationItem } from './turn-navigation.ts'
 import { ChatTurnProcessProjector } from './turn-process-presentation.ts'
 
@@ -851,6 +852,9 @@ const EMPTY_CONTRIBUTION: LegacyContribution = {
 
 function legacyContribution(raw: ChatConversationViewNode): LegacyContribution {
   const node = raw as ChatNode
+  // A retracted Node leaves the timeline, the statistics fallback, and every
+  // other surface the compatibility slice feeds.
+  if (node.surfaceHidden === true) return EMPTY_CONTRIBUTION
   // Content-free settled Assistants remain in the finalized compatibility
   // stream so the composer stats pills keep their pre-assembly step counts;
   // hidden running attempts have no final Node to contribute.
@@ -1078,6 +1082,9 @@ function partialContributionChanged(
       && previous?.anchorSeq !== next.anchorSeq)
 }
 
+/** Empty retraction set shared by every snapshot without a hidden Turn. */
+const EMPTY_RETRACTED_TURNS: ReadonlySet<number> = new Set()
+
 /** Incremental keyed Chat builder registered under the `chat` target. */
 export class ChatSnapshotBuilder implements ConversationViewBuilder<ChatConversationViewNode, ChatSnapshot> {
   private readonly store = new MutableChatNodeStore()
@@ -1086,8 +1093,11 @@ export class ChatSnapshotBuilder implements ConversationViewBuilder<ChatConversa
   private readonly legacy = new LegacySliceBuilder()
   private readonly referenceLabels = new ReferenceLabelProjector()
   private readonly skillNames = new SkillNameProjector()
+  private readonly surfaceRewrites = new SurfaceRewriteProjector()
   private order: readonly string[] = EMPTY_KEYS
   private latestGroupInput: ConversationGroupInput<ChatConversationViewNode>
+  /** Loaded Turns the retraction projection hid completely; identity kept until the set moves. */
+  private retracted: ReadonlySet<number> = EMPTY_RETRACTED_TURNS
   private readonly readGroupNode = (key: NodeKey): ChatConversationViewNode | undefined => this.store.get(key)
   private readonly readGroupTurn = (turn: number): readonly NodeKey[] => this.locations.getTurn(turn) as readonly NodeKey[]
   private readonly readGroupPosition = (key: NodeKey): GroupNodePosition | undefined => this.locations.getPosition(key)
@@ -1111,7 +1121,7 @@ export class ChatSnapshotBuilder implements ConversationViewBuilder<ChatConversa
     readonly nodes: readonly ChatConversationViewNode[]
     readonly timeline: ConversationTimelineSnapshot
   }): ChatSnapshot {
-    const nodes = this.skillNames.replace(this.referenceLabels.replace(input.nodes))
+    const nodes = this.surfaceRewrites.replace(this.skillNames.replace(this.referenceLabels.replace(input.nodes)))
     this.store.replace(nodes)
     this.order = orderedVisibleChatNodes(nodes).map(node => node.key)
     this.locations.rebuild(this.order, this.store)
@@ -1136,7 +1146,10 @@ export class ChatSnapshotBuilder implements ConversationViewBuilder<ChatConversa
     readonly timeline: ConversationTimelineSnapshot
     readonly changedTurns?: readonly number[]
   }): ChatSnapshot {
-    const upserts = this.skillNames.apply(this.referenceLabels.apply(input.upserts, this.store), this.store)
+    const upserts = this.surfaceRewrites.apply(
+      this.skillNames.apply(this.referenceLabels.apply(input.upserts, this.store), this.store),
+      this.store,
+    )
     const processTurns = new Set<number>()
     let structural = false
     const contentOnly: ChatConversationViewNode[] = []
@@ -1208,8 +1221,40 @@ export class ChatSnapshotBuilder implements ConversationViewBuilder<ChatConversa
       locations: this.locations,
       navigation: this.navigation,
       timeline,
+      // The rail holds exactly the loaded Turns with a rendered row, in order.
+      latestTurn: this.navigation.items().at(-1)?.turn,
+      retractedTurns: this.retractedTurns(timeline),
       legacy,
     }
+  }
+
+  /**
+   * Loaded Turns whose every Node the retraction projection hid. The host Turn
+   * outline still names them, so the rail ladder needs the set to drop their
+   * marks. A Turn with no loaded Node is merely outside the window and stays.
+   * @param timeline - current conversation timeline.
+   * @returns the retracted Turns, or the same set while it does not move.
+   */
+  private retractedTurns(timeline: ConversationTimelineSnapshot): ReadonlySet<number> {
+    const known = new Set(timeline.turnOrder)
+    const visible = new Set<number>()
+    const surfaceHidden = new Set<number>()
+    for (const raw of this.store.values()) {
+      const node = raw as ChatNode
+      const turn = locationCoordinates(node.location).turn
+      if (turn === undefined || !known.has(turn)) continue
+      if (node.visibility === 'visible') visible.add(turn)
+      else if (node.surfaceHidden === true) surfaceHidden.add(turn)
+    }
+    let next: Set<number> | undefined
+    for (const turn of surfaceHidden) {
+      if (visible.has(turn)) continue
+      next ??= new Set()
+      next.add(turn)
+    }
+    if (next === undefined) return this.retracted.size === 0 ? this.retracted : (this.retracted = EMPTY_RETRACTED_TURNS)
+    if (next.size === this.retracted.size && [...next].every(turn => this.retracted.has(turn))) return this.retracted
+    return (this.retracted = next)
   }
 }
 

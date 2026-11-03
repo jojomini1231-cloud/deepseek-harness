@@ -1,0 +1,164 @@
+/* In-place user-message editor: it takes the bubble's place and width, so the
+   row keeps its geometry while the message is edited. */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  /* The same cap the user bubble stack holds: 525/748 of the column width,
+     and 82% outside a sized conversation column. */
+  max-width: min(calc(var(--dsh-chat-content-width, 748px) * 0.702), 82%);
+  padding: 10px 16px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-xl);
+  background: var(--dsw-specific-bubble);
+  /* Elevated surface: the editor's own scrollbar takes the l2 elevation tokens
+     (see ui-theme styles/scrollbar.css for the rebinding contract). */
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+  color: var(--dsw-alias-label-primary);
+}
+
+.editor:focus-within {
+  border-color: var(--dsw-alias-state-business-primary);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  margin-bottom: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  padding: 1px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: 999px;
+  corner-shape: round;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(17px + var(--dsh-content-font-delta-secondary, 0px));
+  white-space: nowrap;
+}
+
+.chipIcon {
+  flex: none;
+  width: calc(14px + var(--dsh-content-font-delta, 0px));
+  height: calc(14px + var(--dsh-content-font-delta, 0px));
+  margin-right: 4px;
+}
+
+.chipLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: calc(22px + var(--dsh-content-font-delta, 0px));
+  /* Six text lines, then the editor scrolls instead of growing past the row. */
+  max-height: 127px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: var(--dsh-content-font-size, 14px);
+  line-height: calc(22px + var(--dsh-content-font-delta, 0px));
+  overflow-y: auto;
+  resize: none;
+}
+
+.failure {
+  margin-top: 6px;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(18px + var(--dsh-content-font-delta-secondary, 0px));
+  text-align: right;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.hint {
+  margin-right: auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(28px + var(--dsh-content-font-delta, 0px));
+  height: calc(28px + var(--dsh-content-font-delta, 0px));
+  padding: 6px;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.action svg {
+  width: calc(15px + var(--dsh-content-font-delta, 0px));
+  height: calc(15px + var(--dsh-content-font-delta, 0px));
+}
+
+@media (hover: hover) {
+  .action:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-secondary);
+  }
+}
+
+/* Unavailable stays focusable and hoverable so Tooltip can explain why. */
+.action[data-unavailable] {
+  cursor: default;
+  opacity: 0.4;
+}
+
+@media (hover: hover) {
+  .action[data-unavailable]:hover {
+    background: transparent;
+    color: var(--dsw-alias-label-tertiary);
+  }
+}
+
+/* The shortcut hint belongs to a physical keyboard; touch keeps the controls. */
+@media (max-width: 480px) {
+  .hint {
+    display: none;
+  }
+}
+
+/* Touch: each control keeps the 44px hit floor while the glyph holds its size. */
+@media (pointer: coarse) {
+  .action {
+    width: max(44px, calc(28px + var(--dsh-content-font-delta, 0px)));
+    height: max(44px, calc(28px + var(--dsh-content-font-delta, 0px)));
+  }
+}

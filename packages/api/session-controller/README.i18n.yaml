@@ -15,8 +15,8 @@
   en: 1fdf707322fb6996
   zh: 0204f7e9d4aa3cce
 /session-controller/use-this-package:
-  en: 94701736b4ea4a7b
-  zh: d3d163cb9a874fad
+  en: f2239e8d0112cf58
+  zh: 0b4325530a34a1f8
 /session-controller/use-this-package/temporary-sessions:
   en: 3d852de61c18f8c7
   zh: 8a30df5b303635fc
@@ -30,11 +30,20 @@
   en: c92590fbaf75e45e
   zh: fcac67017bb0e3ab
 /session-controller/model-experience:
-  en: 30b917bf822bb4df
-  zh: b0b023b5b526c317
-/session-controller/model-experience/kv-cache-effect:
-  en: 22fc0c9dbedd3bb6
-  zh: fad040ca55fd0e0a
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/session-controller/model-experience/retracted-conversation-history:
+  en: 06455d33ccac8fa3
+  zh: 7976424af2855139
+/session-controller/model-experience/retracted-conversation-history/what-the-model-sees:
+  en: 5f05d8e4c89b84c1
+  zh: 215fd1976b9940af
+/session-controller/model-experience/retracted-conversation-history/token-effect:
+  en: d0d5c3ac623eb4cb
+  zh: 3e629892c377923a
+/session-controller/model-experience/retracted-conversation-history/kv-cache-effect:
+  en: eeb008c484d00a0d
+  zh: e3fc95a7f5247f6e
 /session-controller/known-limitations-and-deferred-work:
   en: 5db0f9f69a8be926
   zh: 6ba1cc4a3850fcbc

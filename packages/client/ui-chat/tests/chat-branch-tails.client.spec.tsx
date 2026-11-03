@@ -49,6 +49,16 @@ const useDetachedChat: ChatNodeViewProps['useChat'] = bindSnapshotSelector({
   getSnapshot: () => ({ order: [], nodes: new Map() }),
 } as never)
 
+/** Detached Session snapshot: fixture rows never come from a running Session. */
+const useIdleSession: ChatNodeViewProps['useSession'] = bindSnapshotSelector({
+  subscribe: () => () => {},
+  getSnapshot: () => ({ running: false }),
+} as never)
+
+/** Fixture message actions; interaction coverage asserts these through the row. */
+const retractMessage: ChatNodeViewProps['retractMessage'] = async () => ({ ok: true })
+const editMessage: ChatNodeViewProps['editMessage'] = async () => true
+
 interface MessageItemProps {
   readonly node: ConversationNode
   readonly t: ChatNodeViewProps['t']
@@ -83,7 +93,8 @@ function MessageItem({ node, t: translate, referenceLabels, skillNames }: Messag
   }
   const props: Partial<Omit<ChatNodeViewProps, 'node'>> & { node: ChatConversationViewNode } = {
     node: viewNode, t: translate, loadImage: unusedImageLoader, renderFactorySlot: renderUserFactory,
-    openFile: vi.fn(), useChat: useDetachedChat,
+    openFile: vi.fn(), useChat: useDetachedChat, useSession: useIdleSession,
+    retractMessage, editMessage,
   }
   switch (node.kind) {
     case 'user':
@@ -175,7 +186,7 @@ describe('MessageItem arms', () => {
     expect(resolved.container.textContent).toContain('/123 then ')
   })
 
-  it('user bubbles expose clock / copy and neither branch nor edit; copy writes the text', () => {
+  it('user bubbles expose clock / copy / retract / edit and no branch; copy writes the text', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -200,7 +211,8 @@ describe('MessageItem arms', () => {
     expect(stack?.contains(screen.getByRole('button', { name: '复制' }))).toBe(false)
     expect(stack?.nextElementSibling?.contains(screen.getByRole('button', { name: '复制' }))).toBe(true)
     expect(screen.queryByRole('button', { name: '在新对话中分支' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '编辑' })).toBeNull()
+    expect(screen.getByRole('button', { name: '回退到这条消息' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '编辑这条消息' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '复制' }))
     expect(writeText).toHaveBeenCalledWith('hello bubble')
   })

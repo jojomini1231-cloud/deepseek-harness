@@ -401,6 +401,30 @@ export class Session implements SessionFace {
   }
 
   /**
+   * Retract: contract session.retract 1:1. The surface replacement in the
+   * durable event stream hides the replaced rows; the response only names the
+   * marker event.
+   * @param targetSeq - durable seq of the user message to retract from.
+   * @returns the retraction marker's durable seq, or the business error.
+   */
+  async retract(targetSeq: SessionSeq): Promise<RemoteResult<{ seq: SessionSeq }>> {
+    const result = await this.remote.session.retract({ sessionId: this.sessionId, targetSeq })
+    return result.ok ? { ok: true, value: { seq: SessionSeq(result.value.seq) } } : result
+  }
+
+  /**
+   * Edit: contract session.edit 1:1. The replacement user message arrives as a
+   * durable surface event; the response names its sequence once recorded.
+   * @param targetSeq - durable seq of the user message to edit.
+   * @param text - replacement text with at least one non-whitespace character.
+   * @returns the edited message's durable seq, or the business error.
+   */
+  async edit(targetSeq: SessionSeq, text: string): Promise<RemoteResult<{ seq: SessionSeq }>> {
+    const result = await this.remote.session.edit({ sessionId: this.sessionId, targetSeq, text })
+    return result.ok ? { ok: true, value: { seq: SessionSeq(result.value.seq) } } : result
+  }
+
+  /**
    * Execute one slash-command line against this session's agent — pure
    * admission semantics (the host executor durably logs the lifecycle;
    * outcomes render as flow nodes, never as a response echo).

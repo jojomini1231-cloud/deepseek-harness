@@ -7,7 +7,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionBinding } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { GroupKey } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { createSnapshotStore, type ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
-import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { SessionSeq, type SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-browser/client'
 import type {} from '@deepseek-ai/dsh-client-ui-input-trigger/client'
@@ -49,6 +49,7 @@ import { PerformanceUsagePolicy } from './performance-usage.ts'
 import { useTurnDataValue } from './chat/use-turn-data.ts'
 import { bindDisclosure } from './chat/use-disclosure.ts'
 import { useFlowHidden, useMotionHidden } from './chat/flow-motion.ts'
+import { editAccepted, focusComposer, retractOutcome } from './model/surface-actions.ts'
 
 /** Bind group and header visibility to the viewport of one flow render. */
 export const CHAT_FLOW_INJECT: ChatFlowInjected = {
@@ -227,7 +228,18 @@ export function apply(ctx: Context): void {
     inject: (sessionId: SessionId): ChatFlowDataInjected => {
       const binding = ctx.sessions.binding(sessionId)
       if (binding === undefined) throw new Error(`ui-chat: unknown session "${sessionId}"`)
-      return { ...nodeSources(binding), hooks: { presentation, connectionState } }
+      const session = binding.session
+      return {
+        ...nodeSources(binding),
+        // A retraction or edit rewrites the Session surface; the durable events
+        // that follow move the timeline, so the row reports only the outcome.
+        retractMessage: async seq =>
+          retractOutcome(await session.retract(SessionSeq(seq)).catch((_error: unknown) => null)),
+        editMessage: async (seq, text) =>
+          editAccepted(await session.edit(SessionSeq(seq), text).catch((_error: unknown) => null)),
+        focusComposer: () => { focusComposer(binding.ctx.get('conversation'), binding.ctx) },
+        hooks: { presentation, connectionState },
+      }
     },
   }, ChatFlow))
 

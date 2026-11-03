@@ -180,6 +180,12 @@ export const IconEditOutlineRegular = productIcon('edit-outline', 'regular')
 /** Medium IconEditOutline artwork with a 1.3px stroke. */
 export const IconEditOutlineMedium = productIcon('edit-outline', 'medium')
 
+/** Regular one-pixel IconRewindOutline artwork. */
+export const IconRewindOutlineRegular = productIcon('rewind-outline', 'regular')
+
+/** Medium IconRewindOutline artwork with a 1.3px stroke. */
+export const IconRewindOutlineMedium = productIcon('rewind-outline', 'medium')
+
 /** Regular one-pixel IconThinkOutline artwork. */
 export const IconThinkOutlineRegular = productIcon('think-outline', 'regular')
 

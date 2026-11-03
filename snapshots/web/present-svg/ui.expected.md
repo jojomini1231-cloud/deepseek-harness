@@ -1,5 +1,7 @@
 - text: 简单画一个 SVG 表示冯诺依曼架构, 保存为 von-neumann.svg {{clock}}
 - button "复制"
+- button "回退到这条消息"
+- button "编辑这条消息"
 - status: 已完成
 - button "已完成，用时 {{duration}}" [expanded]
 - button "已完成分析" [expanded]

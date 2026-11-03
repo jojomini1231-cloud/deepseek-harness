@@ -114,6 +114,18 @@ export interface ChatSnapshot {
   readonly locations: ChatLocationNodeIndex
   readonly navigation: ChatTurnNavigationIndex
   readonly timeline: ConversationTimelineSnapshot
+  /**
+   * Latest loaded Turn that keeps a visible Node, or undefined when the visible
+   * conversation is empty. A retraction moves it back to the Turn that now ends
+   * the conversation, so that Turn regains the tail actions.
+   */
+  readonly latestTurn: number | undefined
+  /**
+   * Loaded Turns a conversation retraction hid completely. The rail also merges
+   * the host's whole-log Turn outline, which still names these Turns, so it
+   * drops their marks from the visible ladder.
+   */
+  readonly retractedTurns: ReadonlySet<number>
   readonly legacy: LegacyConversationSlice
 }
 
@@ -161,6 +173,8 @@ export const EMPTY_CHAT_SNAPSHOT: ChatSnapshot = {
     items: () => EMPTY_LIST,
   },
   timeline: EMPTY_TIMELINE,
+  latestTurn: undefined,
+  retractedTurns: new Set(),
   legacy: {
     nodes: EMPTY_LIST,
     turnTimings: new Map(),

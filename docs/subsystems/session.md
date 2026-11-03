@@ -945,6 +945,26 @@ workspaceDesktop(): { name: string; available: boolean; fileManager: 'finder' | 
 @Remote('fork') async fork(request: SessionForkRequest): Promise<SessionForkValue>
 
 /**
+ * Retract one conversation branch from a plain user message after explicitly
+ * resuming its Session: everything from that message onward leaves the
+ * model-visible surface while the event log keeps it. The Session must be
+ * idle with no pending input.
+ * @param request - Session identity and the target user message's durable seq.
+ * @returns the durable sequence of the retraction marker.
+ */
+@Remote('retract') retract(request: SessionRetractRequest): Promise<SessionRetractValue>
+
+/**
+ * Edit one plain user message after explicitly resuming its Session: the
+ * target and its successors leave the surface, and the replacement text with
+ * the target's non-text content blocks opens the next turn. The Session must
+ * be idle with no pending input.
+ * @param request - Session identity, target user message seq, and replacement text.
+ * @returns the durable sequence of the edited user message.
+ */
+@Remote('edit') edit(request: SessionEditRequest): Promise<SessionEditValue>
+
+/**
  * Admit one prompt after explicitly resuming its Session.
  * @param request - Session identity, prompt content, source metadata, and delivery mode.
  * @param signal - caller cancellation before prompt admission begins.

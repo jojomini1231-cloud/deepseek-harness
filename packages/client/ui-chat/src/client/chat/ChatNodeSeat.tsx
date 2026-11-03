@@ -26,10 +26,19 @@ interface ChatNodeSeatProps extends ChatNodeOwnerProps {
   readonly useChatNodeBottom: ChatFlowSlotProps['useChatNodeBottom']
   readonly deferCollapse: boolean
   readonly useGroupAction: ChatFlowSlotProps['useGroupAction']
+  /** Chat-internal flow state handed to rows that explain an offline surface. */
+  readonly disconnected: boolean
 }
 
+/**
+ * Owner currency plus Chat-internal flow state. The slot contract carries the
+ * conversation actions; the connection state stays inside this package and
+ * reaches the user-message renderer as an extra owner field.
+ */
+type ChatNodeOwnerState = ChatNodeOwnerProps & { readonly disconnected: boolean }
+
 type RoutedChatNodeOwner = {
-  [Kind in ChatNode['kind']]: ChatNodeOwnerProps & { readonly node: ChatNode<Kind> }
+  [Kind in ChatNode['kind']]: ChatNodeOwnerState & { readonly node: ChatNode<Kind> }
 }[ChatNode['kind']]
 
 function turnDataOf(node: ChatNode | undefined): ConversationLocationDataStore<ConversationTurnDataMap> | undefined {
@@ -50,6 +59,7 @@ function turnOf(node: ChatNode | undefined): number | undefined {
 export const ChatNodeSeat = memo(function ChatNodeSeat({
   nodeKey, groupPart, useChatNode, useChatNodeProcess, usePresentation,
   cwd, openFile, inspectCall, forkAt,
+  retractMessage, editMessage, focusComposer, disconnected,
   loadImage, fileMentions, useStore, actions, renderSlot, t, useChatNodeBottom, deferCollapse, useGroupAction,
 }: ChatNodeSeatProps) {
   const bottom = useChatNodeBottom(nodeKey)
@@ -129,7 +139,7 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
       disclosureReset.set(disclosureReset.getSnapshot() + 1)
     }
   }, [processMember, processHidden, wrapperRef, disclosureReset])
-  const owner = useMemo<ChatNodeOwnerProps | null>(() => node === undefined
+  const owner = useMemo<ChatNodeOwnerState | null>(() => node === undefined
     ? null
     : {
       ...groupPart === undefined ? {} : { groupPart },
@@ -137,12 +147,16 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
       openFile,
       inspectCall,
       forkAt,
+      retractMessage,
+      editMessage,
+      focusComposer,
+      disconnected,
       loadImage,
       fileMentions,
       turnProcess,
     }, [
-    node, groupPart, cwd, openFile, inspectCall, forkAt,
-    loadImage, fileMentions, turnProcess,
+    node, groupPart, cwd, openFile, inspectCall, forkAt, retractMessage, editMessage, focusComposer,
+    disconnected, loadImage, fileMentions, turnProcess,
   ])
   if (routedNode === undefined || owner === null) return null
   // Runtime dispatch owns the correlation: every Node's discriminant is the

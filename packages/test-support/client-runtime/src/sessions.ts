@@ -131,6 +131,22 @@ export class FixtureSession implements SessionFace {
   }
 
   /**
+   * Fail-loud stub; supply `retract` on the fixture's session face to exercise it.
+   * @returns never — always throws.
+   */
+  retract(): never {
+    throw new Error(`test session "${this.sessionId}": retract is not stubbed — supply it on the fixture's session face`)
+  }
+
+  /**
+   * Fail-loud stub; supply `edit` on the fixture's session face to exercise it.
+   * @returns never — always throws.
+   */
+  edit(): never {
+    throw new Error(`test session "${this.sessionId}": edit is not stubbed — supply it on the fixture's session face`)
+  }
+
+  /**
    * Fail-loud stub; supply `updateQueue` on the fixture's session face to exercise it.
    * @returns never — always throws.
    */

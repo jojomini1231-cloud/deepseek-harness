@@ -2682,6 +2682,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the new Session identity.',
       },
       {
+        signature: '@Remote(\'retract\') retract(request: SessionRetractRequest): Promise<SessionRetractValue>',
+        description: 'Retract one conversation branch from a plain user message after explicitly resuming its Session: everything from that message onward leaves the model-visible surface while the event log keeps it. The Session must be idle with no pending input.',
+        parameters: [{ name: 'request', description: 'Session identity and the target user message\'s durable seq.' }],
+        returns: 'the durable sequence of the retraction marker.',
+      },
+      {
+        signature: '@Remote(\'edit\') edit(request: SessionEditRequest): Promise<SessionEditValue>',
+        description: 'Edit one plain user message after explicitly resuming its Session: the target and its successors leave the surface, and the replacement text with the target\'s non-text content blocks opens the next turn. The Session must be idle with no pending input.',
+        parameters: [{ name: 'request', description: 'Session identity, target user message seq, and replacement text.' }],
+        returns: 'the durable sequence of the edited user message.',
+      },
+      {
         signature: '@Remote(\'prompt\') async prompt(request: SessionPromptRequest, signal: AbortSignal): Promise<SessionPromptValue>',
         description: 'Admit one prompt after explicitly resuming its Session.',
         parameters: [{ name: 'request', description: 'Session identity, prompt content, source metadata, and delivery mode.' }, { name: 'signal', description: 'caller cancellation before prompt admission begins.' }],
@@ -8196,6 +8208,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionDeleteValue {\n    readonly deleted: true;\n}',
   },
   {
+    name: 'SessionEditRequest',
+    declaration: 'export interface SessionEditRequest extends SessionRetractRequest {\n    readonly text: string;\n}',
+  },
+  {
+    name: 'SessionEditValue',
+    declaration: 'export interface SessionEditValue {\n    readonly seq: number;\n}',
+  },
+  {
     name: 'SessionEndInput',
     declaration: 'export interface SessionEndInput {\n    reason: \'clear\' | \'logout\' | \'prompt_input_exit\' | \'resume\' | \'other\';\n    sessionId: string;\n}',
   },
@@ -8574,6 +8594,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionResultRange',
     declaration: 'export interface SessionResultRange {\n    from?: number;\n    to?: number;\n}',
+  },
+  {
+    name: 'SessionRetractRequest',
+    declaration: 'export interface SessionRetractRequest {\n    readonly sessionId: SessionId;\n    readonly targetSeq: number;\n}',
+  },
+  {
+    name: 'SessionRetractValue',
+    declaration: 'export interface SessionRetractValue {\n    readonly seq: number;\n}',
   },
   {
     name: 'SessionSearchCursor',

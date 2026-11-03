@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest'
-import { mergeTurnRailItems } from '../src/client/chat/turn-rail-items.ts'
+import { mergeTurnRailItems, withoutRetractedTurns } from '../src/client/chat/turn-rail-items.ts'
 import type { TurnNavigationItem } from '../src/client/contract/snapshot.ts'
 
 function loadedItem(turn: number, prompt = `p${String(turn)}`, response = `r${String(turn)}`): TurnNavigationItem {
@@ -73,5 +73,20 @@ describe('mergeTurnRailItems', () => {
       { turn: 3, prompt: '', response: '', anchor: { kind: 'unloaded', seq: 4 } },
       { turn: 6, prompt: 'kept', response: '', anchor: { kind: 'unloaded', seq: 7 } },
     ])
+  })
+})
+describe('withoutRetractedTurns', () => {
+  it('passes the ladder through while nothing is retracted', () => {
+    const items = mergeTurnRailItems([], [{ turn: 1, seq: 0, prompt: 'first', response: '' }])
+    expect(withoutRetractedTurns(items, new Set())).toBe(items)
+  })
+
+  it('drops the marks of retracted turns and keeps the rest in order', () => {
+    const items = mergeTurnRailItems(
+      [loadedItem(2)],
+      [{ turn: 1, seq: 0, prompt: 'first', response: '' }, { turn: 3, seq: 12, prompt: '', response: '' }],
+    )
+    expect(withoutRetractedTurns(items, new Set([2])).map(item => item.turn)).toEqual([1, 3])
+    expect(withoutRetractedTurns(items, new Set([1, 2, 3]))).toEqual([])
   })
 })

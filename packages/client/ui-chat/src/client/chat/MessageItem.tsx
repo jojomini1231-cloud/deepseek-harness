@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { PropsRenderFactories, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
@@ -10,7 +10,8 @@ import type {
 import type { ModelRetryNode, TurnErrorNode, UserMessageNode } from '../contract/snapshot.ts'
 import { CompactionItem } from './CompactionItem.tsx'
 import { ContextInjectionRow } from './ContextInjectionRow.tsx'
-import { MessageIconActions } from './MessageIconActions.tsx'
+import { MessageEditor } from './MessageEditor.tsx'
+import { MessageIconActions, type MessageActionsUnavailable } from './MessageIconActions.tsx'
 import css from './MessageItem.module.css'
 
 const EMPTY_TEXT_FACTS: Readonly<Partial<UserTextFacts>> = {}
@@ -178,13 +179,15 @@ const NO_MESSAGE_SOURCE: PropsRenderSlots<'conversation.chat.user.before'>['rend
 /** Right-aligned bubble shared by user and steering rows. */
 function UserStyleBubble({
   node, renderSlotChain, content, loadImage, renderFactorySlot, actions,
-  pending = false, echo = false, batchStart = false,
+  editor, pending = false, echo = false, batchStart = false,
   referenceLabels, skillNames, previewAttachments, facts: inputFacts = EMPTY_TEXT_FACTS, interactive = false,
 }: {
   content: readonly unknown[]
   renderFactorySlot: PropsRenderFactories['renderFactorySlot']
   /** Optional IconActions (or similar) below the bubble; receives the joined text. */
   actions?: (text: string) => ReactNode
+  /** In-place editor standing in for the prepared content; hides the actions row. */
+  editor?: ReactNode
   /** Row whose durable source the message-source seat elects above this bubble. */
   node: DecoratedRow
   /** Seat renderer; rows that do not own the seat pass {@link NO_MESSAGE_SOURCE}. */
@@ -224,13 +227,13 @@ function UserStyleBubble({
       data-chat-steering-batch={batchStart ? 'start' : undefined}
     >
       {renderSlotChain('conversation.chat.user.before', { source: node.data.source, kind: node.kind }, { fallback: null })}
-      {renderFactorySlot('conversation.chat.user.content', {
+      {editor ?? renderFactorySlot('conversation.chat.user.content', {
         content: prepared,
         loadImage,
         facts,
         interactive,
       })}
-      {actions?.(prepared.text)}
+      {editor === undefined ? actions?.(prepared.text) : null}
     </div>
   )
 }
@@ -327,21 +330,62 @@ export function PendingSubmissionBubble({ submission, loadImage, renderFactorySl
  *
  * Renders the durable-message chain seat directly above the bubble. The seat is
  * declared by the `user` registration alone, so a steering row renders the same
- * bubble without asking for it.
+ * bubble without asking for it. Only a durable user message retracts or edits;
+ * steering rows and submission echoes keep the copy action alone.
  */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
-  node, renderFactorySlot, loadImage, renderSlotChain, t,
+  node, renderFactorySlot, loadImage, renderSlotChain, t, retractMessage, editMessage, useSession, disconnected,
 }: ChatNodeViewProps<'user' | 'steering'> & {
   /** Bound by the `user` keyed registration, the only entry that declares the seat. */
   renderSlotChain: PropsRenderSlots<'conversation.chat.user.before'>['renderSlotChain']
+  /** Chat-internal flow state: the client connection is offline, so surface actions cannot run. */
+  disconnected?: boolean | undefined
 }) {
   const data = node.data
+  const running = useSession(snapshot => snapshot.running)
+  const [editing, setEditing] = useState(false)
+  const editButtonRef = useRef<HTMLButtonElement>(null)
+  // Only a cancelled editor returns focus; mounting the row must not steal it.
+  const restoreEditFocus = useRef(false)
+  const parts = useMemo(() => contentParts(data.content), [data.content])
+  const openEditor = useCallback(() => { setEditing(true) }, [])
+  const closeEditor = useCallback(() => {
+    restoreEditFocus.current = true
+    setEditing(false)
+  }, [])
+  useEffect(() => {
+    if (editing || !restoreEditFocus.current) return
+    restoreEditFocus.current = false
+    editButtonRef.current?.focus()
+  }, [editing])
+  const sendEdit = useCallback(async (text: string): Promise<boolean> => {
+    const accepted = await editMessage(data.seq, text)
+    if (accepted) setEditing(false)
+    return accepted
+  }, [editMessage, data.seq])
+  const retract = useCallback(() => { void retractMessage(data.seq) }, [retractMessage, data.seq])
+  const editable = node.kind === 'user'
+  const unavailable: MessageActionsUnavailable | undefined = disconnected === true
+    ? 'disconnected'
+    : running ? 'running' : undefined
+  const editor = editing
+    ? <MessageEditor
+      initialText={parts.text}
+      attachments={parts.attachments}
+      {...data.referenceLabels === undefined ? {} : { referenceLabels: data.referenceLabels }}
+      {...data.skillNames === undefined ? {} : { skillNames: data.skillNames }}
+      onSend={sendEdit}
+      onCancel={closeEditor}
+      t={t}
+    />
+    : undefined
   return (
     <UserStyleBubble
       node={node}
       renderSlotChain={renderSlotChain}
       content={data.content}
       interactive
+      editor={editor}
       renderFactorySlot={renderFactorySlot}
       loadImage={loadImage}
       batchStart={node.kind === 'steering' && node.data.batchStart === true}
@@ -353,6 +397,12 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
           time={data.time}
           clock="start"
           className={css.actions}
+          {...editable ? {
+            onRetract: retract,
+            onEdit: openEditor,
+            editActionRef: editButtonRef,
+            messageActionsUnavailable: unavailable,
+          } : {}}
           t={t}
         />
       )}
