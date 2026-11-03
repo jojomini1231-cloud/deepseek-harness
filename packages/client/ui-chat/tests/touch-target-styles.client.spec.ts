@@ -78,7 +78,8 @@ describe('process group header', () => {
 describe('chat tail', () => {
   it('gives the running status the height of the 44px actions row and grows the back-to-bottom control', () => {
     const coarse = lastCoarseBlock(chatView)
-    expect(declarations(coarse, '.runningContent')?.get('height')).toBe('max(44px, calc(28px + var(--dsh-content-font-delta, 0px)))')
+    expect(declarations(coarse, '.column')?.get('--dsh-chat-tail-row-height')).toBe('max(44px, calc(28px + var(--dsh-content-font-delta, 0px)))')
+    expect(declarations(chatView, '.runningContent')?.get('height')).toBe('var(--dsh-chat-tail-row-height)')
     expect(declarations(coarse, '.toBottom')?.get('width')).toBe('44px')
     expect(declarations(coarse, '.toBottom')?.get('height')).toBe('44px')
     expect(declarations(chatView, '.toBottom')?.get('width')).toBe('34px')
