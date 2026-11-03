@@ -29,3 +29,27 @@
     background: var(--dsw-alias-interactive-bg-hover);
   }
 }
+
+/* Phone drawer seat: the frame positions it on the frame edge (ui-layout
+   AppFrame's leadingSeat), and the drawer it opens is the phone's navigation.
+   Only that control survives here; starting a Session lives inside the
+   drawer, so the row keeps one 44px target instead of three crowded ones. */
+:global(html[data-mobile-shell]) .controls {
+  gap: 0;
+}
+
+:global(html[data-mobile-shell]) .iconButton {
+  width: 44px;
+  height: 44px;
+}
+
+:global(html[data-mobile-shell]) .iconButton svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Keep the first control only. Selecting by position in `.controls` rather
+   than by button type holds whether or not a Tooltip adds a sibling node. */
+:global(html[data-mobile-shell]) .controls > :not(:first-child) {
+  display: none;
+}

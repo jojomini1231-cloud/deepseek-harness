@@ -62,6 +62,7 @@
    centered on the same axis as the input box (which caps at chat + 16px); the
    scroller itself stays full-bleed. */
 .column {
+  --dsh-chat-tail-row-height: calc(28px + var(--dsh-content-font-delta, 0px));
   position: relative;
   max-width: var(--dsh-chat-content-width);
   width: 100%;
@@ -139,7 +140,7 @@
 }
 
 /* Tail slot: the running status and a completed Turn's actions row both take
-   a 16px offset plus a 28px row. The steering renderer marks the first
+   a 16px offset plus the tail row height. The steering renderer marks the first
    steering row of each claim that Chat orders after the Turn's process
    control; that row keeps the slot above it, the way a completed Turn's
    actions row precedes the next user message, while rows claimed together
@@ -148,7 +149,7 @@
    without moving any bubble. Neighbour gap rules exclude the batch start so
    this slot always applies. */
 :is(.column, :global([data-slot="conversation.chat.flow"])) > .flowItem:has(> [data-slot="conversation.chat.node"] > [data-chat-steering-batch="start"]) {
-  --dsh-chat-flow-gap: calc(44px + var(--dsh-content-font-delta, 0px));
+  --dsh-chat-flow-gap: calc(16px + var(--dsh-chat-tail-row-height));
 }
 
 .running + [data-pending-steering] {
@@ -184,7 +185,7 @@
 @keyframes running-enters-slot {
   from {
     opacity: 0;
-    translate: 0 calc(-44px - var(--dsh-content-font-delta, 0px));
+    translate: 0 calc(-16px - var(--dsh-chat-tail-row-height));
   }
   40% {
     opacity: 1;
@@ -265,7 +266,7 @@
   min-width: 0;
   gap: 6px;
   margin-top: 4px;
-  height: calc(28px + var(--dsh-content-font-delta, 0px));
+  height: var(--dsh-chat-tail-row-height);
 }
 
 .runningText {
@@ -406,4 +407,19 @@
   visibility: hidden;
   margin: 0;
   width: max-content;
+}
+
+/* Touch: the finished-Turn actions row is 44px, so the running status sharing
+   its tail slot takes the same height, and the floating back-to-bottom control
+   grows to the touch floor. */
+@media (pointer: coarse) {
+  .column {
+    --dsh-chat-tail-row-height: max(44px, calc(28px + var(--dsh-content-font-delta, 0px)));
+  }
+
+  .toBottom {
+    width: 44px;
+    height: 44px;
+    margin-top: -44px;
+  }
 }

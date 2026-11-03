@@ -72,6 +72,8 @@ Queue 预览启用空白折叠和文档边缘 trim，保留 emoji，并使用 CS
 
 在粗指针设备上，composer 的草稿字号至少为 16px，以避免获得焦点时浏览器自动放大；更大的字号偏好仍然生效。
 
+在手机外壳（`html[data-mobile-shell]`）下，头部为框架的 leading 座位（抽屉入口）让出宽度，标题使用 15/22；composer 栈让出底部安全区；粗指针下附件与发送控件的命中区为 44px；`html[data-keyboard-open]` 置位时，输入卡下方的元信息行退出布局。
+
 控件组的尺寸、内容、可见性或字体加载状态变化后，composer 测量展开状态下的控件组。若无法排在同一行，控制栏为模型位设置 `--dsh-composer-model-text-display: none` 和 `--dsh-composer-model-icon-display: block`；两者默认值分别为 `block` 和 `none`。模型位按内容宽度（最多 360px）参与测量，而不是按行宽比例，因此长模型名在测量中保持可见。若连图标也放不下，仍允许换行。
 
 上下文占用率入口遵循[统计控件圆角规则](../../../docs/ui-radius.zh.md#radius-scale)。

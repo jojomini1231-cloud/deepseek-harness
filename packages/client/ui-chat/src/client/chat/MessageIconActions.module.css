@@ -114,3 +114,17 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* Touch: the action row and each icon take the 44px hit floor. The glyphs keep
+   their px-delta size; only the hit box grows, and the row keeps its own height
+   in flow so nothing overlaps the message above or below. */
+@media (pointer: coarse) {
+  .actions {
+    height: max(44px, calc(28px + var(--dsh-content-font-delta, 0px)));
+  }
+
+  .action {
+    width: max(44px, calc(28px + var(--dsh-content-font-delta, 0px)));
+    height: max(44px, calc(28px + var(--dsh-content-font-delta, 0px)));
+  }
+}

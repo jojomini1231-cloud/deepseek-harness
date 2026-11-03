@@ -19,7 +19,8 @@ import { createLayoutStore } from './stores.ts'
 import { LayoutController } from './service.ts'
 import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/client'
 import { en, ja, es, fr, de, ru, pt, zh } from './shortcut-locales.ts'
-import { ThemePresenter } from './theme-presenter.ts'
+import { MOBILE_TYPOGRAPHY_QUERY, ThemePresenter } from './theme-presenter.ts'
+import { trackVisualViewport } from './visual-viewport.ts'
 
 // Contract exports only (export-convergence rule: cross-package consumers
 // keep a symbol exported; test-only/package-internal symbols live off /src).
@@ -64,6 +65,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      *
      * The occupant receives the frame's live column state (collapsed, width)
      * and is expected to render the compact control rail while collapsed.
+     * Mark its toggle button with `data-sidebar-toggle` for responsive focus transfer.
      */
     'sidebar': { kind: 'single'; scope: 'root'; owner: SidebarOwnerProps }
     /**
@@ -109,6 +111,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * collapse; other platforms keep the rail), so the occupant can assume the
      * frame edge is the window edge and the macOS traffic lights sit before it.
      * OCCUPIED by ui-sidebar's reopen/New Session controls.
+     * Mark the reopen button with `data-sidebar-toggle` for responsive focus transfer.
      *
      * While the seat is mounted the frame publishes
      * `--dsh-frame-leading-clearance` (the inline inset the seat's band
@@ -217,11 +220,22 @@ export function apply(ctx: ClientContext): void {
   // state through the getter once, then event-driven only; no React path.
   ctx.effect(() => {
     const presenter = new ThemePresenter()
-    presenter.apply(ctx.theme.getTheme())
+    const theme = ctx.theme
+    presenter.apply(theme.getTheme())
     const off = ctx.on('theme/change', (snapshot) => { presenter.apply(snapshot) })
+    // The phone typography floors depend on the viewport, so a frame crossing
+    // the phone width re-projects the same resolved snapshot.
+    const phone = typeof window.matchMedia === 'function' ? window.matchMedia(MOBILE_TYPOGRAPHY_QUERY) : undefined
+    const onViewport = (): void => { presenter.apply(theme.getTheme()) }
+    phone?.addEventListener('change', onViewport)
     return () => {
+      phone?.removeEventListener('change', onViewport)
       off()
       presenter.dispose()
     }
   }, 'ui-layout: theme presenter')
+
+  // Visual viewport: the phone shell and keyboard-aware surfaces consume the
+  // published height and inset; the tracker retracts its own root writes.
+  ctx.effect(() => trackVisualViewport(), 'ui-layout: visual viewport')
 }

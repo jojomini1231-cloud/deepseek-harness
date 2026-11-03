@@ -628,3 +628,30 @@
 .embeddedBody[data-content-phase='settling'] .composerSeat {
   visibility: hidden;
 }
+
+/* Phone shell: the frame has no sidebar track, so the drawer trigger rides its
+   absolute leading seat (ui-layout AppFrame) over this header. The leading
+   column reserves that seat's width, which starts the title row clear of the
+   44px control. The frame column already consumes the top safe area. */
+:global(html[data-mobile-shell]) .headerLeading {
+  padding-left: 48px;
+}
+
+/* One-line title at the mobile reading size; the subagent lineage row keeps
+   the smaller information tier. */
+:global(html[data-mobile-shell]) .crumb {
+  font-size: 15px;
+  line-height: 22px;
+}
+
+:global(html[data-mobile-shell]) .crumbSubagent {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* The phone header keeps the Session title and the right-panel entry; the
+   desktop-only utilities (open-in-app, scheduled-task catalog) collapse.
+   display:none also removes them from the accessibility tree. */
+:global(html[data-mobile-shell]) .headerUtilities {
+  display: none;
+}

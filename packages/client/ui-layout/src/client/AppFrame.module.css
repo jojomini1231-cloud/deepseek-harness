@@ -55,7 +55,12 @@
   }
 }
 
+/* Columns state their tracks explicitly: the phone drawer takes the sidebar
+   column out of flow (position: fixed), and auto-placement would then drop the
+   centre into the zero-width first track. */
 .sidebarCol {
+  grid-column: 1;
+  grid-row: 1;
   min-width: 0;
   overflow: hidden;
   background: var(--dsw-specific-sidebar-fill);
@@ -63,6 +68,8 @@
 }
 
 .centerCol {
+  grid-column: 2;
+  grid-row: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -265,6 +272,8 @@
  * where it is. The occupant draws its own left border.
  */
 .rightbarCol {
+  grid-column: 3;
+  grid-row: 1;
   position: relative;
   min-width: 0;
   overflow: visible;
@@ -287,4 +296,79 @@
 
 .overlayLayer > * {
   pointer-events: auto;
+}
+
+/*
+ * Phone shell: the frame keeps a single stack and the sidebar column becomes a
+ * fixed overlay drawer. The column stays mounted while closed (translated off
+ * the frame edge and hidden from focus and assistive technology) so opening
+ * slides the same content in; data-mobile-drawer drives both directions. The
+ * frame follows the visual viewport's position and height, independently of
+ * the document scroll Safari can apply when focusing an input.
+ */
+:global(html[data-mobile-shell]) {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.frame[data-mobile-shell] {
+  position: fixed;
+  top: var(--dsh-viewport-top, 0px);
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
+  height: var(--dsh-viewport-height, 100%);
+  /* Only the top inset belongs to the shell: the conversation header clears the
+     notch once here, while the composer and the fixed drawer own the bottom
+     inset themselves. */
+  padding-top: var(--dsh-safe-top);
+}
+
+.frame[data-mobile-shell] .sidebarCol {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 31;
+  box-sizing: border-box;
+  width: min(86vw, 328px);
+  padding-top: var(--dsh-safe-top);
+  padding-bottom: var(--dsh-safe-bottom);
+  border: 0;
+  border-radius: 0 var(--dsw-radius-xl) var(--dsw-radius-xl) 0;
+  background: var(--dsw-specific-sidebar-fill);
+  box-shadow: var(--dsw-elevation-prominent);
+  transform: translateX(-100%);
+  visibility: hidden;
+  pointer-events: none;
+  transition: transform 280ms var(--ds-ease-in-out), visibility 0s linear 280ms;
+}
+
+.frame[data-mobile-shell][data-mobile-drawer='open'] .sidebarCol {
+  transform: none;
+  visibility: visible;
+  pointer-events: auto;
+  transition: transform 280ms var(--ds-ease-in-out), visibility 0s linear;
+}
+
+/* Decorative dismissal layer between the centre and the drawer. */
+.frame[data-mobile-shell] .scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: var(--dsw-alias-bg-mask-1);
+}
+
+/* The drawer trigger shares the leading seat: below the safe area, on the
+   frame edge, with a 44px touch target for the control it carries. */
+.frame[data-mobile-shell] .leadingSeat {
+  top: calc(var(--dsh-safe-top) + 6px);
+  left: 12px;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame[data-mobile-shell] .sidebarCol,
+  .frame[data-mobile-shell][data-mobile-drawer='open'] .sidebarCol {
+    transition: none;
+  }
 }

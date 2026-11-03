@@ -299,3 +299,19 @@
   left: -10px;
   width: 10px;
 }
+
+/* Touch: every option row reaches the 44px hit floor (including the compact
+   and dense variants) and the card never runs past the viewport's side
+   margins. Desktop popover sizes stay exactly as declared above. */
+@media (pointer: coarse) {
+  .item,
+  .compactList .item,
+  .denseList .item {
+    min-height: 44px;
+  }
+
+  .list,
+  .submenu {
+    max-width: min(360px, calc(100vw - 24px));
+  }
+}

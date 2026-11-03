@@ -258,8 +258,10 @@ describe('web e2e: plan chip click area at the narrow viewport', () => {
 
   // The suite above only reaches the icon through the Plan chip's width. This
   // case keeps the row otherwise empty: a long model name must still exceed
-  // the row above the mobile minimum, so a row-relative width cap cannot hide
-  // the demand behind a shrunken, ellipsized name.
+  // the row, so a row-relative width cap cannot hide the demand behind a
+  // shrunken, ellipsized name. Below 600px the phone shell reserves no sidebar
+  // track, so the composer row is the frame width minus its gutters and the
+  // 360px collapse threshold is first crossed at the 390px phone minimum.
   it('collapses the model text on a narrow composer without another control', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-model-collapse-no-plan'))
     await page.locator('[data-composer-input]').first().waitFor({ timeout: 10_000 })
@@ -267,7 +269,7 @@ describe('web e2e: plan chip click area at the narrow viewport', () => {
     await selectModel(page, LONG_MODEL)
     await expectControlLayout(page, false)
 
-    await resizeControls(page, 440)
+    await resizeControls(page, 390)
     await expectControlLayout(page, true)
     const trigger = page.getByRole('button', { name: /Select model/ })
     expect(await trigger.getAttribute('title')).toContain(LONG_MODEL)

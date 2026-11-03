@@ -4,12 +4,12 @@
  * controls), `body[data-ds-dark-theme]` for the token palette, the active
  * theme's alias-token overrides as inline CSS variables on body, the content
  * font-size axis (`--dsh-content-font-size`), the code and terminal sizes
- * (`--dsh-code-font-size`, `--dsh-terminal-font-size`), the user font lists
- * (`--dsh-font-family-<role>`), `html[data-ds-theme-source]`
- * for native-chrome mirroring, and one presenter-owned
- * `meta[name="theme-color"]` for surrounding browser UI. Pure DOM writes, no
- * React involvement; the presenter only ever retracts what it wrote itself,
- * so foreign attributes, metadata, and inline styles survive.
+ * (`--dsh-code-font-size`, `--dsh-terminal-font-size`) floored by the mobile
+ * typography minimums, the user font lists (`--dsh-font-family-<role>`),
+ * `html[data-ds-theme-source]` for native-chrome mirroring, and one
+ * presenter-owned `meta[name="theme-color"]` for surrounding browser UI. Pure
+ * DOM writes, no React involvement; the presenter only ever retracts what it
+ * wrote itself, so foreign attributes, metadata, and inline styles survive.
  */
 import type { FontRole, ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 
@@ -36,6 +36,21 @@ const FONT_SIZE_VARIABLES = {
   code: '--dsh-code-font-size',
   terminal: '--dsh-terminal-font-size',
 } as const satisfies Record<FontRole, string>
+
+/**
+ * Phone typography floors by role: below {@link MOBILE_TYPOGRAPHY_QUERY} a
+ * preference under the floor is raised to it, while a larger preference still
+ * wins. The viewport is read here rather than expressed in CSS so the body
+ * variables stay plain pixels for every consumer and test.
+ */
+const MOBILE_FONT_SIZE_FLOORS = {
+  text: 15,
+  code: 12,
+  terminal: 12,
+} as const satisfies Record<FontRole, number>
+
+/** Viewport query matching the frame's phone presentation (ui-layout's 600px breakpoint). */
+export const MOBILE_TYPOGRAPHY_QUERY = '(max-width: 599px)'
 
 /** Body variables carrying the user's normalized font lists; absent selects the built-in stack. */
 const FONT_FAMILY_VARIABLES = {
@@ -74,8 +89,12 @@ export class ThemePresenter {
     const body = document.body
     if (scheme === 'dark') body.setAttribute(DARK_ATTRIBUTE, '')
     else body.removeAttribute(DARK_ATTRIBUTE)
+    const phone = typeof window.matchMedia === 'function' && window.matchMedia(MOBILE_TYPOGRAPHY_QUERY).matches
     for (const [role, name] of Object.entries(FONT_SIZE_VARIABLES)) {
-      body.style.setProperty(name, `${snapshot.fontSizes[role as FontRole]}px`)
+      const roleFont = role as FontRole
+      const size = snapshot.fontSizes[roleFont]
+      const floor = phone ? MOBILE_FONT_SIZE_FLOORS[roleFont] : 0
+      body.style.setProperty(name, `${Math.max(size, floor)}px`)
     }
     for (const [kind, name] of Object.entries(FONT_FAMILY_VARIABLES)) {
       const list = snapshot.fontFamilies[kind as FontRole]

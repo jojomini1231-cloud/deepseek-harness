@@ -456,3 +456,34 @@
 .activity { display: flex; align-items: center; flex: none; }
 .activity:empty { display: none; }
 .activityExpanded { flex: 1; min-width: 0; }
+
+/* Phone shell: the frame's bottom safe area pads the whole composer stack, so
+   the input card and the meta row under it both clear the home indicator. The
+   declaration lands after .hero so the centered hero keeps it too. */
+:global(html[data-mobile-shell]) .root {
+  padding-bottom: max(8px, var(--dsh-safe-bottom, 0px));
+}
+
+/* With the keyboard up the meta row (session statistics, composer dock) would
+   sit under it: display:none gives its height back to the transcript and takes
+   the row out of the accessibility tree rather than leaving an invisible box. */
+:global(html[data-keyboard-open]) .dock {
+  display: none;
+}
+
+/* Touch: the attach and send circles take the 44px hit floor. Their boxes stay
+   in flow, so the row grows instead of overlapping the draft above it. */
+@media (pointer: coarse) {
+  .add {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* The row's 2px downward shift compensates the small desktop chips; with
+     44px controls it would push the circle into the draft above. */
+  .primary {
+    width: 44px;
+    height: 44px;
+    transform: none;
+  }
+}

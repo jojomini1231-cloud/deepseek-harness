@@ -730,3 +730,25 @@
     animation: none;
   }
 }
+
+/* Phone drawer: the frame's fixed column (ui-layout AppFrame) pads itself with
+   the safe-area insets, so this root keeps only the drawer's own top rhythm
+   and its bottom floor — the content still lands safe-top + 6 / safe-bottom + 8
+   from the screen edges. */
+:global(html[data-mobile-shell]) .root {
+  padding-top: 6px;
+  padding-bottom: 8px;
+}
+
+/* Keyboard-shortcut hints and their mask belong to a pointer with a keyboard;
+   the drawer keeps every control itself. */
+:global(html[data-mobile-shell]) .newSessionShortcut {
+  display: none;
+}
+
+/* Touch: navigation rows take a 44px hit inside the drawer. */
+@media (pointer: coarse) {
+  .panelRow {
+    min-height: 44px;
+  }
+}

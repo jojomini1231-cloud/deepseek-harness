@@ -81,6 +81,14 @@ describe('main panel selection', () => {
   const panelA = 'panel-a' as MainPanelId
   const panelB = 'panel-b' as MainPanelId
 
+  it.each([390, 599, 600, 800])('closes navigation only in the phone drawer at %ipx', (width) => {
+    const { store, actions } = createLayoutStore().create()
+    actions.setViewportWidth(width)
+    actions.toggleSidebar()
+    actions.selectPanel(panelA)
+    expect(store.getSnapshot().layoutInfo.narrowExpanded).toBe(width >= 600)
+  })
+
   it('changes only panelInfo when switching panels and returning to the Conversation', () => {
     const { store, actions } = createLayoutStore().create()
     actions.setSidebar(400)

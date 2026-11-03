@@ -25,10 +25,15 @@ describe('Turn tail slot spacing', () => {
     expect(group).toMatch(/margin-top:\s*var\(--dsh-chat-flow-gap, 4px\)/)
   })
 
+  it('sizes the tail row once and leaves the touch floor to override it', () => {
+    const view = read('ChatView.module.css')
+    expect(view).toMatch(new RegExp(String.raw`\.column \{\s*--dsh-chat-tail-row-height:\s*calc\(28px \+ var\(--dsh-content-font-delta, 0px\)\);`))
+  })
+
   it('keeps the tail slot above a marked steering batch start and out of neighbour gaps', () => {
     const view = read('ChatView.module.css')
     const marked = String.raw`:has\(> \[data-slot="conversation\.chat\.node"\] > \[data-chat-steering-batch`
-    expect(view).toMatch(new RegExp(String.raw`\.flowItem${marked}="start"\]\)\s*\{\s*--dsh-chat-flow-gap:\s*calc\(44px \+ var\(--dsh-content-font-delta, 0px\)\);`))
+    expect(view).toMatch(new RegExp(String.raw`\.flowItem${marked}="start"\]\)\s*\{\s*--dsh-chat-flow-gap:\s*calc\(16px \+ var\(--dsh-chat-tail-row-height\)\);`))
     expect(view).toMatch(new RegExp(String.raw`:not\(\.running\):not\(${marked}\]\)\)\s*\{\s*--dsh-chat-flow-gap:\s*12px;`))
     expect(view).toMatch(new RegExp(String.raw`:not\(\.running\):not\(\[data-submission-echo\], \[data-pending-steering\]\):not\(${marked}\]\)\)\s*\{\s*--dsh-chat-flow-gap:\s*16px;`))
   })
@@ -55,7 +60,7 @@ describe('Running status entrance after admitted steering', () => {
     expect(view).toMatch(new RegExp(String.raw`@media \(prefers-reduced-motion: no-preference\) \{\s*:where\(\.column > [^{]*\[data-chat-flow-kind="steering"\]\) \+ \.running \{\s*`
       + String.raw`animation: running-enters-slot 140ms cubic-bezier\(0\.2, 0\.8, 0\.2, 1\);`))
     expect(view).toMatch(new RegExp(String.raw`@keyframes running-enters-slot \{\s*from \{\s*opacity: 0;\s*`
-      + String.raw`translate: 0 calc\(-44px - var\(--dsh-content-font-delta, 0px\)\);\s*\}\s*40% \{\s*opacity: 1;`))
+      + String.raw`translate: 0 calc\(-16px - var\(--dsh-chat-tail-row-height\)\);\s*\}\s*40% \{\s*opacity: 1;`))
   })
 
   it('is the only status move, and an input fold changes only its duration', () => {

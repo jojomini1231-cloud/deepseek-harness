@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FontFamilies, ThemePreference, ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 import { fontFamilyVariable } from '@deepseek-ai/dsh-client-ui-theme/src/theme-settings.ts'
 import { DARK_ATTRIBUTE, THEME_SOURCE_ATTRIBUTE, ThemePresenter } from '@deepseek-ai/dsh-client-ui-layout/src/client/theme-presenter.ts'
@@ -86,6 +86,16 @@ describe('ThemePresenter', () => {
     expect(document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('14px')
     expect(document.body.style.getPropertyValue('--dsh-code-font-size')).toBe('11px')
     expect(document.body.style.getPropertyValue('--dsh-terminal-font-size')).toBe('13px')
+    presenter.apply(snapshot('light', {}, 17))
+    expect(document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('17px')
+  })
+
+  it('raises a phone preference to the typography floor but keeps a larger one', () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: () => {}, removeEventListener: () => {} }) as unknown as MediaQueryList)
+    const presenter = new ThemePresenter()
+    presenter.apply(snapshot('light'))
+    expect(document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('15px')
+    expect(document.body.style.getPropertyValue('--dsh-code-font-size')).toBe('12px')
     presenter.apply(snapshot('light', {}, 17))
     expect(document.body.style.getPropertyValue('--dsh-content-font-size')).toBe('17px')
   })

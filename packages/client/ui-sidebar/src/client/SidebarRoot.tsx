@@ -251,6 +251,7 @@ export function SidebarRoot({
       <button
         type="button"
         className={clsx(css.iconButton, css.toggle)}
+        data-sidebar-toggle
         aria-label={toggleLabel}
         aria-keyshortcuts={shortcut?.aria}
         onClick={() => { toggleSidebar() }}

@@ -38,6 +38,7 @@ export function HeaderLeadingControls({
         <button
           type="button"
           className={css.iconButton}
+          data-sidebar-toggle
           aria-label={t('toggle.open')}
           aria-keyshortcuts={shortcut?.aria}
           onClick={() => { toggleSidebar() }}

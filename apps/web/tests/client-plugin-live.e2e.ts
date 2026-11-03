@@ -113,7 +113,7 @@ it('places dynamic Session menu rows by order among the shipped ones and removes
     await page.mouse.move(0, 0)
     await observe('blur', true, false)
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.getByRole('button', { name: 'Open sidebar', exact: true }).first().click()
+    await page.locator('[data-shell-leading] button').first().click()
     await page.mouse.move(0, 0)
     await observe('narrow', true, false)
     const bounds = await row.evaluate((element) => {
