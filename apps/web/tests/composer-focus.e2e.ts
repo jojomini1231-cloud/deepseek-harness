@@ -11,6 +11,7 @@ import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './suppor
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/composer-focus', import.meta.url))
 const EXPECTED = join(SNAPSHOT_DIR, 'focus.expected.md')
+const FIXTURES = ['focus.expected.md', 'submission.expected.md', 'keyboard.expected.md']
 
 /**
  * Observe focus and both ends of the browser selection, including its direction.
@@ -203,7 +204,7 @@ it('restores the previous caret or selection in fresh and existing sessions', as
     '# Composer whitespace focus', '', '## Fresh session', '', ...hero,
     '', '## Existing session', '', ...docked,
   ].join('\n'), webSnapshotMode())
-  await assertFixtureInventory(SNAPSHOT_DIR, ['focus.expected.md', 'submission.expected.md'])
+  await assertFixtureInventory(SNAPSHOT_DIR, FIXTURES)
   if (webSnapshotMode() !== 'record') expect(tripwire.warnings).toEqual([])
   expect(tripwire.pageErrors).toEqual([])
 }, 180_000)
@@ -240,6 +241,7 @@ it('keeps mobile submission keyboard navigation in the composer while retaining 
         })
         try {
           await page.goto(scaffold.authenticatedUrl)
+          if (mobile) await page.getByRole('button', { name: 'Open sidebar', exact: true }).click()
           await connectFreshWorkspace(page, scaffold.workspaceCwd, `submission-${platform}`)
           const input = page.locator('[data-composer-input][contenteditable="true"]')
           await input.fill('Reply with a one-sentence description of event sourcing, then stop.')
@@ -285,5 +287,78 @@ it('keeps mobile submission keyboard navigation in the composer while retaining 
     }
   }
   await compareOrRefreshGolden(join(SNAPSHOT_DIR, 'submission.expected.md'), observations.join('\n'), webSnapshotMode())
-  await assertFixtureInventory(SNAPSHOT_DIR, ['focus.expected.md', 'submission.expected.md'])
+  await assertFixtureInventory(SNAPSHOT_DIR, FIXTURES)
+}, 180_000)
+
+it('keeps the phone composer above the keyboard while the visual viewport pans', async () => {
+  const observations: string[] = []
+  for (const engine of [chromium, webkit]) {
+    const browser = await engine.launch()
+    let scaffold: Awaited<ReturnType<typeof launchWebScaffold>> | undefined
+    try {
+      scaffold = await launchWebScaffold({
+        extraOverlayPath: fileURLToPath(new URL('./pin-browse-picker.overlay.yml', import.meta.url)),
+        replayFixture: fileURLToPath(new URL('../../../snapshots/web/live-interactions/session.v3.jsonl', import.meta.url)),
+        compareReplaySession: false,
+      })
+      const page = await browser.newPage({
+        viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true,
+        locale: 'en-US', timezoneId: 'Asia/Shanghai',
+      })
+      onTestFailed(() => saveFailureShot(page, `composer-keyboard-${engine.name()}`))
+      await page.goto(scaffold.authenticatedUrl)
+      await page.getByRole('button', { name: 'Open sidebar', exact: true }).click()
+      await connectFreshWorkspace(page, scaffold.workspaceCwd, `keyboard-${engine.name()}`)
+      const input = page.locator('[data-composer-input][contenteditable="true"]')
+      const settled = scaffold.whenTurnSettled(60_000)
+      await input.fill('Reply with a one-sentence description of event sourcing, then stop.')
+      await page.getByRole('button', { name: 'Send message', exact: true }).tap()
+      await settled
+      await input.fill('Keyboard draft')
+      const retained = await input.elementHandle()
+
+      // Headless engines have no OS keyboard. Keep the layout viewport full
+      // height while independently shrinking and panning the visual viewport.
+      for (const state of [
+        { height: 420, offsetTop: 0, scroll: 0 },
+        { height: 420, offsetTop: 196, scroll: 196 },
+        { height: 420, offsetTop: 0, scroll: 196 },
+        { height: 844, offsetTop: 0, scroll: 0 },
+      ]) {
+        await page.evaluate(({ height, offsetTop, scroll }) => {
+          const viewport = window.visualViewport!
+          document.documentElement.style.height = `${window.innerHeight * 2}px`
+          window.scrollTo(0, scroll)
+          Object.defineProperties(viewport, {
+            height: { configurable: true, get: () => height },
+            offsetTop: { configurable: true, get: () => offsetTop },
+          })
+          viewport.dispatchEvent(new Event('resize'))
+          viewport.dispatchEvent(new Event('scroll'))
+        }, state)
+        await expect.poll(() => page.locator('[data-mobile-shell][data-mobile-drawer]').evaluate((frame) => {
+          const box = frame.getBoundingClientRect()
+          return { top: box.top - window.visualViewport!.offsetTop, height: box.height }
+        })).toEqual({ top: 0, height: state.height })
+        const gap = await page.locator('[data-composer-card]').evaluate((card) => {
+          const viewport = window.visualViewport!
+          return viewport.offsetTop + viewport.height - card.getBoundingClientRect().bottom
+        })
+        expect(gap).toBeGreaterThanOrEqual(0)
+        expect(gap).toBeLessThan(50)
+        expect(await retained!.evaluate(element => element === document.activeElement)).toBe(true)
+        expect(await input.textContent()).toBe('Keyboard draft')
+        const editorBox = await input.boundingBox()
+        await page.keyboard.insertText('!')
+        await expect.poll(() => input.textContent()).toBe('Keyboard draft!')
+        await expect.poll(() => input.boundingBox()).toEqual(editorBox)
+        await input.fill('Keyboard draft')
+      }
+      observations.push(`- ${engine.name()}: keyboard resize, viewport pan, document scroll and keyboard close keep the shell in the visible viewport and the composer within 50px of its bottom; editor, focus and draft survive`)
+    } finally {
+      try { await browser.close() } finally { await scaffold?.close() }
+    }
+  }
+  await compareOrRefreshGolden(join(SNAPSHOT_DIR, 'keyboard.expected.md'), observations.join('\n'), webSnapshotMode())
+  await assertFixtureInventory(SNAPSHOT_DIR, FIXTURES)
 }, 180_000)

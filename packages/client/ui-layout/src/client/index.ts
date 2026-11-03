@@ -65,6 +65,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      *
      * The occupant receives the frame's live column state (collapsed, width)
      * and is expected to render the compact control rail while collapsed.
+     * Mark its toggle button with `data-sidebar-toggle` for responsive focus transfer.
      */
     'sidebar': { kind: 'single'; scope: 'root'; owner: SidebarOwnerProps }
     /**
@@ -110,6 +111,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * collapse; other platforms keep the rail), so the occupant can assume the
      * frame edge is the window edge and the macOS traffic lights sit before it.
      * OCCUPIED by ui-sidebar's reopen/New Session controls.
+     * Mark the reopen button with `data-sidebar-toggle` for responsive focus transfer.
      *
      * While the seat is mounted the frame publishes
      * `--dsh-frame-leading-clearance` (the inline inset the seat's band

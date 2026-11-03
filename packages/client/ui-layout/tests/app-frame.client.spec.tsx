@@ -60,13 +60,19 @@ function resize(width: number): void {
   })
 }
 
-function mountFrame(windowWidth = frameWidth) {
+function mountFrame(windowWidth = frameWidth, controls = false) {
   vi.stubGlobal('innerWidth', windowWidth)
   const instance = createLayoutStore().create()
   const slotCalls: { key: string; props: object; options: RenderOpts | undefined }[] = []
   const renderSlot: AppFrameProps['renderSlot'] = (key, owner, options) => {
     slotCalls.push({ key, props: owner, options })
-    return <div data-testid={`${key}-content`} data-entry-key={options?.entryKey} />
+    return (
+      <div data-testid={`${key}-content`} data-entry-key={options?.entryKey}>
+        {controls && (key === 'sidebar' || key === 'shell.leading') && (
+          <button data-sidebar-toggle onClick={() => { instance.actions.toggleSidebar() }}>Toggle sidebar</button>
+        )}
+      </div>
+    )
   }
   const useSessions: AppFrameProps['useSessions'] = sel => sel({
     ids: selectedSession === undefined ? [] : [selectedSession],
@@ -683,6 +689,61 @@ describe('AppFrame frame measurement lifecycle', () => {
 })
 
 describe('AppFrame phone drawer', () => {
+  it.each(['plugins' as MainPanelId, null])('closes the drawer after selecting %s, including repeated selection', (panelId) => {
+    frameWidth = 390
+    const { frame, instance } = mountFrame(390)
+    for (let repeat = 0; repeat < 2; repeat += 1) {
+      act(() => { instance.actions.toggleSidebar() })
+      expect(frame.dataset.mobileDrawer).toBe('open')
+      act(() => { instance.actions.selectPanel(panelId) })
+      expect(frame.dataset.mobileDrawer).toBe('closed')
+      expect(frame.querySelector('[data-mobile-scrim]')).toBeNull()
+      expect(instance.getSnapshot().panelInfo.activePanelId).toBe(panelId)
+    }
+  })
+
+  it('transfers focus from the phone trigger to the rail on widening', () => {
+    frameWidth = 390
+    const { getByTestId } = mountFrame(390, true)
+    const trigger = getByTestId('shell.leading-content').querySelector('button')!
+    trigger.focus()
+    resize(800)
+    expect(trigger.isConnected).toBe(false)
+    expect(document.activeElement).toBe(getByTestId('sidebar-content').querySelector('button'))
+  })
+
+  it('transfers focus from the rail to the phone trigger on narrowing', () => {
+    frameWidth = 800
+    const { getByTestId } = mountFrame(800, true)
+    getByTestId('sidebar-content').querySelector('button')!.focus()
+    resize(390)
+    expect(document.activeElement).toBe(getByTestId('shell.leading-content').querySelector('button'))
+  })
+
+  it('preserves focus when the sidebar stays open across the phone breakpoint', () => {
+    frameWidth = 800
+    const { instance, getByTestId } = mountFrame(800, true)
+    act(() => { instance.actions.toggleSidebar() })
+    const toggle = getByTestId('sidebar-content').querySelector('button')!
+    toggle.focus()
+    resize(390)
+    expect(document.activeElement).toBe(toggle)
+    resize(800)
+    expect(document.activeElement).toBe(toggle)
+  })
+
+  it('leaves focus outside the sidebar unchanged when crossing the phone breakpoint', () => {
+    frameWidth = 800
+    const { getByTestId } = mountFrame(800, true)
+    const action = document.createElement('button')
+    getByTestId('main-content').append(action)
+    action.focus()
+    resize(390)
+    expect(document.activeElement).toBe(action)
+    resize(800)
+    expect(document.activeElement).toBe(action)
+  })
+
   it('renders the phone stack with a closed drawer and its trigger seat', () => {
     frameWidth = 390
     const { frame, getByTestId, sidebarOwner } = mountFrame(390)

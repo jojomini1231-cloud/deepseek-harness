@@ -1,0 +1,2 @@
+- chromium: keyboard resize, viewport pan, document scroll and keyboard close keep the shell in the visible viewport and the composer within 50px of its bottom; editor, focus and draft survive
+- webkit: keyboard resize, viewport pan, document scroll and keyboard close keep the shell in the visible viewport and the composer within 50px of its bottom; editor, focus and draft survive

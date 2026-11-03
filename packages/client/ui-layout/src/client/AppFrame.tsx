@@ -141,6 +141,9 @@ export function AppFrame({
 }: AppFrameProps) {
   const layoutInfo = useStore(state => state.layoutInfo)
   const frameRef = useRef<HTMLDivElement | null>(null)
+  const sidebarRef = useRef<HTMLDivElement | null>(null)
+  const leadingRef = useRef<HTMLDivElement | null>(null)
+  const responsiveFocus = useRef<'leading' | 'sidebar' | null>(null)
   const viewport = layoutInfo.viewportWidth
   // The phone presentation is decided from the frame width alone (never a
   // pointer or user-agent query), and the drawer reuses the narrow expanded
@@ -157,7 +160,15 @@ export function AppFrame({
     let disposed = false
     const measure = () => {
       const width = el.getBoundingClientRect().width
-      if (width > 0) actions.setViewportWidth(width)
+      if (width <= 0) return
+      // Capture before the store update can remove the focused seat or hide
+      // the rail. CSS cannot transfer focus between these two controls.
+      if (el.hasAttribute('data-mobile-shell') !== (width < MOBILE_BREAKPOINT)) {
+        const active = document.activeElement
+        responsiveFocus.current = leadingRef.current?.contains(active) ? 'leading'
+          : sidebarRef.current?.contains(active) ? 'sidebar' : null
+      }
+      actions.setViewportWidth(width)
     }
     measure()
     const observer = new ResizeObserver(() => {
@@ -319,6 +330,14 @@ export function AppFrame({
   const leading = useMemo(() => renderSlot('shell.leading', {}), [renderSlot])
   const leadingMounted = (darwin && sidebarCollapsed) || (mobile && !drawerOpen)
 
+  useLayoutEffect(() => {
+    const from = responsiveFocus.current
+    responsiveFocus.current = null
+    const target = from === 'leading' && !leadingMounted ? sidebarRef.current
+      : from === 'sidebar' && mobile && !drawerOpen ? leadingRef.current : null
+    target?.querySelector<HTMLButtonElement>('button[data-sidebar-toggle]')?.focus({ preventScroll: true })
+  }, [mobile, drawerOpen, leadingMounted])
+
   return (
     <div
       ref={frameRef}
@@ -353,7 +372,7 @@ export function AppFrame({
           onClick={() => { actions.toggleSidebar() }}
         />
       )}
-      <div className={css.sidebarCol}>
+      <div ref={sidebarRef} className={css.sidebarCol}>
         {sidebar}
       </div>
       <>
@@ -369,7 +388,7 @@ export function AppFrame({
         {overlays}
       </div>
       {leadingMounted && (
-        <div className={css.leadingSeat} data-shell-leading>
+        <div ref={leadingRef} className={css.leadingSeat} data-shell-leading>
           {leading}
         </div>
       )}

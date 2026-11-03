@@ -3,9 +3,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   KEYBOARD_INSET_VARIABLE, KEYBOARD_OPEN_ATTRIBUTE, trackVisualViewport, VIEWPORT_HEIGHT_VARIABLE,
+  VIEWPORT_TOP_VARIABLE,
 } from '../src/client/visual-viewport.ts'
 
-const ROOT_VARIABLES = [VIEWPORT_HEIGHT_VARIABLE, KEYBOARD_INSET_VARIABLE]
+const ROOT_VARIABLES = [VIEWPORT_HEIGHT_VARIABLE, VIEWPORT_TOP_VARIABLE, KEYBOARD_INSET_VARIABLE]
 
 /** Minimal stand-in for the browser's VisualViewport. */
 class FakeVisualViewport extends EventTarget {
@@ -59,6 +60,7 @@ describe('trackVisualViewport', () => {
   it('publishes the visible height and a zero inset before any event', () => {
     const { stop } = mount(844)
     expect(root().style.getPropertyValue(VIEWPORT_HEIGHT_VARIABLE)).toBe('844px')
+    expect(root().style.getPropertyValue(VIEWPORT_TOP_VARIABLE)).toBe('0px')
     expect(root().style.getPropertyValue(KEYBOARD_INSET_VARIABLE)).toBe('0px')
     expect(root().hasAttribute(KEYBOARD_OPEN_ATTRIBUTE)).toBe(false)
     stop()
@@ -107,6 +109,7 @@ describe('trackVisualViewport', () => {
     vi.stubGlobal('innerHeight', 700)
     const stop = trackVisualViewport()
     expect(root().style.getPropertyValue(VIEWPORT_HEIGHT_VARIABLE)).toBe('700px')
+    expect(root().style.getPropertyValue(VIEWPORT_TOP_VARIABLE)).toBe('0px')
     expect(root().style.getPropertyValue(KEYBOARD_INSET_VARIABLE)).toBe('0px')
 
     vi.stubGlobal('innerHeight', 500)
@@ -121,6 +124,7 @@ describe('trackVisualViewport', () => {
 
   it('restores replaced values, detaches the listeners, and drops a queued frame on dispose', () => {
     root().style.setProperty(VIEWPORT_HEIGHT_VARIABLE, '999px', 'important')
+    root().style.setProperty(VIEWPORT_TOP_VARIABLE, '25px', 'important')
     root().setAttribute(KEYBOARD_OPEN_ATTRIBUTE, '')
     const { viewport, stop } = mount(844)
     expect(root().style.getPropertyValue(VIEWPORT_HEIGHT_VARIABLE)).toBe('844px')
@@ -132,6 +136,8 @@ describe('trackVisualViewport', () => {
     expect(frames.size).toBe(0)
     expect(root().style.getPropertyValue(VIEWPORT_HEIGHT_VARIABLE)).toBe('999px')
     expect(root().style.getPropertyPriority(VIEWPORT_HEIGHT_VARIABLE)).toBe('important')
+    expect(root().style.getPropertyValue(VIEWPORT_TOP_VARIABLE)).toBe('25px')
+    expect(root().style.getPropertyPriority(VIEWPORT_TOP_VARIABLE)).toBe('important')
     expect(root().style.getPropertyValue(KEYBOARD_INSET_VARIABLE)).toBe('')
     // The pre-existing marker is restored rather than silently dropped.
     expect(root().hasAttribute(KEYBOARD_OPEN_ATTRIBUTE)).toBe(true)
@@ -139,5 +145,30 @@ describe('trackVisualViewport', () => {
     viewport.dispatchEvent(new Event('resize'))
     window.dispatchEvent(new Event('resize'))
     expect(frames.size).toBe(0)
+  })
+
+  it('follows viewport panning independently of document scrolling and retracts it on keyboard close', () => {
+    const { viewport, stop } = mount(844)
+    viewport.height = 420
+    viewport.offsetTop = 196.4
+    vi.stubGlobal('scrollY', 196)
+    viewport.dispatchEvent(new Event('resize'))
+    viewport.dispatchEvent(new Event('scroll'))
+    flushFrames()
+    expect(root().style.getPropertyValue(VIEWPORT_HEIGHT_VARIABLE)).toBe('420px')
+    expect(root().style.getPropertyValue(VIEWPORT_TOP_VARIABLE)).toBe('196px')
+
+    viewport.offsetTop = 0
+    viewport.dispatchEvent(new Event('scroll'))
+    flushFrames()
+    expect(root().style.getPropertyValue(VIEWPORT_TOP_VARIABLE)).toBe('0px')
+    expect(root().style.getPropertyValue(VIEWPORT_HEIGHT_VARIABLE)).toBe('420px')
+
+    viewport.height = 844
+    viewport.dispatchEvent(new Event('resize'))
+    flushFrames()
+    expect(root().style.getPropertyValue(VIEWPORT_TOP_VARIABLE)).toBe('0px')
+    expect(root().style.getPropertyValue(VIEWPORT_HEIGHT_VARIABLE)).toBe('844px')
+    stop()
   })
 })

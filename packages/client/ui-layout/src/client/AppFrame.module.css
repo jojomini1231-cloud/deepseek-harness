@@ -303,10 +303,19 @@
  * fixed overlay drawer. The column stays mounted while closed (translated off
  * the frame edge and hidden from focus and assistive technology) so opening
  * slides the same content in; data-mobile-drawer drives both directions. The
- * frame height follows the visual viewport, so an on-screen keyboard shrinks
- * the shell instead of covering it.
+ * frame follows the visual viewport's position and height, independently of
+ * the document scroll Safari can apply when focusing an input.
  */
+:global(html[data-mobile-shell]) {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 .frame[data-mobile-shell] {
+  position: fixed;
+  top: var(--dsh-viewport-top, 0px);
+  left: 0;
+  width: 100%;
   box-sizing: border-box;
   height: var(--dsh-viewport-height, 100%);
   /* Only the top inset belongs to the shell: the conversation header clears the

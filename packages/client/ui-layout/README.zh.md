@@ -31,11 +31,12 @@ kind: "package-reference"
 
 全局面板占据 root 作用域的 `main` keyed slot；`conversation` 是为会话界面保留的 key。`ctx.layout.selectPanel(id)` 选中已注册面板，`null` 则选中会话界面，但不改变当前会话。Plugins 页面是默认组合中的一个全局面板。
 
+<a id="mobile-shell"></a>
 ### 移动端外壳
 
-帧宽低于 600px 时框架切换为手机形态：单列堆叠，侧边栏不占网格轨道，改为以 `min(86vw, 328px)` 的固定覆盖式抽屉呈现，带抬升圆角与阴影、安全区内边距和 280ms 滑入（reduced-motion 下取消过渡）。抽屉的开合态复用既有的窄屏展开布局状态，因此打开桌面控制栏的同一个 `toggleSidebar` 操作也打开抽屉；装饰遮罩与 Esc 均可关闭，控件仍在 DOM 中时关闭会把焦点还给打开它的控件。抽屉关闭期间 `shell.leading` 座挂载在框架安全区左上角，ui-sidebar 既有的重新打开控件由此成为抽屉入口。手机形态不渲染列宽拖拽手柄。框架以自身的 `data-mobile-shell` 与 `html` 上的同名属性标记该形态，并以 `data-mobile-drawer="open|closed"` 发布开合态；各包样式依据这些标记分叉，而不是指针或 UA 查询。
+帧宽低于 600px 时框架切换为手机形态：单列堆叠，侧边栏不占网格轨道，改为以 `min(86vw, 328px)` 的固定覆盖式抽屉呈现，带抬升圆角与阴影、安全区内边距和 280ms 滑入（reduced-motion 下取消过渡）。抽屉的开合态复用既有的窄屏展开布局状态，因此打开桌面控制栏的同一个 `toggleSidebar` 操作也打开抽屉；装饰遮罩与 Esc 均可关闭，控件仍在 DOM 中时关闭会把焦点还给打开它的控件。抽屉关闭期间 `shell.leading` 座挂载在框架安全区左上角，ui-sidebar 既有的重新打开控件由此成为抽屉入口。面板或会话导航成功后关闭手机抽屉，重复选择也会关闭。跨越手机断点导致当前聚焦的导航控件隐藏或移除时，框架将焦点移交给可见的侧边栏开关，不唤起输入键盘。侧边栏与 leading 座位的占用方以 `data-sidebar-toggle` 标记该按钮。手机形态不渲染列宽拖拽手柄。框架以自身的 `data-mobile-shell` 与 `html` 上的同名属性标记该形态，并以 `data-mobile-drawer="open|closed"` 发布开合态；各包样式依据这些标记分叉，而不是指针或 UA 查询。
 
-框架高度取自 `--dsh-viewport-height` 而非布局视口。布局插件用 `visualViewport` 的 resize/scroll 事件（以及 `window.resize`）维护该变量、`--dsh-keyboard-inset` 与 `html[data-keyboard-open]`，写入合并到一帧动画，浏览器不提供 visual viewport 时回退 `innerHeight`；停用追踪器时会还原它替换过的值。`--dsh-safe-top` 与 `--dsh-safe-bottom` 在 ui-theme 的 base 样式表中别名平台安全区；手机端字号下限由本包的主题呈现器应用。
+手机框架使用固定定位，高度取自 `--dsh-viewport-height`，顶部位置取自 `--dsh-viewport-top`，使键盘引起的视口平移和文档滚动不会让框架偏离可见视口。手机形态下文档不滚动，内容在各自面板内滚动。布局插件用 `visualViewport` 的 resize/scroll 事件（以及 `window.resize`）维护这些变量、`--dsh-keyboard-inset` 与 `html[data-keyboard-open]`，写入合并到一帧动画，浏览器不提供 visual viewport 时高度回退 `innerHeight`、顶部位置取零；停用追踪器时会还原它替换过的值。`--dsh-safe-top` 与 `--dsh-safe-bottom` 在 ui-theme 的 base 样式表中别名平台安全区；手机端字号下限由本包的主题呈现器应用。
 
 root 作用域的单一 `shell.bottom` slot 横跨三列下方的整行。占用方控制自身高度与显隐；三列按该高度缩短，空内容不预留空间。切换主面板时保留底部组件。列宽拖拽手柄止于底部内容上方，`shell.overlay` 仍覆盖整个框架。默认组合不占用此 slot。
 
@@ -62,7 +63,7 @@ root 作用域的单一 `shell.bottom` slot 横跨三列下方的整行。占用
 
 `selectPanel(id)` 在改变选中态前检查实时 `main` 注册表；缺失的 key 会抛错并保留当前面板。`beginNavigation()` 为异步 UI 导航返回 abort signal。后续调用、有效面板选择（包括重复选择）或布局释放会中止该 signal，但不取消底层会话创建。消费方在提交导航或搬移草稿前检查 signal。
 
-一次注册声明框架的子 slot，并绑定 `ctx.layout` 的 `selectPanel`、`toggleSidebar`、`openRightbar(track, fullscreen)` 与 `closeRightbar`。同一个 root 存储把 `panelInfo` 选中态与 `layoutInfo` 测量、宽度偏好、呈现报告分开。`ctx.layout.panelInfo` 与标准 `usePanelInfo` hook 共用同一个选中态来源；AppFrame 订阅引用稳定的布局对象。`rightbar` owner 提供实际 `width`、`viewportWidth`，以及表示能否以普通模式呈现的 `canShow`；占用方在空间不足时执行确定性的收起，变宽不自行重新展开。全屏隐藏宽度手柄，但不自行释放占用方要求保留的轨道。AppFrame 保持各列容器挂载。右栏的 root 控制器仅在选中会话界面时，经 `SessionProvider` 渲染 `rightbar.session`；内容卸载时的报告释放轨道。独立的标题组件仅在会话界面可见时使用所选会话标题，以构建配置的产品标题或本地化 `common.brand.localBuild` 为回退值；语言变化会更新该回退值。手机形态把网格固定为 `0px minmax(0px, 1fr) 0px`，并将侧边栏列改为由 `data-mobile-drawer` 驱动的固定覆盖层（transform 加 visibility，关闭时移出焦点顺序）；遮罩与 Escape 监听仅在抽屉打开时挂载，关闭时把焦点还给仍挂载的打开控件；侧边栏 owner 收到 `collapsed: !drawerOpen` 与 `width: MOBILE_DRAWER_WIDTH`。视觉视口追踪器把事件合并到一帧动画，写入两个根变量与键盘标记，并在释放时还原其替换过的值。主题呈现器是第二个 effect：从解析后的快照做纯 DOM 写入——初始状态经 getter 读取一次，此后仅事件驱动，不经过 React。它先应用调色板、字号、字体列表与 token 变量，再把渲染出的背景测量为唯一的颜色依据。全屏呈现禁用网格和手柄过渡；占用方完全覆盖框架后才报告新的列布局。退出全屏时，框架先保持无过渡并安装目标布局：关闭移除右轨道，恢复保留右轨道。后续普通几何操作恢复正常过渡。
+一次注册声明框架的子 slot，并绑定 `ctx.layout` 的 `selectPanel`、`toggleSidebar`、`openRightbar(track, fullscreen)` 与 `closeRightbar`。同一个 root 存储把 `panelInfo` 选中态与 `layoutInfo` 测量、宽度偏好、呈现报告分开。`ctx.layout.panelInfo` 与标准 `usePanelInfo` hook 共用同一个选中态来源；AppFrame 订阅引用稳定的布局对象。`rightbar` owner 提供实际 `width`、`viewportWidth`，以及表示能否以普通模式呈现的 `canShow`；占用方在空间不足时执行确定性的收起，变宽不自行重新展开。全屏隐藏宽度手柄，但不自行释放占用方要求保留的轨道。AppFrame 保持各列容器挂载。右栏的 root 控制器仅在选中会话界面时，经 `SessionProvider` 渲染 `rightbar.session`；内容卸载时的报告释放轨道。独立的标题组件仅在会话界面可见时使用所选会话标题，以构建配置的产品标题或本地化 `common.brand.localBuild` 为回退值；语言变化会更新该回退值。手机形态把网格固定为 `0px minmax(0px, 1fr) 0px`，并将侧边栏列改为由 `data-mobile-drawer` 驱动的固定覆盖层（transform 加 visibility，关闭时移出焦点顺序）；遮罩与 Escape 监听仅在抽屉打开时挂载，关闭时把焦点还给仍挂载的打开控件；侧边栏 owner 收到 `collapsed: !drawerOpen` 与 `width: MOBILE_DRAWER_WIDTH`。视觉视口追踪器把事件合并到一帧动画，写入三个根变量与键盘标记，并在释放时还原其替换过的值。主题呈现器是第二个 effect：从解析后的快照做纯 DOM 写入——初始状态经 getter 读取一次，此后仅事件驱动，不经过 React。它先应用调色板、字号、字体列表与 token 变量，再把渲染出的背景测量为唯一的颜色依据。全屏呈现禁用网格和手柄过渡；占用方完全覆盖框架后才报告新的列布局。退出全屏时，框架先保持无过渡并安装目标布局：关闭移除右轨道，恢复保留右轨道。后续普通几何操作恢复正常过渡。
 
 </details>
 
