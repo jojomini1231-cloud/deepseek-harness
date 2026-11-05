@@ -561,6 +561,14 @@ export function chatSnapshotFixture(input: {
     && derived.every((item, index) => sameTurnNavigationItem(kept[index], item))
     ? kept
     : derived
+  // The latest Turn holding a visible Node; production derives the same fact
+  // from the visible order when the assembler publishes.
+  let latestTurn: number | undefined
+  for (const node of ordered) {
+    const location = node.location
+    if (location.kind !== 'turn' && location.kind !== 'step') continue
+    if (latestTurn === undefined || location.turn.turn > latestTurn) latestTurn = location.turn.turn
+  }
   for (const data of turnData.values()) data.publish()
   store.publish()
   return {
@@ -569,6 +577,9 @@ export function chatSnapshotFixture(input: {
     locations,
     navigation: { items: () => items },
     timeline,
+    latestTurn,
+    // Component fixtures model conversation content, not retractions.
+    retractedTurns: new Set(),
     legacy,
   }
 }

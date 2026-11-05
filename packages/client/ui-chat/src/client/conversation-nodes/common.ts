@@ -2,7 +2,7 @@ import type {
   ConversationLocation, ConversationNodeContext,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
-  ChatNode, ChatNodeDataMap, ChatNodeKind,
+  ChatNode, ChatNodeDataMap, ChatNodeKind, ChatRetraction,
 } from '../contract/chat-nodes.ts'
 import type { ChatGroupTree } from '../contract/group-tree.ts'
 
@@ -46,7 +46,7 @@ export function locationCoordinates(location: ConversationLocation): { turn?: nu
  * @param kind - Chat renderer dispatch key.
  * @param anchorSeq - sortable render position.
  * @param data - renderer-owned payload.
- * @param options - optional Location, visibility, and group-tree overrides.
+ * @param options - optional Location, visibility, group-tree, and retraction overrides.
  * @returns final Chat view Node.
  */
 export function chatNode<Kind extends ChatNodeKind>(
@@ -58,6 +58,7 @@ export function chatNode<Kind extends ChatNodeKind>(
     readonly location?: ConversationLocation
     readonly visibility?: 'visible' | 'hidden'
     readonly groupTree?: ChatGroupTree | undefined
+    readonly retraction?: ChatRetraction | undefined
   } = {},
 ): ChatNode<Kind> {
   return {
@@ -69,6 +70,7 @@ export function chatNode<Kind extends ChatNodeKind>(
     location: options.location ?? contextLocation(context),
     visibility: options.visibility ?? 'visible',
     groupTree: options.groupTree,
+    retraction: options.retraction,
     data,
   }
 }

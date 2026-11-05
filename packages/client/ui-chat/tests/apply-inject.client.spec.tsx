@@ -7,7 +7,7 @@ import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { ISession, SessionReference } from '@deepseek-ai/dsh-api-session-controller/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import {
-  SlotTestRuntime, stubConfigForm, usePinnedBrowserLanguages,
+  RemoteError, SlotTestRuntime, stubConfigForm, usePinnedBrowserLanguages,
 } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionBehaviorOverrides } from '@deepseek-ai/dsh-client-test-runtime'
 import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
@@ -49,6 +49,8 @@ function sessionFakeFor() {
     })),
     prompt: vi.fn<ISession['prompt']>(() => Promise.resolve({ ok: true, value: { accepted: true } })),
     cancel: vi.fn<ISession['cancel']>(() => Promise.resolve({ ok: true, value: { accepted: true } })),
+    retract: vi.fn<ISession['retract']>(() => Promise.resolve({ ok: true, value: { seq: SessionSeq(1) } })),
+    edit: vi.fn<ISession['edit']>(() => Promise.resolve({ ok: true, value: { seq: SessionSeq(1) } })),
   } satisfies SessionBehaviorOverrides
 }
 
@@ -139,6 +141,42 @@ async function bench(initialSettings?: ChatSettings, withBrowserRegistry = true,
 }
 
 describe('Chat inject API', () => {
+  it('routes retraction, edit, and composer focus through the flow inject face', async () => {
+    const b = await bench()
+    try {
+      const { injected } = b.chatFlowApi(b.rootReference)
+      expect(await injected.retractMessage(9)).toEqual({ ok: true })
+      expect(b.session.retract).toHaveBeenLastCalledWith(SessionSeq(9))
+      b.session.retract.mockResolvedValueOnce({ ok: false, error: new RemoteError('session/busy', 'busy', { sessionId: ROOT }) })
+      expect(await injected.retractMessage(10)).toEqual({ ok: false, reason: 'busy' })
+      b.session.retract.mockResolvedValueOnce({ ok: false, error: new RemoteError('session/rewind-unavailable', 'gone', { sessionId: ROOT, targetSeq: 11 }) })
+      expect(await injected.retractMessage(11)).toEqual({ ok: false, reason: 'unavailable' })
+      b.session.retract.mockResolvedValueOnce({ ok: false, error: new RemoteError('gateway/internal', 'boom', {}) })
+      expect(await injected.retractMessage(12)).toEqual({ ok: false, reason: 'failed' })
+      b.session.retract.mockRejectedValueOnce(new Error('rpc down'))
+      expect(await injected.retractMessage(13)).toEqual({ ok: false, reason: 'failed' })
+
+      expect(await injected.editMessage(9, 'new text')).toBe(true)
+      expect(b.session.edit).toHaveBeenLastCalledWith(SessionSeq(9), 'new text')
+      b.session.edit.mockResolvedValueOnce({ ok: false, error: new RemoteError('session/edit-empty', 'empty', {}) })
+      expect(await injected.editMessage(9, '')).toBe(false)
+      b.session.edit.mockRejectedValueOnce(new Error('rpc down'))
+      expect(await injected.editMessage(9, 'text')).toBe(false)
+
+      const focus = vi.fn()
+      const forComposer = vi.spyOn(b.runtime.ctx.conversation.input, 'for')
+        .mockReturnValue({ focus } as never)
+      injected.focusComposer()
+      expect(forComposer).toHaveBeenCalledWith(b.rootReference.binding.ctx)
+      expect(focus).toHaveBeenCalledOnce()
+      forComposer.mockRestore()
+      expect(b.session.prompt).not.toHaveBeenCalled()
+      expect(b.session.cancel).not.toHaveBeenCalled()
+    } finally {
+      await b.runtime.dispose()
+    }
+  })
+
   it('routes text gestures from each Chat view to the registered consumer with its own Session', async () => {
     const b = await bench()
     try {

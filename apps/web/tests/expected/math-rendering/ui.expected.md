@@ -8,6 +8,8 @@
   - button "More conversation views"
 - text: Render this mathematical proof. {{clock}}
 - button "Copy"
+- button "Retract to this message"
+- button "Edit this message"
 - status: Completed
 - button "Completed in {{duration}}" [disabled]
 - heading "Math rendering" [level=2]

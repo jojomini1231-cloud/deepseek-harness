@@ -100,8 +100,10 @@ export const VIEWER_ENDPOINT_CLASSES = {
   'fileReferences/list': 'owner-only', // owner composer reference search
   'session/create': 'owner-only', // owner creates a Session
   'session/delete': 'owner-only', // owner deletes a Session
+  'session/edit': 'owner-only', // owner rewinds a Session conversation through an edited message
   'session/initializeDefaultModel': 'owner-only', // owner initializes a Session default model
   'session/openWorkspacePath': 'owner-only', // owner opens a Workspace path
+  'session/retract': 'owner-only', // owner rewinds a Session conversation from one user message
   'session/search': 'owner-only', // owner searches across Sessions
   'session/selectModel': 'owner-only', // owner selects a Session model
   'session/updateQueue': 'owner-only', // owner edits queued input

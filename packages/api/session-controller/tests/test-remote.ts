@@ -65,6 +65,10 @@ import type {
   SessionSelectModelRequest,
   SessionSelectModelValue,
   SessionProjectionsRequest,
+  SessionRetractRequest,
+  SessionRetractValue,
+  SessionEditRequest,
+  SessionEditValue,
   SessionUpdateQueueRequest,
   SessionUpdateQueueValue,
 } from '../src/types.ts'
@@ -84,6 +88,8 @@ export interface TestSessionRemote {
   rename(request: SessionRenameRequest): Promise<RemoteResult<SessionRenameValue>>
   fork(request: SessionForkRequest): Promise<RemoteResult<SessionForkValue>>
   prompt(request: SessionPromptRequest, signal?: AbortSignal): Promise<RemoteResult<SessionPromptValue>>
+  retract(request: SessionRetractRequest): Promise<RemoteResult<SessionRetractValue>>
+  edit(request: SessionEditRequest): Promise<RemoteResult<SessionEditValue>>
   attachment(request: SessionAttachmentRequest): Promise<RemoteResult<SessionAttachmentValue>>
   updateQueue(request: SessionUpdateQueueRequest): Promise<RemoteResult<SessionUpdateQueueValue>>
   cancel(request: SessionCancelRequest): Promise<RemoteResult<SessionCancelValue>>
@@ -393,6 +399,8 @@ export async function createSessionTestRemote(
       () => direct.prompt(request, signal),
       signal,
     ),
+    retract: request => remoteResult(() => direct.retract(request)),
+    edit: request => remoteResult(() => direct.edit(request)),
     attachment: request => remoteResult(() => direct.attachment(request)),
     updateQueue: request => remoteResult(() => direct.updateQueue(request)),
     cancel: request => remoteResult(() => direct.cancel(request)),

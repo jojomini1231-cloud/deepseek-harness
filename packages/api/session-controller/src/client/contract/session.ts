@@ -110,6 +110,27 @@ export interface ISession {
     attachment: ImageAttachmentRef,
   ): Promise<RemoteResult<{ attachment: ImageAttachmentRef; data: Uint8Array }>>
   /**
+   * Retract this Session from one plain user message: that message and
+   * everything after it leave the model-visible surface and the rendered
+   * timeline, while the durable log keeps them. The Session must be idle with
+   * no pending input.
+   * @param targetSeq - durable seq of the user message to retract from.
+   * @returns the retraction marker's durable seq, or the business error
+   *   (`session/busy`, `session/rewind-unavailable`, `session/not-found`).
+   */
+  retract(targetSeq: SessionSeq): Promise<RemoteResult<{ seq: SessionSeq }>>
+  /**
+   * Edit one plain user message: its text is replaced, its non-text content
+   * blocks stay attached, and the replacement opens the next turn while the
+   * target and its successors leave the surface. The Session must be idle with
+   * no pending input.
+   * @param targetSeq - durable seq of the user message to edit.
+   * @param text - replacement text with at least one non-whitespace character.
+   * @returns the edited message's durable seq, or the business error
+   *   (`session/busy`, `session/rewind-unavailable`, `session/edit-empty`, `session/not-found`).
+   */
+  edit(targetSeq: SessionSeq, text: string): Promise<RemoteResult<{ seq: SessionSeq }>>
+  /**
    * Apply one edit, remove, or Steer action to a still-pending queue occurrence.
    * @param itemId - agent-owned inbox occurrence identity.
    * @param action - requested queue operation.

@@ -1,0 +1,110 @@
+## Before
+
+- banner:
+  - navigation "Session hierarchy": "NavScenario: first run bash to"
+  - button "More actions"
+  - button "Open right sidebar"
+  - tablist:
+    - tab "Chat" [selected]
+    - tab "Trajectory"
+  - button "More conversation views"
+- navigation "Turn navigation":
+  - button "Jump to turn 1"
+  - button "Jump to turn 2"
+- text: "NavScenario: first run bash to print exactly NAVIGATION_OK, then read nav-a.md and nav-b.md using two read calls in ONE assistant message, then reply with the single word FIRST_DONE and stop. {{clock}}"
+- button "Copy"
+- button "Retract to this message"
+- button "Edit this message"
+- status: Completed
+- button "Completed in {{duration}}"
+- paragraph: FIRST_DONE
+- button "Copy"
+- button "Good response"
+- button "Bad response"
+- button "Branch into a new conversation"
+- text: "{{clock}} Reply in markdown with: a level-2 heading \"Navigation Summary\", a bulleted list of exactly two items, and a fenced code block containing echo WATERFALL. Then stop. {{clock}}"
+- button "Copy"
+- button "Retract to this message"
+- button "Edit this message"
+- status: Completed
+- button "Completed in {{duration}}"
+- heading "Navigation Summary" [level=2]
+- list:
+  - listitem: alpha nav
+  - listitem: beta nav
+- text: Code block
+- button "Wrap lines" [pressed]
+- button "Copy"
+- code: echo WATERFALL
+- button "Copy"
+- button "Good response"
+- button "Bad response"
+- button "Branch into a new conversation"
+- text: {{clock}}
+- textbox "Message or run a task, / commands, @ files or sessions"
+- button "Add files or run commands"
+- 'button "Access mode, current: Workspace Write"': Workspace Write
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Send message" [disabled]
+- button "2 turns 3 steps · {{throughput}} tok/s": 2 turns 3 steps{{throughput}} tok/s
+- button "24.5K tok · Cache hit 97%": 24.5K tokCache hit 97%
+
+## After retract
+
+- banner:
+  - navigation "Session hierarchy": "NavScenario: first run bash to"
+  - button "More actions"
+  - button "Open right sidebar"
+  - tablist:
+    - tab "Chat" [selected]
+    - tab "Trajectory"
+  - button "More conversation views"
+- text: "NavScenario: first run bash to print exactly NAVIGATION_OK, then read nav-a.md and nav-b.md using two read calls in ONE assistant message, then reply with the single word FIRST_DONE and stop. {{clock}}"
+- button "Copy"
+- button "Retract to this message"
+- button "Edit this message"
+- status: Completed
+- button "Completed in {{duration}}"
+- paragraph: FIRST_DONE
+- button "Copy"
+- button "Good response"
+- button "Bad response"
+- button "Branch into a new conversation"
+- text: {{clock}}
+- textbox "Message or run a task, / commands, @ files or sessions"
+- button "Add files or run commands"
+- 'button "Access mode, current: Workspace Write"': Workspace Write
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Send message" [disabled]
+- button "2 turns 3 steps · {{throughput}} tok/s": 2 turns 3 steps{{throughput}} tok/s
+- button "24.5K tok · Cache hit 97%": 24.5K tokCache hit 97%
+
+## Editing
+
+- banner:
+  - navigation "Session hierarchy": "NavScenario: first run bash to"
+  - button "More actions"
+  - button "Open right sidebar"
+  - tablist:
+    - tab "Chat" [selected]
+    - tab "Trajectory"
+  - button "More conversation views"
+- textbox "Edit message text": "Edited: summarize the navigation check in one sentence."
+- text: Press Ctrl/⌘ + Enter to send, Esc to cancel
+- button "Cancel editing"
+- button "Send the edited message"
+- status: Completed
+- button "Completed in {{duration}}"
+- paragraph: FIRST_DONE
+- button "Copy"
+- button "Good response"
+- button "Bad response"
+- button "Branch into a new conversation"
+- text: {{clock}}
+- textbox "Message or run a task, / commands, @ files or sessions"
+- button "Add files or run commands"
+- 'button "Access mode, current: Workspace Write"': Workspace Write
+- button "Select model, current DeepSeek-V4-Flash": DeepSeek-V4-Flash
+- button "Send message" [disabled]
+- button "2 turns 3 steps · {{throughput}} tok/s": 2 turns 3 steps{{throughput}} tok/s
+- button "24.5K tok · Cache hit 97%": 24.5K tokCache hit 97%

@@ -14,12 +14,12 @@ import type {
 import type { FileUploadReceiptId, StagedAttachment } from '@deepseek-ai/dsh-client-file-upload/types'
 import type {} from '@deepseek-ai/dsh-client-file-upload'
 import {
-  ReasoningEffortId, createUserMessage, freezeMessage,
+  ReasoningEffortId, createDeveloperMessage, createUserMessage, freezeMessage,
 } from '@deepseek-ai/dsh-llm'
-import type { MessageSource } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, MessageSource } from '@deepseek-ai/dsh-llm'
 import { buildForkSeed } from '@deepseek-ai/dsh-session/fork'
-import { SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
-import type { SessionEvent, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
+import { SessionLogOffset, SessionSeq, isReplacementSurfaceEvent } from '@deepseek-ai/dsh-session'
+import type { Session, SessionEvent, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-session-query'
 import { SessionTitleInvalidError } from '@deepseek-ai/dsh-session-title'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
@@ -52,6 +52,10 @@ import type {
   SessionRenameValue,
   SessionSelectModelRequest,
   SessionSelectModelValue,
+  SessionRetractRequest,
+  SessionRetractValue,
+  SessionEditRequest,
+  SessionEditValue,
   SessionUpdateQueueRequest,
   SessionUpdateQueueValue,
   SessionRequestId,
@@ -97,6 +101,64 @@ function latestCompletedPrefixBoundary(events: readonly SessionEvent[]): Session
     boundary = next.seq
   }
   return boundary
+}
+
+/**
+ * One retraction target and the current-surface range it rewrites. An empty
+ * surface tail retracts nothing, so the marker appends instead of replacing.
+ */
+type RewindPlan =
+  | { readonly kind: 'append'; readonly targetSeq: SessionSeq }
+  | {
+    readonly kind: 'replace'
+    readonly targetSeq: SessionSeq
+    readonly startSeq: SessionSeq
+    readonly endSeq: SessionSeq
+    readonly shadowedSeqs: readonly SessionSeq[]
+  }
+
+/**
+ * The turn and step coordinates a retraction marker records. The marker is
+ * appended between turns, so it stands at the end of the last observed step's
+ * position.
+ * @param events - exact observed Session history.
+ * @returns the latest observed turn and step, both 0 before the first turn.
+ */
+function lastTurnStep(events: readonly SessionEvent[]): { turn: number; step: number } {
+  let turn = 0
+  let step = 0
+  for (const event of events) {
+    if (event.type === 'turn/start') {
+      turn = event.data.turn
+      step = 0
+    } else if (event.type === 'step/start') {
+      step = event.data.step
+    }
+  }
+  return { turn, step }
+}
+
+/**
+ * Replace one user message's text while keeping its non-text blocks in order.
+ * The new text takes the first text block's position, or the end when the
+ * original message carried none.
+ * @param content - original admitted content blocks.
+ * @param text - replacement text.
+ * @returns the edited content blocks.
+ */
+function editedContent(content: readonly ContentBlock[], text: string): ContentBlock[] {
+  const blocks: ContentBlock[] = []
+  let placed = false
+  for (const block of content) {
+    if (block.type !== 'text') {
+      blocks.push(block)
+    } else if (!placed) {
+      blocks.push({ type: 'text', text })
+      placed = true
+    }
+  }
+  if (!placed) blocks.push({ type: 'text', text })
+  return blocks
 }
 
 /** Implements Session business commands delegated by the Session Controller Remote service. */
@@ -586,6 +648,251 @@ export class SessionCommandController {
       }
     }
     return { sessionId: childId }
+  }
+
+  /**
+   * Retract one conversation branch: append the durable marker that replaces
+   * the current surface range from the target user message through its tail.
+   * The target and everything after it stay in the event log but leave the
+   * derived model history and the client surface.
+   * @param request - Session identity and the target user message's durable seq.
+   * @returns the durable sequence of the retraction marker.
+   */
+  async retract(request: SessionRetractRequest): Promise<SessionRetractValue> {
+    const agent = await this.resolveAgent(request.sessionId)
+    this.assertRewindIdle(agent, request.sessionId)
+    using observation = await this.observeRewindHistory(request.sessionId)
+    // The re-check, the current-surface read, and the append share one
+    // synchronous segment, so a turn that started during the observation is
+    // refused instead of interleaving with the marker.
+    this.assertRewindIdle(agent, request.sessionId)
+    const { plan } = this.resolveRewind(agent, request, observation.events)
+    return { seq: this.appendRewindMarker(agent.session, plan, observation.events).seq }
+  }
+
+  /**
+   * Edit one user message: record the retraction marker, then admit the
+   * replacement text with the target's non-text content blocks as the next
+   * turn's ordinary user message. Both steps run after every validation has
+   * passed, so a marker that is already durable when admission fails names its
+   * own sequence in the failure.
+   * @param request - Session identity, target user message seq, and replacement text.
+   * @returns the durable sequence of the edited user message.
+   */
+  async edit(request: SessionEditRequest): Promise<SessionEditValue> {
+    if (request.text.trim().length === 0) {
+      throw new RemoteError('session/edit-empty', 'edited message text must include non-whitespace characters', {})
+    }
+    const agent = await this.resolveAgent(request.sessionId)
+    this.assertRewindIdle(agent, request.sessionId)
+    using observation = await this.observeRewindHistory(request.sessionId)
+    // The re-check, the current-surface read, the marker append, and the
+    // admission share one synchronous segment, so a turn that started during
+    // the observation is refused instead of interleaved with the rewrite.
+    this.assertRewindIdle(agent, request.sessionId)
+    const { target, plan } = this.resolveRewind(agent, request, observation.events)
+    const message = createUserMessage({
+      content: editedContent(target.content, request.text),
+      source: { kind: 'user' },
+    })
+    const marker = this.appendRewindMarker(agent.session, plan, observation.events)
+    const recorded = Promise.withResolvers<SessionSeq>()
+    const stopEvent = this.ctx.on('session/event', (session, event) => {
+      if (session !== agent.session || event.type !== 'user/message' || event.data.id !== message.id) return
+      recorded.resolve(event.seq)
+    })
+    const stopStatus = this.ctx.on('agent/status', ({ agent: subject, status }) => {
+      if (subject !== agent || status !== 'idle') return
+      const stillPending = agent.inbox.nextTurn.some(item => item.id === message.id)
+        || agent.inbox.nextStep.some(item => item.id === message.id)
+      if (stillPending) return
+      recorded.reject(new RemoteError(
+        'gateway/internal',
+        `session "${agent.id}": the retraction was recorded at seq ${String(marker.seq)} but the edited message was not admitted`,
+        { sessionId: agent.id },
+      ))
+    })
+    try {
+      agent.followup(message)
+      return { seq: await recorded.promise }
+    } catch (error: unknown) {
+      if (error instanceof RemoteError) throw error
+      throw new RemoteError(
+        'gateway/internal',
+        `session "${agent.id}": the retraction was recorded at seq ${String(marker.seq)} but the edited message was not admitted: ${String(error)}`,
+        { sessionId: agent.id },
+        { cause: error },
+      )
+    } finally {
+      stopEvent()
+      stopStatus()
+    }
+  }
+
+  /**
+   * Refuse a rewind while the Session runs work or holds pending input, so the
+   * surface range resolved here is still the range its event replaces.
+   * @param agent - Session Agent whose activity gates the rewind.
+   * @param sessionId - addressed Session identity for the failure details.
+   */
+  private assertRewindIdle(agent: Agent, sessionId: SessionId): void {
+    if (agent.status !== 'idle' || agent.inbox.nextTurn.length > 0 || agent.inbox.nextStep.length > 0) {
+      throw new RemoteError(
+        'session/busy',
+        `session "${sessionId}" has a running turn or pending input`,
+        { sessionId },
+      )
+    }
+  }
+
+  /**
+   * Read the exact Session history one rewind inspects. Only the observer's
+   * asynchronous read may access historical events; the returned lease stays
+   * valid while the caller computes the range and appends the marker.
+   * @param sessionId - addressed Session identity.
+   * @returns the exact observation, disposed with the caller's scope.
+   */
+  private async observeRewindHistory(sessionId: SessionId): Promise<SessionObservation> {
+    try {
+      return await this.ctx.sessionQuery.observeSession(sessionId, { projectionMode: 'none' })
+    } catch (error: unknown) {
+      throw new RemoteError(
+        'gateway/internal',
+        `session "${sessionId}" history is unavailable: ${String(error)}`,
+        { sessionId },
+        { cause: error },
+      )
+    }
+  }
+
+  /**
+   * Validate one rewind request's target message and resolve its placement.
+   * @param agent - Session Agent owning the target.
+   * @param request - Session identity and target event sequence.
+   * @param events - exact observed Session history at the rewind cut.
+   * @returns the target message and the surface range the rewind rewrites.
+   */
+  private resolveRewind(
+    agent: Agent,
+    request: SessionRetractRequest,
+    events: readonly SessionEvent[],
+  ): { target: UserMessage; plan: RewindPlan } {
+    let targetSeq: SessionSeq
+    try {
+      targetSeq = SessionSeq(request.targetSeq)
+    } catch {
+      throw this.rewindUnavailable(request)
+    }
+    const event = events[targetSeq]
+    if (event === undefined || event.seq !== targetSeq
+      || event.type !== 'user/message' || event.data.source.kind !== 'user') {
+      throw this.rewindUnavailable(request)
+    }
+    return {
+      target: event.data,
+      plan: this.surfacePlacement(agent.session, request.sessionId, targetSeq, events),
+    }
+  }
+
+  /** The stable refusal for a target that is not a plain user message of this Session. */
+  private rewindUnavailable(request: SessionRetractRequest): RemoteError {
+    return new RemoteError(
+      'session/rewind-unavailable',
+      `session "${request.sessionId}" has no plain user message at seq ${request.targetSeq}`,
+      { sessionId: request.sessionId, targetSeq: request.targetSeq },
+    )
+  }
+
+  /**
+   * Resolve the current surface range one rewind replaces. A target still on
+   * the surface is retracted from itself; one an earlier replacement shadowed
+   * rewinds from the node after that replacement, so a compaction summary
+   * survives. A range with no shadowed node records an append instead.
+   * @param session - Session whose current surface is rewritten.
+   * @param sessionId - addressed Session identity for the failure details.
+   * @param targetSeq - validated target message sequence.
+   * @param events - exact observed Session history supplying replacement citations.
+   * @returns the append-only or replacing range the rewind records.
+   */
+  private surfacePlacement(
+    session: Session,
+    sessionId: SessionId,
+    targetSeq: SessionSeq,
+    events: readonly SessionEvent[],
+  ): RewindPlan {
+    const nodes = session.surface.nodes
+    const targetIndex = nodes.indexOf(targetSeq)
+    const startIndex = targetIndex >= 0
+      ? targetIndex
+      : this.surfaceStandInIndex(events, nodes, sessionId, targetSeq) + 1
+    const shadowedSeqs = nodes.slice(startIndex)
+    const [startSeq] = shadowedSeqs
+    const endSeq = shadowedSeqs.at(-1)
+    return startSeq === undefined || endSeq === undefined
+      ? { kind: 'append', targetSeq }
+      : { kind: 'replace', targetSeq, startSeq, endSeq, shadowedSeqs }
+  }
+
+  /**
+   * The current surface position of the node standing in for one event: the
+   * newest observed replacement that transitively shadowed it. A replacement
+   * appended after the observation leaves no stand-in and fails rather than
+   * committing a range the current surface no longer supports.
+   * @param events - exact observed Session history.
+   * @param nodes - current surface nodes.
+   * @param sessionId - addressed Session identity for the failure details.
+   * @param seq - event whose stand-in position is resolved.
+   * @returns the stand-in's index in `nodes`.
+   * @throws {RemoteError} `session/rewind-unavailable` when nothing kept it on the surface.
+   */
+  private surfaceStandInIndex(
+    events: readonly SessionEvent[],
+    nodes: readonly SessionSeq[],
+    sessionId: SessionId,
+    seq: SessionSeq,
+  ): number {
+    let cursor = seq
+    for (const event of events) {
+      if (!isReplacementSurfaceEvent(event) || event.sourceEventSeqs?.includes(cursor) !== true) continue
+      cursor = event.seq
+    }
+    const index = nodes.indexOf(cursor)
+    if (index === -1) {
+      throw new RemoteError(
+        'session/rewind-unavailable',
+        `session "${sessionId}" no longer places seq ${String(seq)} on its surface`,
+        { sessionId, targetSeq: seq },
+      )
+    }
+    return index
+  }
+
+  /**
+   * Append the durable retraction marker: an empty developer message that
+   * derives no model-visible message, states the retracted target in its source
+   * so clients can hide the range, and carries the replacement that removes the
+   * resolved surface range.
+   * @param session - Session receiving the marker.
+   * @param plan - resolved surface placement for the retraction.
+   * @param events - exact observed Session history supplying the marker coordinates.
+   * @returns the committed marker event.
+   */
+  private appendRewindMarker(
+    session: Session,
+    plan: RewindPlan,
+    events: readonly SessionEvent[],
+  ): SessionEvent<'developer/message'> {
+    const message = createDeveloperMessage({
+      content: [],
+      source: { kind: 'conversation-rewind', targetSeq: plan.targetSeq },
+    })
+    const data = { ...lastTurnStep(events), message }
+    return plan.kind === 'append'
+      ? session.append('developer/message', data, { surfaceOp: 'append' })
+      : session.append('developer/message', data, {
+        surfaceOp: { op: 'replace', startSeq: plan.startSeq, endSeq: plan.endSeq },
+        sourceEventSeqs: [...plan.shadowedSeqs],
+      })
   }
 
   /**

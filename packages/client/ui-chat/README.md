@@ -58,6 +58,10 @@ Chat omits system-prompt, ordinary Context injection, and `permission` command r
 
 When an Assistant attempt retires without a visible message, Chat hides its already-published Node instead of removing its key. A retry in the same Step reuses that key when visible content returns. This also applies when the loaded window lacks the Step start.
 
+Conversation retraction hides another set of rows. A `conversation-rewind` marker is an empty `developer/message` that never renders; Chat hides every row whose anchor falls inside `[source.targetSeq … marker seq]`, together with the shell rows of a Turn whose content those rows removed, so an emptied Turn leaves no process control or action footer behind. Retracted rows remain in the durable log and Trajectory inspection, and a later retraction may hide an earlier marker's interval again. A target the Host already compacted keeps its compaction summary in the model history while the transcript still breaks at the message the reader clicked: the summary row falls inside the hidden range too. `ChatSnapshot.latestTurn` is the last loaded Turn that keeps a visible row, so retracting the closing Turn moves the tail and its actions back to the Turn that now ends the conversation, and retracting every Turn leaves it undefined.
+
+The Turn rail also drops the marks of fully retracted Turns (`ChatSnapshot.retractedTurns`): the Host Turn outline still names them because the durable log keeps them, so the view filters those marks out of its ladder.
+
 <a id="command-and-failure-rows"></a>
 ## Command and failure rows
 

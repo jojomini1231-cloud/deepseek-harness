@@ -5,6 +5,16 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ChatGroupTree } from './group-tree.ts'
 
+/**
+ * Retraction target recorded by one `conversation-rewind` marker. Chat hides
+ * every Node from this target through the marker's own sequence, so the
+ * transcript breaks at the message the user chose.
+ */
+export interface ChatRetraction {
+  /** Durable sequence of the message the reader asked to retract. */
+  readonly targetSeq: number
+}
+
 /** Final Chat render unit produced by a Chat business Definition. */
 export interface ChatConversationViewNode extends ConversationViewNode {
   readonly target: 'chat'
@@ -18,6 +28,10 @@ export interface ChatConversationViewNode extends ConversationViewNode {
    * opening Turn, or at the first loaded Turn when none is loaded.
    */
   readonly groupTree?: ChatGroupTree | undefined
+  /** Retraction target; present on a `conversation-rewind` marker, which never renders. */
+  readonly retraction?: ChatRetraction | undefined
+  /** Set when a later surface rewrite removed this Node from the visible conversation. */
+  readonly surfaceHidden?: true | undefined
 }
 
 /** Merge-extensible payload registry keyed by final Chat renderer kind. */

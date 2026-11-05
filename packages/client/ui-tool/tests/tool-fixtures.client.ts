@@ -45,6 +45,8 @@ export function toolChatSnapshot(
     },
     navigation: { items: () => [] },
     timeline: { turnOrder: [], turns: new Map() },
+    latestTurn: undefined,
+    retractedTurns: new Set(),
     legacy: {
       nodes: settled,
       runningCalls: running,

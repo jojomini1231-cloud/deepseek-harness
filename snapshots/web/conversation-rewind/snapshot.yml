@@ -1,0 +1,9 @@
+version: 1
+scenario: conversation-rewind
+profile: web
+composition: web-default
+recording: authored
+header:
+  class: web-default
+session:
+  source: ../navigation-panes/session.v3.jsonl

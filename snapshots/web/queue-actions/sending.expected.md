@@ -9,6 +9,10 @@
   - button "More conversation views"
 - text: Reply with a one-sentence description of event sourcing, then stop. {{clock}}
 - button "Copy"
+- button "Retract to this message" [disabled]
+- text: Unavailable while the session is running
+- button "Edit this message" [disabled]
+- text: Unavailable while the session is running
 - paragraph: partial
 - status: Deep diving
 - text: Deep diving for {{duration}} ···

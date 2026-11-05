@@ -223,8 +223,38 @@ export interface UserBeforeOwnerProps {
   readonly kind: 'user' | 'steering'
 }
 
+/**
+ * Outcome of one conversation retraction request.
+ * `busy` means the Session still runs or holds queued input; `unavailable`
+ * means the target is not a normal user message on the current surface;
+ * `failed` covers every other refusal or transport failure.
+ */
+export type RetractMessageResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: 'busy' | 'unavailable' | 'failed' }
+
+/** Conversation-surface actions offered to the Chat flow and its user rows. */
+export type ChatSurfaceActionInjected = {
+  /**
+   * Retract one user message and everything the current surface holds after it.
+   * @param seq - durable `user/message` sequence of the target.
+   * @returns acceptance, or the refusal reason.
+   */
+  retractMessage: (seq: number) => Promise<RetractMessageResult>
+  /**
+   * Replace one user message's text and retract the surface after it. The Host
+   * keeps the original message's non-text blocks.
+   * @param seq - durable `user/message` sequence of the target.
+   * @param text - replacement text.
+   * @returns whether the Host accepted the edit; false leaves the conversation unchanged.
+   */
+  editMessage: (seq: number, text: string) => Promise<boolean>
+  /** Return the keyboard to this Session's composer after one accepted action. */
+  focusComposer: () => void
+}
+
 /** Stable owner currency delivered to a keyed Chat renderer. */
-export interface ChatNodeOwnerProps {
+export interface ChatNodeOwnerProps extends ChatSurfaceActionInjected {
   /** Renderer-owned Node portion selected by the grouping Definition. */
   groupPart?: string
   cwd?: string | undefined
@@ -348,7 +378,7 @@ export interface ChatViewInjected {
 }
 
 /** Session-owned node sources shared with the view, plus the flow's connection state. */
-export type ChatFlowDataInjected = Pick<ChatViewInjected, 'keyedHooks'> & {
+export type ChatFlowDataInjected = Pick<ChatViewInjected, 'keyedHooks'> & ChatSurfaceActionInjected & {
   hooks: Pick<ChatViewInjected['hooks'], 'presentation'> & {
     /** Client connection lifecycle; the running clock pauses while it is not connected. */
     connectionState: ConnectionStateSource

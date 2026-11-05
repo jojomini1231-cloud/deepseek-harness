@@ -58,6 +58,10 @@ Chat 在所有工作步骤展示模式下都不显示系统提示词行、普通
 
 Assistant 尝试结束且没有可见消息时，Chat 隐藏已发布的 Node，不移除其 key。同一 Step 的重试再次产生可见内容时，复用该 key。已加载窗口缺少 Step 起点时也遵循此规则。
 
+对话撤回会隐藏另一组行。`conversation-rewind` 标记是一条空内容的 `developer/message`，永不渲染；Chat 隐藏所有锚点落在 `[source.targetSeq … 标记 seq]` 内的行，并一并隐藏内容被这些行移除的轮次壳行，因此被清空的轮次不会留下过程控制或操作页脚。被撤回的行仍保留在持久日志与 Trajectory 查看中，后续撤回还可能再次隐藏更早标记的区间。Host 已压缩的目标在模型历史中保留压缩摘要，但界面仍在用户点击的那条消息处断开：摘要行同样落在隐藏区间内。`ChatSnapshot.latestTurn` 是最后一个仍保留可见行的已加载轮次，因此撤回末尾轮次会把尾巴及其操作移回当前结束对话的轮次，撤回全部轮次时其为 undefined。
+
+轮次导航同样会移除被完全撤回的轮次的标记（`ChatSnapshot.retractedTurns`）：Host 的轮次大纲仍会列出它们（持久日志保留），因此视图把这些标记从导航梯中过滤掉。
+
 <a id="command-and-failure-rows"></a>
 ## 指令与失败行
 

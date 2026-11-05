@@ -87,3 +87,20 @@ export function mergeTurnRailItems(
   if (byTurn.size === 0) return EMPTY_ITEMS
   return [...byTurn.values()].sort((left, right) => left.turn - right.turn)
 }
+
+/**
+ * Drop the rail marks of Turns a conversation retraction hid. The host outline
+ * names every logged Turn, including ones no longer on the visible surface, so
+ * the view filters those marks after the merge.
+ * @param items - merged rail ladder.
+ * @param retractedTurns - loaded Turns the retraction projection hid completely.
+ * @returns the ladder without retracted marks; the same array when nothing is hidden.
+ */
+export function withoutRetractedTurns(
+  items: readonly TurnRailItem[],
+  retractedTurns: ReadonlySet<number>,
+): readonly TurnRailItem[] {
+  if (retractedTurns.size === 0) return items
+  const kept = items.filter(item => !retractedTurns.has(item.turn))
+  return kept.length === items.length ? items : kept
+}

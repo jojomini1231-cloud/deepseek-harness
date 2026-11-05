@@ -16,6 +16,8 @@
   - button "Jump to turn 2"
 - text: "Explain event sourcing in one sentence.Your parent agent id is \"session-{{uuid}}\". Before you finish, send your result to that agent with send_message({ agent_id: \"session-{{uuid}}\", message: \"<self-contained result>\" }). The parent shares your workspace but does not automatically receive your transcript, tool output, or reasoning. Send earlier messages as well when a finding changes what the parent should do next; sending a message does not end your turn. {{clock}}"
 - button "Copy"
+- button "Retract to this message"
+- button "Edit this message"
 - status: Completed
 - button "Completed in {{duration}}" [expanded]
 - button "Analysis completed" [expanded]
@@ -27,6 +29,8 @@
 - button "Branch into a new conversation"
 - text: {{clock}} Now give the same explanation to a human reader. {{clock}}
 - button "Copy"
+- button "Retract to this message"
+- button "Edit this message"
 - status: Completed
 - button "Completed in {{duration}}" [expanded]
 - button "Analysis completed" [expanded]

@@ -14,7 +14,7 @@ import { isAtOrOutside } from '../contract/group-tree.ts'
 import type { ChatFlowHookContext, ChatViewSlotProps, OpenFileOptions } from '../contract/slots.ts'
 import type { ChatSnapshot } from '../contract/snapshot.ts'
 import { TurnNavigator } from './TurnNavigator.tsx'
-import { mergeTurnRailItems } from './turn-rail-items.ts'
+import { mergeTurnRailItems, withoutRetractedTurns } from './turn-rail-items.ts'
 import { useTextInteraction } from './text-interaction.ts'
 import { useChatScroll } from './use-chat-scroll.ts'
 import { fileMediaUrl, resolveWorkspacePath, sessionFileAddress } from '@deepseek-ai/dsh-util-workspace-path'
@@ -74,12 +74,15 @@ export function ChatView({
   // both the data and its change signal: the array identity moves only when a
   // Turn enters, leaves, or changes its preview.
   const turnNavigationItems = useChat(s => s.navigation.items())
+  // Turns a conversation retraction hid completely: the outline below still
+  // names them because the durable log keeps them.
+  const retractedTurns = useChat(s => s.retractedTurns)
   // Host-computed whole-log outline; the merge is view-layer only (the
   // conversation snapshot never carries projection values).
   const turnOutline = useProjection('turnOutline')
   const railItems = useMemo(
-    () => mergeTurnRailItems(turnNavigationItems, turnOutline),
-    [turnNavigationItems, turnOutline],
+    () => withoutRetractedTurns(mergeTurnRailItems(turnNavigationItems, turnOutline), retractedTurns),
+    [turnNavigationItems, turnOutline, retractedTurns],
   )
   const inbox = useProjection('inbox') as InboxState | undefined
   // Workspace root off the session list row: path summaries display relative to it.

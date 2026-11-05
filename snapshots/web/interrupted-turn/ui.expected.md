@@ -8,6 +8,8 @@
   - button "More conversation views"
 - text: "Use the read tool twice in one assistant message: read a.txt and b.txt. Then reply with the single word DONE and stop. {{clock}}"
 - button "Copy"
+- button "Retract to this message"
+- button "Edit this message"
 - status: Stopped
 - button "Stopped" [disabled] [expanded]
 - button "Read files"
