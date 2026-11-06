@@ -21,5 +21,14 @@
   - button "Split" [disabled]
 - text: {{cwd}}/workspace
 - button "Reload"
-- list:
-  - listitem: Empty directory
+- paragraph: Choose a file from the tree on the right.
+- separator "Resize the file preview and file tree"
+- text: Project
+- toolbar "File tree actions":
+  - button "Expand All"
+  - button "Collapse All"
+- complementary "Workspace files":
+  - list:
+    - listitem: Empty directory
+- toolbar "View containers":
+  - button "Files"

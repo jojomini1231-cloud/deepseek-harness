@@ -5,7 +5,7 @@
  * of its own.
  */
 
-import type { DesktopWebAccessSettings } from './settings.ts'
+import type { DesktopWebAccessSettings } from './settings-file.ts'
 
 /**
  * The only address the Desktop listener binds. Loopback is a product decision rather

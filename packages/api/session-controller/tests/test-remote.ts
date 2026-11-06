@@ -65,6 +65,7 @@ import type {
   SessionSelectModelRequest,
   SessionSelectModelValue,
   SessionProjectionsRequest,
+  SessionProjectionFrame,
   SessionRetractRequest,
   SessionRetractValue,
   SessionEditRequest,
@@ -100,6 +101,7 @@ export interface TestSessionRemote {
   page(request: SessionPageRequest, signal?: AbortSignal): Promise<RemoteResult<SessionEventsPage>>
   projections(request: SessionProjectionsRequest, signal?: AbortSignal): Promise<RemoteResult<SessionProjectionsValue>>
   follow(request: SessionFollowRequest, signal?: AbortSignal): AsyncIterable<SessionFollowFrame>
+  observeProjections(request: SessionProjectionsRequest, signal?: AbortSignal): AsyncIterable<SessionProjectionFrame>
   control(signal?: AbortSignal): AsyncIterable<SessionControlFrame>
 }
 
@@ -418,6 +420,7 @@ export async function createSessionTestRemote(
       signal,
     ),
     follow: (request, signal = new AbortController().signal) => direct.follow(request, signal),
+    observeProjections: (request, signal = new AbortController().signal) => direct.observeProjections(request, signal),
     control: (signal = new AbortController().signal) => direct.control(signal),
   }
 }

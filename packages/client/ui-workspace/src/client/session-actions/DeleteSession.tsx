@@ -1,12 +1,12 @@
 /**
  * The permanent-deletion action for temporary Sessions: a
- * `sidebar.workspaces.session.menu.item` row and a
- * `sidebar.workspaces.session.row.action` button over one injected behavior,
- * plus the `shell.overlay` dialog that confirms the deletion. Both entries
- * render only for a row the browser marked temporary, because only such a
- * Session has a Session-local directory the deletion also removes. The notice
- * a successful deletion raises and the diagnostics for Host rejections live
- * in the injected callbacks, not here.
+ * `sidebar.workspaces.session.row.action` button and the `shell.overlay`
+ * dialog that confirms the deletion. The button renders only for a row the
+ * browser marked temporary, because only such a Session has a Session-local
+ * directory the deletion also removes. The Session menu offers the same
+ * deletion through a ctx.contextMenus contribution over the same injected
+ * callback. The notice a successful deletion raises and the diagnostics for
+ * Host rejections live in the injected callbacks, not here.
  */
 import { useState } from 'react'
 import type { SessionActivity } from '@deepseek-ai/dsh-api-workspace-controller/client'
@@ -16,39 +16,14 @@ import type {} from '@deepseek-ai/dsh-jobs/view'
 import type {} from '@deepseek-ai/dsh-schedule/client'
 import type {} from '@deepseek-ai/dsh-subagent/client'
 import {
-  Button, IconTrashOutlineRegular, MenuItemButton, Modal, Tooltip,
+  Button, IconTrashOutlineRegular, Modal, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   DeleteSessionInjected, SessionDeleteConfirmInjected, SessionDeleteConfirmProps, SessionDeleteConfirmRequest,
-  SessionMenuItemProps, SessionRowActionProps,
+  SessionRowActionProps,
 } from '../contract/slots.ts'
 import css from '../rows/Rows.module.css'
 import browserCss from '../rows/WorkspaceBrowser.module.css'
-
-/**
- * Menu row (order 500): the last row, separated from the reversible actions
- * above it; absent on every non-temporary Session.
- * @param props - owner share, the delete share, and the menu open state.
- * @returns the row, or null for a non-temporary Session.
- */
-export function DeleteSessionMenuItem(props: SessionMenuItemProps<DeleteSessionInjected>) {
-  const { sessionId, displayTitle, temporary, useMenuOpenState, requestSessionDelete, t } = props
-  const [, setMenuOpen] = useMenuOpenState()
-  if (!temporary) return null
-  return (
-    <MenuItemButton
-      danger
-      separatorBefore
-      icon={<IconTrashOutlineRegular size={14} />}
-      onSelect={() => {
-        setMenuOpen(false)
-        requestSessionDelete(sessionId, displayTitle)
-      }}
-    >
-      {t('menu.deleteSession')}
-    </MenuItemButton>
-  )
-}
 
 /**
  * Hover button (order 300): the trailing destructive action; absent on every
@@ -60,7 +35,7 @@ export function DeleteSessionRowButton(props: SessionRowActionProps<DeleteSessio
   const { sessionId, displayTitle, temporary, requestSessionDelete, t } = props
   if (!temporary) return null
   return (
-    <Tooltip label={t('actions.delete')} side="bottom" align="end" delayMs={500}>
+    <Tooltip label={t('actions.delete')} side="bottom" align="end" delayMs={500} portal>
       <button
         type="button"
         className={css.iconButton}

@@ -1,7 +1,8 @@
 /** Document renderer slot: the view supplies shared file state, renderers own their presentation. */
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { PropsRuntime, SlotHookFactory } from '@deepseek-ai/dsh-client-ui-slots'
-import type { SidebarRightTabNavigation } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
+import type { PaneId } from '@deepseek-ai/dsh-client-ui-dockkit'
+import type { SidebarRightTabNavigation, UseSidebarRightTabInfo } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type { ShortcutCatalogEntry } from '@deepseek-ai/dsh-client-shortcuts/client'
 import type { RefCallback } from 'react'
 import type { TextInjected } from '../face.ts'
@@ -93,6 +94,17 @@ export interface DocumentPreviewInput {
   readonly bindRefresh?: (commands: { readonly refresh?: () => void }) => () => void
   /** Effective refresh binding the toolbar's reload control advertises; omitted shows no keys. */
   readonly refreshShortcut?: ShortcutCatalogEntry | undefined
+  /** Pane hosting this preview; the header path's `file` context-menu target carries it, and omits it when absent. */
+  readonly paneId?: PaneId | undefined
+  /**
+   * Right-Sidebar tab hosting this preview as its whole body. When given, the
+   * preview draws the workspace navigator (`sidebar.files.navigator`, opening a
+   * chosen file in this tab's place) and its header toggle
+   * (`sidebar.files.navigator.toggle`); when omitted, neither renders. Keep its
+   * identity stable across renders: the navigator positions re-render only when
+   * it changes.
+   */
+  readonly useTabInfo?: UseSidebarRightTabInfo | undefined
 }
 
 /** The reusable preview's inject face: the business reads plus the renderer registry source. */

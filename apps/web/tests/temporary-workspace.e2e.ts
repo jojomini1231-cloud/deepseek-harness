@@ -57,7 +57,7 @@ describe('web e2e: temporary workspace', () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-temporary-workspace'))
     // Both sections share one scroller and render as sibling trees, so the
     // region is scoped to the scroller rather than to either tree.
-    const sidebar = page.locator('[class*="treeBody"]')
+    const sidebar = page.locator('[data-sidebar-list-area]')
     const workspaceTitle = basename(scaffold.workspaceCwd)
     await sidebar.getByText(workspaceTitle, { exact: true }).waitFor({ timeout: 15_000 })
 
@@ -89,7 +89,7 @@ describe('web e2e: temporary workspace', () => {
 
     await compareOrRefreshGolden(
       SIDEBAR_EXPECTED,
-      await captureStableAria(page, '[class*="treeBody"]', scaffold.workspaceCwd),
+      await captureStableAria(page, '[data-sidebar-list-area]', scaffold.workspaceCwd),
       MODE,
     )
 
@@ -98,7 +98,7 @@ describe('web e2e: temporary workspace', () => {
 
   it('deletes the temporary Session, its subagent, its log, and its directory from the row menu', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-temporary-workspace-delete'))
-    const sidebar = page.locator('[class*="treeBody"]')
+    const sidebar = page.locator('[data-sidebar-list-area]')
     const temporaryTree = sidebar.getByRole('tree', { name: 'Temporary workspaces' })
 
     // A provisional New Session row has no content yet and therefore no row
@@ -161,7 +161,7 @@ describe('web e2e: temporary workspace', () => {
 
     await compareOrRefreshGolden(
       DELETED_EXPECTED,
-      await captureStableAria(page, '[class*="treeBody"]', scaffold.workspaceCwd),
+      await captureStableAria(page, '[data-sidebar-list-area]', scaffold.workspaceCwd),
       MODE,
     )
 

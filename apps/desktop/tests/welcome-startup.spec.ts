@@ -1,4 +1,6 @@
-vi.mock('../src/web-document.ts', () => ({ authenticateWebHost: async () => 'test-cookie', serveWebDocument: vi.fn(), forwardWebRequest: vi.fn() }))
+vi.mock('../src/web-document.ts', () => ({
+  authenticateWebHost: async () => 'test-cookie', serveWebDocument: vi.fn(), forwardWebRequest: vi.fn(), removeLegacyHostCookies: async () => {},
+}))
 /** Welcome startup uses the Host before transitioning to the workspace. */
 
 import { afterEach, expect, it, vi } from 'vitest'
@@ -85,9 +87,9 @@ vi.mock('electron', () => ({
     showInactive = state.showInactiveWorkspace
     async loadURL(url: string) { state.contents = this.webContents; await state.loadWorkspace(url); this.ready?.() }
   },
-  net: { fetch: vi.fn() },
   nativeTheme: state.nativeTheme,
   session: { defaultSession: {
+    on: vi.fn(), cookies: {},
     setPermissionCheckHandler: vi.fn(), setPermissionRequestHandler: vi.fn(), webRequest: { onBeforeSendHeaders: vi.fn() },
   } },
   protocol: { registerSchemesAsPrivileged: vi.fn(), handle: vi.fn() },
@@ -104,7 +106,8 @@ vi.mock('../src/tray.ts', () => ({ DesktopTray: class { relabel() {} dispose() {
 
 vi.mock('../src/paths.ts', () => ({ resolveDesktopPaths: () => ({ profile: '/profile' }) }))
 vi.mock('../src/settings.ts', () => ({
-  readDesktopSettings: () => ({ updates: { allowTestAuthPopupWindow: false }, web: { enabled: false, port: 3080, trustedHost: '' } }),
+  readDesktopSettings: async () => ({ updates: { allowTestAuthPopupWindow: false }, web: { enabled: false, port: 3080, trustedHost: '' } }),
+  readWebAccessSettings: async () => ({ enabled: false, port: 3080, trustedHost: '' }),
   writeWebAccessSettings: vi.fn(),
 }))
 vi.mock('../src/login-shell-environment.ts', async importOriginal => ({
@@ -127,7 +130,7 @@ vi.mock('../src/host-process.ts', () => ({
   },
 }))
 vi.mock('../src/welcome-backend.ts', () => ({
-  connectDesktopWelcome: async () => ({
+  connectDesktopWelcome: () => ({
     analyticsEnabled: async () => false,
     readLocalePreference: async () => state.preference,
     read: async () => {

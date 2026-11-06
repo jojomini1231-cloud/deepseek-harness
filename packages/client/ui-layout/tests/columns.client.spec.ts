@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  clampWidth, computeColumns, MOBILE_BREAKPOINT, MOBILE_DRAWER_WIDTH, SIDEBAR_AUTO_COLLAPSE,
+  clampWidth, computeColumns, MOBILE_BREAKPOINT, SIDEBAR_DRAWER_BREAKPOINT,
 } from '../src/client/columns.ts'
 
 describe('clampWidth', () => {
@@ -18,6 +18,11 @@ describe('computeColumns', () => {
 
   it('keeps only the left rail when both panels are closed', () => {
     expect(computeColumns(1920, 0, 0)).toEqual({ sidebar: 56, center: 1864, rightbar: 0 })
+  })
+
+  it('aligns an expanded sidebar to the fold midpoint without widening a collapsed rail', () => {
+    expect(computeColumns(951, 280, 864, 56, true)).toEqual({ sidebar: 475.5, center: 475.5, rightbar: 0 })
+    expect(computeColumns(951, 0, 0, 56, true)).toEqual({ sidebar: 56, center: 895, rightbar: 0 })
   })
 
   it('clamps sidebar preferences and limits the right panel to 70% of the frame', () => {
@@ -55,11 +60,9 @@ describe('computeColumns', () => {
 })
 
 describe('phone frame', () => {
-  it('exposes the breakpoint and drawer cap used by the mobile shell', () => {
+  it('places the phone presentation inside the drawer range', () => {
     expect(MOBILE_BREAKPOINT).toBe(600)
-    expect(MOBILE_DRAWER_WIDTH).toBe(328)
-    // The phone breakpoint always sits inside the sidebar auto-collapse range.
-    expect(MOBILE_BREAKPOINT).toBeLessThan(SIDEBAR_AUTO_COLLAPSE)
+    expect(MOBILE_BREAKPOINT).toBeLessThan(SIDEBAR_DRAWER_BREAKPOINT)
   })
 
   it('never keeps a normal right track at phone widths', () => {

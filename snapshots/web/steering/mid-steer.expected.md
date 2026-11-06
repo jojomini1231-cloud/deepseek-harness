@@ -12,7 +12,10 @@
 - button "Retract to this message" [disabled]
 - text: Unavailable while the session is running
 - button "Edit this message" [disabled]
-- text: Unavailable while the session is running Running
+- text: Unavailable while the session is running
+- button "Context injection runtime-context"
+- button "Context injection time-context"
+- text: Running
 - button "Ask question waiting"
 - status: Deep diving
 - text: "Deep diving for {{duration}} ··· Interjection: include the word BANANA in your final reply."

@@ -5,7 +5,7 @@ import {
   MIN_WEB_ACCESS_PORT,
   isWebAccessPort,
   type DesktopWebAccessSettings,
-} from '../src/settings.ts'
+} from '../src/settings-file.ts'
 import {
   WEB_ACCESS_HOST,
   parseWebAccessEndpoint,

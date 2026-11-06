@@ -1,3 +1,4 @@
+import type {} from '@deepseek-ai/dsh-client-ui-context-menu/client'
 /**
  * Browser half: register `text` as a right-Sidebar tab type.
  *
@@ -24,6 +25,7 @@ import { DocumentPreview } from './DocumentPreview.tsx'
 import type { DocumentPreviewInjected } from './document/contract.ts'
 import { TextPreview } from './TextPreview.tsx'
 import { TextTitle } from './TextTitle.tsx'
+import { WorkbenchPreview } from './WorkbenchPreview.tsx'
 import { TEXTPREVIEW_ID, textDefinition } from './definition.ts'
 import { textFace } from './face.ts'
 import { createReadPage } from './rpc.ts'
@@ -85,7 +87,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export const inject = ['slots', 'locale', 'sidebarRightTabs', 'remote', 'remote.workspaceFiles', 'configForms', 'resources', 'fileDrag']
 
 /**
- * Client plugin body: register the type, its dictionaries, its body, and its chip title.
+ * Client plugin body: register the type, its dictionaries, its body, its chip
+ * title, and the Files workbench's preview.
  * @param ctx - client root context carrying the registry, slots, copy, and file readers.
  */
 export function apply(ctx: ClientContext): void {
@@ -125,6 +128,10 @@ export function apply(ctx: ClientContext): void {
     { name: 'sidebar.right.pane.tab.title', key: TEXTPREVIEW_ID },
     TextTitle,
   )), 'ui-sidebar-documentpreview: text title')
+  ctx.effect(() => ctx.slots.inject('sidebar.right.tab.files.preview', () => ctx.slots.register(
+    { name: 'sidebar.right.tab.files.preview' },
+    WorkbenchPreview,
+  )), 'ui-sidebar-documentpreview: files workbench preview')
   registerText(ctx)
   registerMarkdown(ctx)
   registerHtml(ctx)

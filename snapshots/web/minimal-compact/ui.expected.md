@@ -15,7 +15,7 @@
 - button "Retract to this message"
 - button "Edit this message"
 - status: Completed
-- button "Completed in {{duration}}" [disabled]
+- button "Completed in {{duration}}"
 - paragraph: MINIMAL_COMPACT_READY
 - button "Copy"
 - button "Good response"
@@ -29,7 +29,7 @@
 - button "Retract to this message"
 - button "Edit this message"
 - status: Completed
-- button "Completed in {{duration}}" [disabled]
+- button "Completed in {{duration}}"
 - paragraph: MINIMAL_COMPACT_OK
 - button "Copy"
 - button "Good response"

@@ -24,6 +24,12 @@ function productIcon(glyph: IconGlyph, weight: IconWeight): (props: IconProps) =
   )
 }
 
+/** Regular one-pixel IconLayersOutline artwork. */
+export const IconLayersOutlineRegular = productIcon('layers-outline', 'regular')
+
+/** Medium IconLayersOutline artwork with a 1.3px stroke. */
+export const IconLayersOutlineMedium = productIcon('layers-outline', 'medium')
+
 /** Regular one-pixel IconNewChatOutline artwork. */
 export const IconNewChatOutlineRegular = productIcon('new-chat-outline', 'regular')
 
@@ -638,3 +644,9 @@ export const IconChevronsInwardOutlineRegular = productIcon('chevrons-inward-out
 
 /** Medium IconChevronsInwardOutline artwork with a 1.3px stroke. */
 export const IconChevronsInwardOutlineMedium = productIcon('chevrons-inward-outline', 'medium')
+
+/** Regular floppy-disk save action. */
+export const IconSaveOutlineRegular = productIcon('save-outline', 'regular')
+
+/** Medium floppy-disk save action. */
+export const IconSaveOutlineMedium = productIcon('save-outline', 'medium')

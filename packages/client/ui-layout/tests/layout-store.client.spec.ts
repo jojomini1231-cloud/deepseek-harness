@@ -81,12 +81,12 @@ describe('main panel selection', () => {
   const panelA = 'panel-a' as MainPanelId
   const panelB = 'panel-b' as MainPanelId
 
-  it.each([390, 599, 600, 800])('closes navigation only in the phone drawer at %ipx', (width) => {
+  it.each([390, 767, 768, 800])('closes navigation only in the sidebar drawer at %ipx', (width) => {
     const { store, actions } = createLayoutStore().create()
     actions.setViewportWidth(width)
     actions.toggleSidebar()
     actions.selectPanel(panelA)
-    expect(store.getSnapshot().layoutInfo.narrowExpanded).toBe(width >= 600)
+    expect(store.getSnapshot().layoutInfo.narrowExpanded).toBe(width >= 768)
   })
 
   it('changes only panelInfo when switching panels and returning to the Conversation', () => {
@@ -296,5 +296,23 @@ describe('right panel instant geometry', () => {
     actions.closeRightbar()
     actions.openRightbar(true, fullscreen)
     expect(store.getSnapshot().layoutInfo).toMatchObject({ rightbarShown: true, rightbarFullscreen: fullscreen, rightbarInstant: false })
+  })
+})
+
+describe('drawer navigation', () => {
+  it.each(['plugins' as MainPanelId, null])('closes the narrow drawer on navigation to %s', (panel) => {
+    const { store, actions } = createLayoutStore().create()
+    actions.setViewportWidth(390)
+    actions.toggleSidebar()
+    actions.selectPanel(panel)
+    expect(store.getSnapshot().layoutInfo.narrowExpanded).toBe(false)
+  })
+
+  it('keeps a tablet sidebar open when navigating', () => {
+    const { store, actions } = createLayoutStore().create()
+    actions.setViewportWidth(768)
+    actions.toggleSidebar()
+    actions.selectPanel(null)
+    expect(store.getSnapshot().layoutInfo.narrowExpanded).toBe(true)
   })
 })

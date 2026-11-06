@@ -233,7 +233,7 @@ describe('web e2e: the working-tree git view', () => {
     await dragRightbar(page, 260)
     await expect.poll(async () => await host.getAttribute('data-files-files-layout'), { timeout: 15_000 }).toBe('narrow')
     expect(await host.getAttribute('data-files-files-page')).toBe('list')
-    await column.locator('[data-files-entry="file"] > button').first().click()
+    await column.locator('[data-files-entry="file"] button').first().click()
     await expect.poll(async () => await host.getAttribute('data-files-files-page')).toBe('open')
     await column.locator('[data-files-files-back]').click()
     await expect.poll(async () => await host.getAttribute('data-files-files-page')).toBe('list')

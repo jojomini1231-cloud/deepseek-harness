@@ -7,7 +7,7 @@ import { connectFreshWorkspace, newEnglishPage, pinBrowserClock, pinHostClock, s
 
 const picker = fileURLToPath(new URL('./pin-browse-picker.overlay.yml', import.meta.url))
 
-it('reveals phone navigation destinations and transfers focus across the phone breakpoint', async () => {
+it('reveals phone navigation destinations and transfers focus across the drawer breakpoint', async () => {
   const scaffold = await launchWebScaffold({ extraOverlayPath: picker })
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined
   try {
@@ -16,25 +16,30 @@ it('reveals phone navigation destinations and transfers focus across the phone b
     onTestFailed(() => saveFailureShot(page, 'mobile-shell-navigation'))
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto(scaffold.authenticatedUrl)
-    const frame = page.locator('[data-mobile-shell][data-mobile-drawer]')
+    const frame = page.locator('[data-mobile-shell][data-sidebar-drawer]')
     const leadingToggle = page.locator('[data-shell-leading] [data-sidebar-toggle]')
     const sidebarToggle = page.locator('[data-slot="sidebar"] [data-sidebar-toggle]')
+    const drawerClosed = () => frame.getAttribute('data-sidebar-collapsed')
     await leadingToggle.waitFor()
     await leadingToggle.click()
+    await expect.poll(drawerClosed).toBeNull()
     await page.getByRole('button', { name: 'Plugins', exact: true }).click()
-    await expect.poll(() => frame.getAttribute('data-mobile-drawer')).toBe('closed')
+    await expect.poll(drawerClosed).toBe('true')
     await page.getByRole('heading', { name: 'Plugins', exact: true }).waitFor()
 
     // Selecting the already-visible destination is still a navigation commit.
     await leadingToggle.click()
+    await expect.poll(drawerClosed).toBeNull()
     await page.getByRole('button', { name: 'Plugins', exact: true }).click()
-    await expect.poll(() => frame.getAttribute('data-mobile-drawer')).toBe('closed')
+    await expect.poll(drawerClosed).toBe('true')
     await leadingToggle.click()
+    await expect.poll(drawerClosed).toBeNull()
     await page.locator('[data-slot="sidebar.workspaces"]')
       .getByRole('button', { name: 'New temporary session', exact: true }).click()
-    await expect.poll(() => frame.getAttribute('data-mobile-drawer')).toBe('closed')
+    await expect.poll(drawerClosed).toBe('true')
     await page.locator('[data-composer-input]').first().waitFor()
 
+    // 800px leaves the drawer range (768px), which unmounts the focused leading seat.
     await leadingToggle.focus()
     await page.setViewportSize({ width: 800, height: 844 })
     await expect.poll(() => sidebarToggle.evaluate(el => el === document.activeElement)).toBe(true)
@@ -64,7 +69,7 @@ it('preserves the touch running-status slot when pending steering is admitted', 
     await pinBrowserClock(page)
     onTestFailed(() => saveFailureShot(page, 'mobile-shell-steering'))
     await page.goto(scaffold.authenticatedUrl)
-    await page.getByRole('button', { name: 'Open sidebar', exact: true }).click()
+    await page.locator('[data-shell-leading]').getByRole('button', { name: 'Open sidebar', exact: true }).click()
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
     const requested = new Promise<void>((resolve) => {
       scaffold.ctx.on('session/event', (_session, event) => { if (event.type === 'request/context') resolve() })

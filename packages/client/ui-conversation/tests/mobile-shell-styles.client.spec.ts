@@ -48,8 +48,10 @@ function lastCoarseBlock(source: string): string {
 
 describe('phone conversation header', () => {
   it('reserves the frame leading seat for the drawer trigger without padding the safe area twice', () => {
-    expect(declarations(header, ':global(html[data-mobile-shell]) .headerLeading')?.get('padding-left'))
-      .toBe('48px')
+    // The frame publishes the phone seat's clearance; a phone-only header inset would add it twice.
+    expect(declarations(header, '.titleRow')?.get('padding-inline-start'))
+      .toBe('max(0px, calc(var(--dsh-frame-leading-clearance, 0px) - 20px))')
+    expect(declarations(header, ':global(html[data-mobile-shell]) .headerLeading')).toBeUndefined()
     expect(declarations(header, ':global(html[data-mobile-shell]) .header')).toBeUndefined()
   })
 

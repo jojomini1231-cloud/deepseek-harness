@@ -57,9 +57,22 @@ describe('SidebarRoot.module.css phone drawer', () => {
     expect(declarations(drawer, ':global(html[data-mobile-shell]) .newSessionShortcut')?.get('display')).toBe('none')
   })
 
-  it('gives panel rows a 44px touch hit while the desktop row keeps its 36px height', () => {
-    expect(declarations(drawer, '.panelRow')?.get('min-height')).toBe('36px')
+  it('gives panel rows a 44px touch hit while the desktop row keeps its 32px height', () => {
+    expect(declarations(drawer, '.panelRow')?.get('min-height')).toBe('32px')
     expect(declarations(lastCoarseBlock(drawer), '.panelRow')?.get('min-height')).toBe('44px')
+  })
+
+  it('gives the unpin action a 44px touch hit and keeps the row label clear of it', () => {
+    const fine = declarations(drawer, '.panelUnpin')
+    expect(fine?.get('width')).toBe('28px')
+    expect(fine?.get('height')).toBe('28px')
+    expect(declarations(drawer, '.panelEntryWide .panelRow')?.get('padding-right')).toBe('38px')
+    const coarse = lastCoarseBlock(drawer)
+    const unpin = declarations(coarse, '.panelUnpin')
+    expect(unpin?.get('top')).toBe('0')
+    expect(unpin?.get('width')).toBe('44px')
+    expect(unpin?.get('height')).toBe('44px')
+    expect(declarations(coarse, '.panelEntryWide .panelRow')?.get('padding-right')).toBe('54px')
   })
 })
 

@@ -1,12 +1,13 @@
 /**
  * Shared harness for the body specs: a real store instance, a real face over a
- * scripted paged read, a scripted `useResource`, and the owner props a tab
- * record carries.
+ * scripted paged read, a scripted `useResource`, and the props the text tab
+ * hands the reusable preview.
  *
  * The framework's standard kit is replaced by the few members these components
  * read, behind one documented cast, so the specs exercise the components and
- * not the slot runtime.
+ * not the slot runtime. The hosting tab's members and the menu hook stay typed.
  */
+import { contextMenuHook } from '@deepseek-ai/dsh-client-test-runtime'
 import { onTestFinished, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { ResourceRegistry } from '../../resources/src/client/resources.ts'
@@ -17,6 +18,8 @@ import { createElement, useSyncExternalStore } from 'react'
 import type { RemoteFailure, RemoteResult } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ResourceSnapshot } from '@deepseek-ai/dsh-client-resources/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { PaneId, TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
+import type { SidebarRightTabInfo, UseSidebarRightTabInfo } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type { WorkspaceFileStat, WorkspaceFileText } from '@deepseek-ai/dsh-api-workspace-files/types'
 import type { DocumentPreviewFactoryProps } from '../src/client/DocumentPreview.tsx'
 import { textFace } from '../src/client/face.ts'
@@ -52,6 +55,14 @@ export const ABSOLUTE_PATH = '/host/project/work/notes.md'
 export const ADDRESS = 'dsh-resource://file/session/s-1/work/notes.md'
 /** What the address names, as the face receives it. */
 export const FILE: SessionFile = { sessionId: SESSION, path: PATH }
+/** The pane holding the text tab that hosts the preview. */
+const PANE_ID = 'pane-1' as PaneId
+
+/** The preview's props as the text tab hands them over: its pane and its information hook are always present. */
+export type HostedPreviewProps = DocumentPreviewFactoryProps & {
+  readonly paneId: PaneId
+  readonly useTabInfo: UseSidebarRightTabInfo
+}
 
 /** One page the Host would return: the lines joined without a terminator, and their count. */
 export function page(offset: number, lines: readonly string[], eof: boolean, version = 'v1'): RemoteResult<WorkspaceFileText> {
@@ -109,8 +120,8 @@ export interface Harness {
   readonly file: WorkspaceFileStat | undefined
   /** The scripted `useResource`. */
   useResource: Mock<() => ResourceSnapshot<WorkspaceFileStat>>
-  /** Composed props for one navigation state. */
-  props: (navigation?: { params?: unknown; revision: number }) => DocumentPreviewFactoryProps
+  /** Composed props for one navigation state, as the text tab in pane `pane-1` hosts the preview. */
+  props: (navigation?: { params?: unknown; revision: number }) => HostedPreviewProps
   /** Script what one offset resolves to from now on. */
   script(offset: number, result: RemoteResult<WorkspaceFileText>): void
   /** Publish another metadata version without acknowledging any tab's content. */
@@ -150,7 +161,8 @@ export function harness(script: Record<number, RemoteResult<WorkspaceFileText>> 
         'data-slot': key,
         'data-slot-path': (owner as { absolutePath: string }).absolutePath,
       })
-  const props = (navigation: { params?: unknown; revision: number } = { revision: 1 }) => ({
+  // Any host's view input and the standard kit, before the hosting tab's members.
+  const viewProps = (navigation: { params?: unknown; revision: number }) => ({
     address: ADDRESS,
     viewKey: tabId,
     navigation: { address: ADDRESS, params: navigation.params, revision: navigation.revision },
@@ -172,6 +184,25 @@ export function harness(script: Record<number, RemoteResult<WorkspaceFileText>> 
     useFactorySlot: (_name: string, fallback: unknown) => fallback,
     t,
   }) as unknown as DocumentPreviewFactoryProps
+  const props = (navigation: { params?: unknown; revision: number } = { revision: 1 }): HostedPreviewProps => {
+    const view = viewProps(navigation)
+    const info: SidebarRightTabInfo = {
+      sidebar: { expanded: true, fullscreen: false },
+      panel: { id: PANE_ID, isFloating: false },
+      tab: {
+        id: tabId as TabId, kind: 'text', contentId: ADDRESS, title: 'notes.md', visible: true,
+        navigation: view.navigation, signal: controller.signal, actions: tabActions,
+      },
+    }
+    return {
+      ...view,
+      paneId: PANE_ID,
+      useTabInfo: () => info,
+      useContextMenu: contextMenuHook(),
+      // Each Factory position renders a marker naming itself.
+      renderFactorySlot: (key: string) => createElement('div', { 'data-navigator-factory': key }),
+    }
+  }
   return {
     instance,
     face,

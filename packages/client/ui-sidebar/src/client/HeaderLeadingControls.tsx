@@ -15,27 +15,26 @@ export type HeaderLeadingControlsProps =
   & PropsLocale<'sidebar'>
 
 /**
- * Sidebar-open, New Session, and New temporary session controls in the frame's
- * window-chrome seat.
- * On macOS desktop a collapsed sidebar hides entirely (no rail), taking the
- * controls off screen; this occupant puts them back beside the traffic
- * lights. The frame mounts the seat only in that state and owns its
- * placement, so the occupant renders unconditionally.
+ * Sidebar-open, New Session, and New temporary session controls in the frame's window-chrome seat.
+ * The frame mounts this seat for hidden sidebars and owns its placement.
+ * Web shows only the sidebar opener; Desktop also retains both Session-start controls.
  * @param props - Injected sidebar actions, the global access Hook, and the sidebar locale seat.
- * @returns the sidebar toggle, plus the New Session and New temporary session controls while the access snapshot
- *   allows `session/create`.
+ * @returns the sidebar toggle, plus New Session and New temporary session on Desktop while access allows
+ *   `session/create`.
  */
 export function HeaderLeadingControls({
   toggleSidebar, startSession, startTemporarySession, trackEntryClick, useRemoteAccess, useShortcuts, t,
 }: HeaderLeadingControlsProps) {
   // A page whose access snapshot excludes starting a Session keeps only the sidebar toggle here.
   const canStartSession = useRemoteAccess('session/create')
+  const desktop = document.documentElement.hasAttribute('data-platform')
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'sidebar.left.toggle'))
   const newShortcut = useShortcuts(rows => rows.find(row => row.id === 'session.new'))
   return (
     <div className={css.controls}>
       <Tooltip label={t('toggle.open')} shortcutKeys={shortcut?.keys} delayMs={500}>
         <button
+          data-sidebar-opener
           type="button"
           className={css.iconButton}
           data-sidebar-toggle
@@ -46,7 +45,7 @@ export function HeaderLeadingControls({
           <IconPanelLeftOutlineRegular size={16} />
         </button>
       </Tooltip>
-      {canStartSession && (
+      {desktop && canStartSession && (
         <>
           <Tooltip label={t('session.new.label')} shortcutKeys={newShortcut?.keys} delayMs={500}>
             <button

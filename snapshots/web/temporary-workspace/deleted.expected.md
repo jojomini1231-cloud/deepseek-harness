@@ -1,8 +1,3 @@
-- text: Workspaces
-- button "Search sessions"
-- textbox "Search session names"
-- button "View options"
-- button "Add workspace"
 - tree "Sessions":
   - treeitem "{{workspace}}" [expanded]
   - treeitem "Untitled 1min"

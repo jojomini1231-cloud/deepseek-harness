@@ -18,6 +18,13 @@
   - button "Split" [disabled]
 - text: {{cwd}}/workspace
 - button "Reload"
-- list:
-  - listitem:
-    - button "t6-refresh.txt"
+- text: Project
+- toolbar "File tree actions":
+  - button "Expand All"
+  - button "Collapse All"
+- complementary "Workspace files":
+  - list:
+    - listitem:
+      - button "t6-refresh.txt"
+- toolbar "View containers":
+  - button "Files"

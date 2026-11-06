@@ -62,9 +62,11 @@
   cursor: pointer;
 }
 
-.refsChip:hover {
-  color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-interactive-bg-hover);
+@media (hover: hover) {
+  .refsChip:hover {
+    color: var(--dsw-alias-label-primary);
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }
 
 .refsChipLabel {
@@ -72,8 +74,8 @@
   text-overflow: ellipsis;
 }
 
-/* The refs popover: portalled to the body and fixed at the anchor's
-   coordinates, so the clipping columns never crop it. */
+/* The refs popover: portalled to the body so the clipping columns never crop
+   it, and anchored below the chip with their right edges aligned. */
 .refsMenu {
   position: fixed;
   z-index: 100;
@@ -82,19 +84,33 @@
   flex-direction: column;
   width: 280px;
   max-width: calc(100vw - 32px);
-  max-height: min(440px, calc(100vh - 24px));
+  max-height: min(440px, calc(100dvh - 12px - max(12px, var(--dsh-frame-overlay-top, 12px))));
   padding: 6px;
   --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
   --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
   box-shadow: var(--dsw-elevation-prominent);
+  position-area: none;
+  top: max(12px, calc(anchor(bottom) + 4px));
+  bottom: 12px;
+  left: 12px;
+  right: max(12px, anchor(right));
+  position-try-fallbacks: --dsh-history-refs-window, --dsh-history-refs-opposite, --dsh-history-refs-wide-opposite, --dsh-history-refs-tall, --dsh-history-refs-viewport;
+  align-self: start;
+  justify-self: end;
+  height: fit-content;
+  min-height: 0;
+  margin: 0;
 }
 
-/* The search box sits on the menu fill rather than the input's own layer. The
-   height and text size come from the primitive's compact form; only the fill
-   is this popover's, and the parent class outranks the wrapper's own styles
-   whichever stylesheet the bundle orders first. */
-.refsMenu .refsSearch {
+/* The search box sits on the menu fill rather than the input's own layer; only
+   the fill is this popover's, and the row class outranks the wrapper's own
+   styles whichever stylesheet the bundle orders first. */
+.refsSearchRow {
   flex: none;
+}
+
+.refsSearchRow .refsSearch {
+  display: flex;
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
@@ -122,9 +138,11 @@
   cursor: pointer;
 }
 
-.refOption:hover {
-  color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-interactive-bg-hover);
+@media (hover: hover) {
+  .refOption:hover {
+    color: var(--dsw-alias-label-primary);
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }
 
 .refOptionActive {
@@ -201,8 +219,10 @@
   cursor: pointer;
 }
 
-.commitRow:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+@media (hover: hover) {
+  .commitRow:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }
 
 .commitRowActive {
@@ -353,8 +373,10 @@
   cursor: pointer;
 }
 
-.dirtyRow:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+@media (hover: hover) {
+  .dirtyRow:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }
 
 .dirtyDot {
@@ -389,9 +411,11 @@
   cursor: pointer;
 }
 
-.loadMore:hover:not(:disabled) {
-  color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-interactive-bg-hover);
+@media (hover: hover) {
+  .loadMore:hover:not(:disabled) {
+    color: var(--dsw-alias-label-primary);
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }
 
 .loadMore:disabled {
@@ -454,9 +478,11 @@
   cursor: pointer;
 }
 
-.pageBack:hover {
-  color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-interactive-bg-hover);
+@media (hover: hover) {
+  .pageBack:hover {
+    color: var(--dsw-alias-label-primary);
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }
 
 .pageSubject {
@@ -518,8 +544,10 @@
   cursor: pointer;
 }
 
-.messageToggle:hover {
-  color: var(--dsw-alias-label-primary);
+@media (hover: hover) {
+  .messageToggle:hover {
+    color: var(--dsw-alias-label-primary);
+  }
 }
 
 .message {
@@ -568,9 +596,11 @@
   flex: none;
 }
 
-.fileSummary:hover {
-  color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-interactive-bg-hover);
+@media (hover: hover) {
+  .fileSummary:hover {
+    color: var(--dsw-alias-label-primary);
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }
 
 .fileSummaryAdded {
@@ -619,8 +649,10 @@
   cursor: pointer;
 }
 
-.fileRow:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+@media (hover: hover) {
+  .fileRow:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }
 
 .fileRowActive {
@@ -716,4 +748,49 @@
   margin-top: 12px;
   border: 0.5px solid var(--dsw-alias-border-l3);
   border-radius: var(--dsw-radius-sm);
+}
+
+@position-try --dsh-history-refs-window {
+  position-area: none;
+  top: max(12px, calc(anchor(bottom) + 4px));
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  margin: 0;
+  align-self: safe start;
+  justify-self: safe start;
+}
+
+@position-try --dsh-history-refs-opposite {
+  top: max(12px, var(--dsh-frame-overlay-top, 12px));
+  bottom: max(12px, calc(anchor(top) + 4px));
+  align-self: end;
+}
+
+@position-try --dsh-history-refs-wide-opposite {
+  top: max(12px, var(--dsh-frame-overlay-top, 12px));
+  bottom: max(12px, calc(anchor(top) + 4px));
+  left: 12px;
+  right: 12px;
+  align-self: end;
+  justify-self: safe start;
+}
+
+@position-try --dsh-history-refs-tall {
+  position-area: none;
+  top: max(12px, var(--dsh-frame-overlay-top, 12px));
+  bottom: 12px;
+  left: 12px;
+  right: max(12px, anchor(right));
+  margin: 0;
+  align-self: safe start;
+  justify-self: end;
+}
+
+@position-try --dsh-history-refs-viewport {
+  position-area: none;
+  inset: max(12px, var(--dsh-frame-overlay-top, 12px)) 12px 12px;
+  margin: 0;
+  align-self: safe start;
+  justify-self: safe start;
 }

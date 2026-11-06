@@ -113,7 +113,7 @@ async function sidebarSnapshot(page: Page) {
       coversViewport: expanded && rect.x === 0 && rect.y === 0
         && Math.round(rect.width) === window.innerWidth && Math.round(rect.height) === window.innerHeight,
       resizeHandleWidth: handle === null ? 0 : Math.round(handle.getBoundingClientRect().width),
-      expandedDirectories: [...panel.querySelectorAll('[data-files-entry="directory"] > button[aria-expanded="true"]')]
+      expandedDirectories: [...panel.querySelectorAll('[data-files-entry="directory"] button[aria-expanded="true"]')]
         .map(button => button.textContent?.trim()),
     }
   })
@@ -192,7 +192,7 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
       await blankColumn.locator('[data-sidebar-right-toggle]').click()
       await blankColumn.locator('[data-dockkit-pane]').first().waitFor({ state: 'hidden' })
       await page.setViewportSize({ width: 767, height: blankViewport.height })
-      await expect.poll(() => columns(page)).toEqual([56, 711, 0])
+      await expect.poll(() => columns(page)).toEqual([0, 767, 0])
       await page.locator('[data-sidebar-right-expand]').click()
       // The fullscreen shell keeps its viewport box while its docked content closes.
       await expect.poll(() => blankColumn.locator('[data-sidebar-right-open]').count()).toBe(1)
@@ -378,7 +378,8 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
     expect(await panel.getAttribute('data-sidebar-right-panel')).toBe('push')
     await column.locator('[data-sidebar-right-guide-entry="files"]').click()
     await column.locator('[data-files-state="tree"]').waitFor({ timeout: 15_000 })
-    const workspaceDirectory = column.locator('[data-files-entry="directory"] > button').filter({ hasText: /^workspace$/ })
+    const workspaceDirectory = column.locator('[data-files-entry="directory"] button')
+      .and(column.getByRole('button', { name: 'workspace', exact: true }))
     await workspaceDirectory.waitFor({ timeout: 15_000 })
     await workspaceDirectory.click()
     await expect.poll(() => workspaceDirectory.getAttribute('aria-expanded')).toBe('true')
@@ -434,7 +435,7 @@ describe.skipIf(MODE === 'record')('web e2e: details panel follows the current S
       await expect.poll(() => columns(page)).toEqual([420, viewport.width - 420 - normalWidth, normalWidth])
       await page.setViewportSize({ width: 767, height: viewport.height })
       await expect.poll(() => panel.boundingBox()).toEqual({ x: 0, y: 0, width: 767, height: viewport.height })
-      await expect.poll(() => columns(page)).toEqual([56, 711, 0])
+      await expect.poll(() => columns(page)).toEqual([0, 767, 0])
       expect(await sidebarSnapshot(page)).toMatchObject({ mode: 'fullscreen', resizeHandleWidth: 0, coversViewport: true })
       await checkpoint('A automatic fullscreen at 767px')
       await column.locator('[data-sidebar-right-mode="push"]').click()

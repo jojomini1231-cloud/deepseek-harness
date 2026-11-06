@@ -15,20 +15,20 @@
   en: 1fdf707322fb6996
   zh: 0204f7e9d4aa3cce
 /session-controller/use-this-package:
-  en: f2239e8d0112cf58
-  zh: 0b4325530a34a1f8
+  en: 21582c123e103bc1
+  zh: a7bc30954307f43f
 /session-controller/use-this-package/temporary-sessions:
-  en: 3d852de61c18f8c7
-  zh: 8a30df5b303635fc
+  en: 5e73384facea78e3
+  zh: 5e21a986310bbeaa
 /session-controller/client-references:
-  en: 41bdda1ac32df558
-  zh: aa5d0e325924066b
+  en: e8979a803ec3e194
+  zh: c567efcd971728ba
 /session-controller/session-media-references:
   en: 954923654eebe2dc
   zh: 6bd9a7d2ea965aed
 /session-controller/configuration:
-  en: c92590fbaf75e45e
-  zh: fcac67017bb0e3ab
+  en: cfc026a1733e4505
+  zh: 87ee883a65e5e0a5
 /session-controller/model-experience:
   en: 215e7ba838619b7b
   zh: a311da3843709f90
@@ -45,8 +45,8 @@
   en: eeb008c484d00a0d
   zh: e3fc95a7f5247f6e
 /session-controller/known-limitations-and-deferred-work:
-  en: 5db0f9f69a8be926
-  zh: 6ba1cc4a3850fcbc
+  en: 23bc3db43e84daa6
+  zh: 0242338ac7bd24fa
 /session-controller/known-limitations-and-deferred-work/dev-note:
   en: e67f633dc6fe7773
   zh: e88aeb617ffb74ea

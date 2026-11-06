@@ -37,8 +37,10 @@
   cursor: pointer;
 }
 
-.browse:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+@media (hover: hover) {
+  .browse:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
 }
 
 .browse:disabled {

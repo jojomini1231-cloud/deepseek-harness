@@ -20,6 +20,7 @@ import { OfficeBody } from '../src/client/office/OfficeBody.tsx'
 import { DocumentPreview } from '../src/client/DocumentPreview.tsx'
 import { TextPreview } from '../src/client/TextPreview.tsx'
 import { TextTitle } from '../src/client/TextTitle.tsx'
+import { WorkbenchPreview } from '../src/client/WorkbenchPreview.tsx'
 import { TextBody } from '../src/client/text/TextBody.tsx'
 import { PLAIN_BODY_ID } from '../src/client/text/index.ts'
 import { MarkdownBody } from '../src/client/markdown/MarkdownBody.tsx'
@@ -44,11 +45,13 @@ interface Recorded {
   store?: unknown
   inject?: unknown
   component: unknown
+  children?: Record<string, unknown>
 }
 
 async function boot() {
   const ctx = new Context()
   ctx.provide('fileDrag', { actions: { prepare: async () => ({ start: () => true, release: () => {} }), reportFailure: () => {} }, read: () => undefined } satisfies import('@deepseek-ai/cordis').Context['fileDrag'])
+  ctx.provide('contextMenus', { open: vi.fn() } as never)
   ctx.provide('resources', createResources())
   ctx.provide('configForms', { developerTools: { enabled: createSnapshotStore(true) } } as never)
   const tabs = new SidebarRightTabRegistry(ctx)
@@ -89,7 +92,7 @@ async function boot() {
 }
 
 describe('ui-sidebar-documentpreview apply', () => {
-  it('registers the type, its dictionaries, and the body and title seats under the type\'s id, the body with a store and a face', async () => {
+  it('registers the type, its dictionaries, the body and title seats under the type\'s id, and the Files workbench\'s preview', async () => {
     const { tabs, registered, factories, dictionaries } = await boot()
     expect(factories.map(entry => [entry.name, entry.locale, entry.component])).toEqual([
       ['sidebar.document.preview', 'sidebarDocumentPreview', DocumentPreview],
@@ -102,6 +105,7 @@ describe('ui-sidebar-documentpreview apply', () => {
     expect(registered.map(entry => [entry.name, entry.key, entry.locale, entry.component])).toEqual([
       ['sidebar.right.pane.tab', TEXTPREVIEW_ID, undefined, TextPreview],
       ['sidebar.right.pane.tab.title', TEXTPREVIEW_ID, undefined, TextTitle],
+      ['sidebar.right.tab.files.preview', undefined, undefined, WorkbenchPreview],
       ['sidebar.right.tab.document', PLAIN_BODY_ID, undefined, TextBody],
       ['sidebar.right.tab.document', MARKDOWN_BODY_ID, 'documentMarkdown', MarkdownBody],
       ['sidebar.right.tab.document', HTML_BODY_ID, 'documentHtml', HtmlBody],
@@ -113,7 +117,11 @@ describe('ui-sidebar-documentpreview apply', () => {
       ['sidebar.right.tab.document', '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/excel', 'sidebarExcel', LazyExcelBody],
       ['sidebar.right.tab.document', '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/code', 'sidebarCodePreview', CodeBody],
     ])
-    // The reusable preview, not the thin tab body, owns the store and the face.
+    // The reusable preview, not the thin tab body, owns the renderer slots, the store, and the face.
+    expect(Object.keys(factories[0]!.children!)).toEqual([
+      'sidebar.right.tab.document', 'sidebar.right.tab.document.actions',
+      'sidebar.right.tab.document.unpreviewable', 'sidebar.right.tab.document.action',
+    ])
     expect(factories[0]?.store).toBeDefined()
     expect(typeof factories[0]?.inject).toBe('function')
   })

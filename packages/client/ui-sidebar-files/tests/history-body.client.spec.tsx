@@ -29,8 +29,8 @@ const REPOSITORY = {
 }
 
 /** Mount the body with the tree listed and a history answer scripted. */
-async function seeded(history: Parameters<typeof mountBody>[4]) {
-  const mounted = mountBody(ROOT, undefined, { status: REPOSITORY }, undefined, history)
+async function seeded(history: Parameters<typeof mountBody>[3]) {
+  const mounted = mountBody(ROOT, undefined, { status: REPOSITORY }, history)
   await act(() => mounted.script.watches.ready(ROOT))
   await act(() => mounted.script.settle({ ok: true, value: { entries: [], truncated: false } }))
   return mounted
@@ -329,7 +329,7 @@ describe('history through the body', () => {
   })
 
   it('keeps the history container reachable when git is unavailable', async () => {
-    const mounted = mountBody(ROOT, undefined, { status: { kind: 'unavailable', entries: [], total: 0 } }, undefined, {
+    const mounted = mountBody(ROOT, undefined, { status: { kind: 'unavailable', entries: [], total: 0 } }, {
       refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF,
     })
     await act(() => mounted.script.watches.ready(ROOT))
@@ -403,7 +403,7 @@ describe('history through the body', () => {
       cleanup()
       // A collapsed Sidebar or a hidden tab keeps its body mounted but reads
       // nothing: the reader is not looking at the list.
-      const hidden = mountBody(ROOT, undefined, { status: REPOSITORY }, { expanded: false }, {
+      const hidden = mountBody(ROOT, { sidebarExpanded: false }, { status: REPOSITORY }, {
         refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF,
       })
       await act(() => hidden.script.watches.ready(ROOT))
@@ -414,7 +414,7 @@ describe('history through the body', () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(9_000) })
       expect(hidden.historyRefs.mock.calls.length).toBe(idle)
       cleanup()
-      const unshown = mountBody(ROOT, undefined, { status: REPOSITORY }, { expanded: true, visible: false }, {
+      const unshown = mountBody(ROOT, { visible: false }, { status: REPOSITORY }, {
         refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF,
       })
       await act(() => unshown.script.watches.ready(ROOT))
@@ -490,7 +490,7 @@ describe('history through the body', () => {
     vi.useFakeTimers()
     try {
       // The first page read failed: the list states the failure it can retry.
-      const failed = mountBody(ROOT, undefined, { status: REPOSITORY }, undefined, { refs: REFS })
+      const failed = mountBody(ROOT, undefined, { status: REPOSITORY }, { refs: REFS })
       await act(() => failed.script.watches.ready(ROOT))
       await act(() => failed.script.settle({ ok: true, value: { entries: [], truncated: false } }))
       fireEvent.click(failed.view.container.querySelector('[data-files-rail-item="history"]')!)
@@ -588,7 +588,7 @@ describe('history through the body', () => {
   it('polls only the working-tree status for the history view, never the git comparison', async () => {
     vi.useFakeTimers()
     try {
-      const mounted = mountBody(ROOT, undefined, { status: REPOSITORY, diff: DIFF }, undefined, {
+      const mounted = mountBody(ROOT, undefined, { status: REPOSITORY, diff: DIFF }, {
         refs: REFS, history: PAGE, commit: DETAIL, commitDiff: DIFF,
       })
       await act(() => mounted.script.watches.ready(ROOT))

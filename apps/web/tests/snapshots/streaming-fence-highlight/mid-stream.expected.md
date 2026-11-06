@@ -12,7 +12,10 @@
 - button "Retract to this message" [disabled]
 - text: Unavailable while the session is running
 - button "Edit this message" [disabled]
-- text: Unavailable while the session is running ts
+- text: Unavailable while the session is running
+- button "Context injection runtime-context"
+- button "Context injection time-context"
+- text: ts
 - button "Wrap lines" [pressed]
 - button "Copy"
 - code: "const first: number = 1 const second = \"two\" let tail"

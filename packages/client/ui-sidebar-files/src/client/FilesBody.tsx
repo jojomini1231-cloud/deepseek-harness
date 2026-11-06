@@ -1,36 +1,40 @@
 /**
  * The files workbench: the workspace root's path row, then the open files'
- * chips and the file the reader is looking at beside the directory tree.
+ * chips and the file the reader is looking at beside the pane's directory
+ * tree, with the git and history views behind the activity rail.
  *
- * Everything the workbench keeps lives in its store, keyed by tab; everything it
- * asks for goes through its injected face. The body decides only what to draw and
- * what a gesture means: a directory row toggles, a file row opens a chip and
- * shows that file, a secondary press on either row opens that row's menu, a chip
- * shows or closes its file, and the divider settles a ratio. The file itself is
- * drawn by the reusable `sidebar.document.preview` Factory, so this package owns
- * no document format.
+ * The tree is the pane's navigator (`sidebar.files.navigator`, drawn for the
+ * page), so every file tab of the pane shows the same tree; everything else
+ * the workbench keeps lives in its store's `byTab` record, keyed by tab, and
+ * everything it asks for goes through the injected face. The body decides
+ * only what to draw and what a gesture means: a file row opens a chip and
+ * shows that file, a chip shows or closes its file, and a divider settles a
+ * ratio. The file itself is drawn by whichever plugin fills the
+ * `sidebar.right.tab.files.preview` seat, so this package owns no document
+ * format.
  *
- * The body owns one lifetime per open chip: the store's bucket — chips, ratio,
- * scroll — belongs to the tab, while each chip's preview state belongs to a
- * signal the body composes from the tab's and the chip's own controller, so
+ * The body owns one lifetime per open chip: the workbench record (chips,
+ * ratio, views) belongs to the tab, while each chip's preview state belongs to
+ * a signal the face composes from the tab's and the chip's own controller, so
  * closing a chip releases its preview without touching its siblings.
  */
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import {
   IconChevronLeftOutlineRegular, IconChevronsInwardOutlineRegular, IconChevronsUpDownOutlineRegular,
   IconPauseOutlineRegular, IconPlayOutlineRegular, IconRefreshOutlineRegular, PathLabel, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+import type {} from '@deepseek-ai/dsh-client-ui-context-menu/client'
 import type {
-  PropsLocale, PropsRenderFactories, PropsRenderSlots, PropsRuntime, PropsStore,
+  InjectFace, PropsLocale, PropsRenderFactories, PropsRenderSlots, PropsRuntime, PropsStore,
 } from '@deepseek-ai/dsh-client-ui-slots'
-import { fileAddressFor, pathPartsOf } from '@deepseek-ai/dsh-util-workspace-path'
-import type {} from '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client'
+import { pathPartsOf } from '@deepseek-ai/dsh-util-workspace-path'
 import type { WorkspaceGitEntry } from '@deepseek-ai/dsh-workspace-changes/types'
 import { HISTORY_PAGE_SIZE, sameGitRefs } from '../git.ts'
 import { useNarrowLayout } from './layout.ts'
 import { useDrillDownFocus } from './drill-down-focus.ts'
 import type { FilesInjected } from './face.ts'
+import type {} from './FileNavigator.tsx'
 import { FileTabs } from './FileTabs.tsx'
 import type {} from './locales.ts'
 import { SplitView } from './SplitView.tsx'
@@ -38,30 +42,17 @@ import { FILES_RAIL_ITEM, GIT_RAIL_ITEM, HISTORY_RAIL_ITEM, WorkbenchRail } from
 import { GitPanel } from './GitPanel.tsx'
 import { HistoryPanel } from './HistoryPanel.tsx'
 import { pickHistoryFile, renameOrigin, resolveHistoryRef } from './history.ts'
-import type { createFilesStore, HistoryTabState, OpenFile } from './store.ts'
-import { TreeList } from './tree.tsx'
-import type { TreeContext } from './tree.tsx'
+import type { createFilesStore, HistoryTabState } from './store.ts'
 import css from './FilesBody.module.css'
 
-/** The body's composed props: the tab it draws, its store, its face, its copy, and the preview Factory. */
+/** The body's composed props: the tab it draws, its seats, its store, the face, and its copy. */
 export type FilesBodyProps =
   & PropsRuntime<'sidebar.right.pane.tab'>
-  & PropsRenderSlots<'sidebar.right.tab.files.actions' | 'sidebar.right.tab.files.chip.actions'>
+  & PropsRenderSlots<'sidebar.right.tab.files.actions' | 'sidebar.right.tab.files.chip.actions' | 'sidebar.right.tab.files.preview'>
   & PropsRenderFactories
   & PropsStore<ReturnType<typeof createFilesStore>>
-  & FilesInjected
+  & InjectFace<FilesInjected>
   & PropsLocale<'sidebarFiles'>
-
-/**
- * The chip and address one tree row opens.
- * @param sessionId - the session whose workspace holds the file.
- * @param root - the tree's absolute workspace root.
- * @param path - the file's absolute path.
- * @returns the open file's entry.
- */
-export function openFileFor(sessionId: Parameters<typeof fileAddressFor>[0], root: string, path: string): OpenFile {
-  return { path, address: fileAddressFor(sessionId, root, path), name: pathPartsOf(path).name }
-}
 
 /** Milliseconds between the git view's quiet working-tree reads. */
 const GIT_SILENT_REFRESH_MS = 3_000
@@ -71,20 +62,25 @@ const HISTORY_SILENT_REFRESH_MS = 3_000
 
 /** The files workbench: the workspace root and whatever the reader has open under it. */
 export function FilesBody({
-  useTabInfo, sessionId, useSessions, useStore, actions, renderSlot, renderFactorySlot,
-  start, refresh, setAutoRefresh, toggle, collapseAll, chipSignal, chipsClosed,
+  useTabInfo, sessionId, useSessions, useStore, actions, renderSlot, renderFactorySlot, useContextMenu,
+  start, refresh, setAutoRefresh, expandAll, collapseAll, chipSignal, chipsClosed,
   gitStatus, gitDiff, historyRefs, history: readHistory, commit, commitDiff, t,
 }: FilesBodyProps): ReactNode {
-  const { tab, sidebar } = useTabInfo()
-  useEffect(() => tab.actions.bindCommands({ refresh: () => { refresh(tab.id) } }), [tab.actions, tab.id, refresh])
+  const { tab, panel: pane, sidebar } = useTabInfo()
+  const { getTriggerProps } = useContextMenu()
+  const paneId = pane.id
+  useEffect(() => tab.actions.bindCommands({ refresh: () => { refresh(paneId) } }), [tab.actions, paneId, refresh])
   const { signal } = tab
   const cwd = useSessions(sessions => sessions.byId[sessionId]?.cwd)
   const state = useStore(store => store.byTab[tab.id])
+  // The pane's tree, as its navigator draws it: listed at the Session's working directory.
+  const autoRefresh = useStore((store) => {
+    const tree = store.byPane[paneId]?.tree
+    return tree?.root === cwd ? tree?.autoRefresh : undefined
+  })
   // The workbench's own measured width decides every container's one-column
   // fallback, not a window media query: the Sidebar is resizable.
   const { setRoot: setContainerHost, narrow } = useNarrowLayout()
-  const bodyRef = useRef<HTMLDivElement>(null)
-  const scrollTopRef = useRef(0)
   // The reads each gesture supersedes; a newer probe or comparison aborts the
   // one still in flight, and the face drops whichever settles out of order.
   const gitProbe = useRef<AbortController | undefined>(undefined)
@@ -143,30 +139,9 @@ export function FilesBody({
     return row?.querySelector<HTMLElement>('button')
       ?? panel.querySelector<HTMLElement>('[data-files-tree-action="expand"]')
   })
-  // Come back where the reader was: loaded levels outlive the body in the
-  // store, so a remounted tree lays out at its full height before this runs
-  // and the stored offset re-lands exactly. Switching to another container
-  // unmounts the tree without writing the store, so the live offset kept in
-  // the ref wins over the stored one. Crossing the narrow threshold and opening
-  // or leaving the preview drill-down both remount the tree's scroller, so the
-  // layout and the drill-down are dependencies for the same reason the
-  // container is.
   const seeded = state !== undefined
-  useLayoutEffect(() => {
-    const body = bodyRef.current
-    if (seeded && body !== null) {
-      body.scrollTop = scrollTopRef.current || state.scrollTop
-      scrollTopRef.current = body.scrollTop
-    }
-  }, [seeded, filesContainer, narrow, state?.pageOpen, state?.scrollTop])
-  // Scrolling only moves the ref; the store hears about it once, on unmount,
-  // so a scroll neither re-renders the tree nor writes after the owner's
-  // abort has forgotten the bucket.
-  useEffect(() => () => {
-    if (seeded && !signal.aborted) actions.scrolled(tab.id, scrollTopRef.current)
-  }, [seeded, signal, tab.id, actions])
   useEffect(() => {
-    // A bucket gone because the record aborted must not be re-seeded by a
+    // A workbench gone because the record aborted must not be re-seeded by a
     // component that has not unmounted yet.
     if (state !== undefined || cwd === undefined || signal.aborted) return
     start(tab.id, cwd, signal)
@@ -554,9 +529,8 @@ export function FilesBody({
     requestCommitDiff(autoFileRoot, autoFileHash, autoFilePath, autoFileFrom, autoFileComplete)
   }, [autoFileRoot, autoFileHash, autoFilePath, autoFileFrom, autoFileComplete])
   /**
-   * Rows other plugins contribute to a file's menu — a chip's or a tree row's,
-   * which share the seat — rendered with the menu so they join its keyboard
-   * walk; picking one dismisses it.
+   * Rows other plugins contribute to an open file's chip menu, rendered with
+   * the menu so they join its keyboard walk; picking one dismisses it.
    * @param path - absolute path of the file whose menu is open.
    * @param onPicked - the menu's dismiss callback.
    * @returns the contributed rows, or nothing when none registered.
@@ -566,19 +540,17 @@ export function FilesBody({
       renderSlot('sidebar.right.tab.files.chip.actions', { path, onPicked }),
     [renderSlot],
   )
-  const tree = useMemo((): TreeContext | undefined => state === undefined ? undefined : {
-    state,
-    onToggle: (parent, path) => { toggle(tab.id, parent, path, state.expanded, signal) },
-    onOpen: (path) => {
-      actions.fileOpened(tab.id, openFileFor(sessionId, state.root, path))
-      // A narrow pick is the preview drill-down; the wide layout draws the
-      // preview beside the tree and records nothing here.
-      if (!narrow) return
-      actions.filesPageOpened(tab.id, true)
-    },
-    renderMenuRow,
-    t,
-  }, [state, tab.id, sessionId, toggle, actions, signal, t, narrow, renderMenuRow])
+  // A file row's click, and its menu's open arm, open a chip and show that file.
+  const onOpen = useCallback((address: string, path: string): void => {
+    // A menu arm can run after the tab closed and its workbench went.
+    if (signal.aborted) return
+    actions.fileOpened(tab.id, { path, address, name: pathPartsOf(path).name })
+    // A narrow pick is the preview drill-down; the wide layout draws the
+    // preview beside the tree and records nothing here.
+    if (!narrow) return
+    actions.filesPageOpened(tab.id, true)
+  }, [signal, actions, tab.id, narrow])
+  const activeAddress = state === undefined ? undefined : state.open.find(file => file.path === state.active)?.address
   // The two columns are memoized so a divider drag re-renders neither the tree
   // nor the document behind it. The chip lifetimes are minted at memo time:
   // `chipSignal` hands back the same composed signal for a chip already open,
@@ -619,32 +591,22 @@ export function FilesBody({
         <div className={css.preview} data-files-preview>
           {active === undefined
             ? <p className={css.previewEmpty} data-files-preview-state="empty">{t('preview.empty')}</p>
-            : renderFactorySlot('sidebar.document.preview', {
+            : renderSlot('sidebar.right.tab.files.preview', {
               address: active.address,
               // The tab id prefix keeps two workbench tabs over the same file
               // in separate preview buckets.
               viewKey: `${tab.id}:${active.path}`,
               navigation: { address: active.address, params: undefined, revision: 1 },
               signal: chipSignal(tab.id, active.path, signal),
+              paneId,
             })}
         </div>
       </>
     )
-  }, [state?.open, state?.active, actions, tab.id, signal,
-    chipSignal, chipsClosed, t, renderFactorySlot, renderMenuRow])
+  }, [state?.open, state?.active, actions, tab.id, paneId, signal,
+    chipSignal, chipsClosed, t, renderSlot, renderMenuRow])
   const treeColumn = useMemo((): ReactNode => {
-    if (tree === undefined || state === undefined) return null
-    /** Open every directory the tree has listed; deeper levels follow on the next press. */
-    const expandAll = (): void => {
-      for (const [parent, level] of Object.entries(state.levels)) {
-        if (level.kind !== 'ready') continue
-        for (const directory of level.level.entries.filter(entry => entry.type === 'directory')) {
-          const path = `${parent.replace(/[/\\]+$/, '')}/${directory.name}`
-          if (state.expanded.includes(path)) continue
-          toggle(tab.id, parent, path, state.expanded, signal)
-        }
-      }
-    }
+    if (!seeded) return null
     const treeHeader = (
       <div className={css.treeHeader} data-files-tree-header>
         <span className={css.treeTitle} data-files-tree-title>{t('tree.title')}</span>
@@ -655,7 +617,7 @@ export function FilesBody({
               className={css.tool}
               aria-label={t('tree.expand')}
               data-files-tree-action="expand"
-              onClick={expandAll}
+              onClick={() => { expandAll(paneId) }}
             >
               <IconChevronsUpDownOutlineRegular />
             </button>
@@ -666,7 +628,7 @@ export function FilesBody({
               className={css.tool}
               aria-label={t('tree.collapse')}
               data-files-tree-action="collapse"
-              onClick={() => { collapseAll(tab.id, signal) }}
+              onClick={() => { collapseAll(paneId) }}
             >
               <IconChevronsInwardOutlineRegular />
             </button>
@@ -674,20 +636,16 @@ export function FilesBody({
         </div>
       </div>
     )
+    // The pane's navigator, drawn for the page: always shown, marking the file the content column shows.
     return (
       <>
         {treeHeader}
-        <div
-          ref={bodyRef}
-          className={css.body}
-          data-files-body
-          onScroll={(event) => { scrollTopRef.current = event.currentTarget.scrollTop }}
-        >
-          <TreeList {...tree} />
+        <div className={css.content} data-files-content>
+          {renderFactorySlot('sidebar.files.navigator', { useTabInfo, page: true, onOpen, current: activeAddress })}
         </div>
       </>
     )
-  }, [tree, state, collapseAll, toggle, tab.id, signal, t])
+  }, [seeded, expandAll, collapseAll, paneId, t, renderFactorySlot, useTabInfo, onOpen, activeAddress])
 
   if (cwd === undefined) {
     return (
@@ -698,8 +656,9 @@ export function FilesBody({
   }
   if (state === undefined) return null
   const reload = (): void => {
-    refresh(tab.id)
+    refresh(paneId)
   }
+  const automatic = autoRefresh ?? true
   // Switching the comparison's scope replaces the drawn comparison: the shown
   // path (or commit file) is read again in the other scope, and the read in
   // flight for the old scope is aborted so its answer never lands. The settled
@@ -722,7 +681,7 @@ export function FilesBody({
   // A narrow pick opens the preview drill-down; it only exists while a file is
   // shown, so closing the last chip returns to the tree.
   return (
-    <div ref={panelRef} className={css.root} data-files-state="tree" data-files-root={state.root}>
+    <div ref={panelRef} className={css.root} data-files-page>
       <div className={css.header}>
         {previewOpen && (
           <Tooltip label={t('files.back.aria')} side="bottom" delayMs={300}>
@@ -738,13 +697,14 @@ export function FilesBody({
             </button>
           </Tooltip>
         )}
-        <PathLabel path={state.root} className={css.path} data-files-path />
+        <PathLabel path={state.root} className={css.path} data-files-path
+          {...getTriggerProps({ kind: 'directory', value: { sessionId, path: state.root } })} />
         <span hidden>
           <button type="button" className={css.tool} aria-label={t('autoRefresh')}
-            aria-pressed={state.autoRefresh} data-files-auto-refresh
-            title={t(state.autoRefresh ? 'autoRefresh.disable' : 'autoRefresh.enable')}
-            onClick={() => { setAutoRefresh(tab.id, !state.autoRefresh) }}>
-            {state.autoRefresh ? <IconPauseOutlineRegular /> : <IconPlayOutlineRegular />}
+            aria-pressed={automatic} disabled={autoRefresh === undefined} data-files-auto-refresh
+            title={t(automatic ? 'autoRefresh.disable' : 'autoRefresh.enable')}
+            onClick={() => { setAutoRefresh(paneId, !automatic) }}>
+            {automatic ? <IconPauseOutlineRegular /> : <IconPlayOutlineRegular />}
           </button>
         </span>
         <Tooltip label={t('reload')} shortcutKeys={tab.refreshShortcut?.keys} side="bottom" delayMs={500}>

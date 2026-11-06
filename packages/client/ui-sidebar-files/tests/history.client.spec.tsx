@@ -10,10 +10,10 @@ import {
 import { isGitCommitDetail, isGitHistory, isGitRefs, sameGitRefs } from '../src/git.ts'
 import { zh } from '../src/client/locales.ts'
 import { createFilesStore } from '../src/client/store.ts'
+import type { FilesStoreInstance } from '../src/client/store.ts'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import { SESSION } from './mount.client.tsx'
-import { scriptedList } from './scripted-list.client.ts'
 import {
   COMMITS, DETAIL, DIFF, hash, HISTORY_ROOT as ROOT, historyState, PAGE, REFS,
 } from './history-fixtures.client.ts'
@@ -159,7 +159,7 @@ describe('history helpers', () => {
 describe('history slice', () => {
   it('seeds the history view with empty defaults and the history container selectable', () => {
     const store = createFilesStore().create()
-    store.actions.start(TAB, ROOT)
+    store.actions.workbenchStarted(TAB, ROOT)
     expect(store.getSnapshot().byTab[TAB]?.history).toEqual(historyState())
     store.actions.containerSelected(TAB, 'history')
     expect(store.getSnapshot().byTab[TAB]?.container).toBe('history')
@@ -168,7 +168,7 @@ describe('history slice', () => {
   it('records refs, their loading state, and a failure the filter can retry', () => {
     const store = createFilesStore().create()
     const { actions } = store
-    actions.start(TAB, ROOT)
+    actions.workbenchStarted(TAB, ROOT)
     actions.historyRefsLoading(TAB)
     expect(store.getSnapshot().byTab[TAB]?.history.refsLoading).toBe(true)
     actions.historyRefsFailed(TAB)
@@ -187,7 +187,7 @@ describe('history slice', () => {
   it('walks a ref from the top, dropping the list and the shown commit page', () => {
     const store = createFilesStore().create()
     const { actions } = store
-    actions.start(TAB, ROOT)
+    actions.workbenchStarted(TAB, ROOT)
     actions.historyRefsLoaded(TAB, REFS, undefined)
     actions.historyLoading(TAB)
     actions.historyLoaded(TAB, undefined, 0, 0, PAGE)
@@ -214,7 +214,7 @@ describe('history slice', () => {
   it('restarts the list when a refs answer walks another ref, and keeps it when the ref holds', () => {
     const store = createFilesStore().create()
     const { actions } = store
-    actions.start(TAB, ROOT)
+    actions.workbenchStarted(TAB, ROOT)
     actions.historyRefsLoaded(TAB, REFS, 'refs/heads/dev')
     actions.historyLoading(TAB)
     actions.historyLoaded(TAB, 'refs/heads/dev', 0, 0, PAGE)
@@ -236,7 +236,7 @@ describe('history slice', () => {
   it('applies a quiet first-page reread without dropping the loaded pages or the shown commit', () => {
     const store = createFilesStore().create()
     const { actions } = store
-    actions.start(TAB, ROOT)
+    actions.workbenchStarted(TAB, ROOT)
     actions.historyRefsLoaded(TAB, REFS, 'refs/heads/dev')
     actions.historyLoading(TAB)
     actions.historyLoaded(TAB, 'refs/heads/dev', 0, 0, PAGE)
@@ -275,7 +275,7 @@ describe('history slice', () => {
   it('records an unchanged refs answer without writing the store', () => {
     const store = createFilesStore().create()
     const { actions } = store
-    actions.start(TAB, ROOT)
+    actions.workbenchStarted(TAB, ROOT)
     actions.historyRefsLoaded(TAB, REFS, 'refs/heads/dev')
     const before = store.getSnapshot()
     // The quiet reread repeats the drawn refs and walk: no state changes, so no
@@ -291,7 +291,7 @@ describe('history slice', () => {
   it('replaces the first page and appends only the page that continues the list', () => {
     const store = createFilesStore().create()
     const { actions } = store
-    actions.start(TAB, ROOT)
+    actions.workbenchStarted(TAB, ROOT)
     actions.historyRefsLoaded(TAB, REFS, undefined)
     actions.historyLoading(TAB)
     // An answer for another ref never lands in this list.
@@ -335,7 +335,7 @@ describe('history slice', () => {
   it('drops a load-more whose list was replaced and walked back to', () => {
     const store = createFilesStore().create()
     const { actions } = store
-    actions.start(TAB, ROOT)
+    actions.workbenchStarted(TAB, ROOT)
     actions.historyRefsLoaded(TAB, REFS, undefined)
     actions.historyLoaded(TAB, undefined, 0, 0, PAGE)
     // A load-more for skip 3 starts, then the reader walks another ref and
@@ -359,7 +359,7 @@ describe('history slice', () => {
   it('shows one commit page, keeping a settled page on a repeated pick', () => {
     const store = createFilesStore().create()
     const { actions } = store
-    actions.start(TAB, ROOT)
+    actions.workbenchStarted(TAB, ROOT)
     actions.historyCommitSelected(TAB, hash('a'))
     expect(store.getSnapshot().byTab[TAB]?.history).toMatchObject({ selected: hash('a'), detail: 'loading', diff: undefined })
     actions.historyDetailLoaded(TAB, hash('a'), DETAIL)
@@ -383,7 +383,7 @@ describe('history slice', () => {
   it('keeps a commit page only for the shown commit and a comparison for its shown file', () => {
     const store = createFilesStore().create()
     const { actions } = store
-    actions.start(TAB, ROOT)
+    actions.workbenchStarted(TAB, ROOT)
     actions.historyCommitSelected(TAB, hash('a'))
     actions.historyDetailLoading(TAB, hash('b'))
     expect(store.getSnapshot().byTab[TAB]?.history.detail).toBe('loading')
@@ -427,7 +427,7 @@ describe('history slice', () => {
   it('records the file fold, layout choice, ratio, offsets, and narrow drill-down', () => {
     const store = createFilesStore().create()
     const { actions } = store
-    actions.start(TAB, ROOT)
+    actions.workbenchStarted(TAB, ROOT)
     actions.historyFilesToggled(TAB)
     expect(store.getSnapshot().byTab[TAB]?.history.filesOpen).toBe(false)
     actions.historyDiffModeSelected(TAB, 'split')
@@ -457,8 +457,8 @@ describe('history slice', () => {
   it('forgets the history slice with its tab and returns to files outside a repository', () => {
     const store = createFilesStore().create()
     const { actions } = store
-    actions.start(TAB, ROOT)
-    actions.start('tab-2' as TabId, ROOT)
+    actions.workbenchStarted(TAB, ROOT)
+    actions.workbenchStarted('tab-2' as TabId, ROOT)
     actions.containerSelected(TAB, 'history')
     actions.historyRefsLoaded(TAB, REFS, undefined)
     // A failed or unavailable read keeps the history container retryable; a
@@ -467,7 +467,7 @@ describe('history slice', () => {
     expect(store.getSnapshot().byTab[TAB]?.container).toBe('history')
     actions.gitStatusLoaded(TAB, { kind: 'not-a-repository', entries: [], total: 0 })
     expect(store.getSnapshot().byTab[TAB]?.container).toBe('files')
-    actions.forget(TAB)
+    actions.workbenchForgotten(TAB)
     expect(Object.keys(store.getSnapshot().byTab)).toEqual(['tab-2'])
   })
 })
@@ -564,11 +564,22 @@ describe('history route validators', () => {
   })
 })
 
+/**
+ * A face over one store instance; the tree's listing, watching, and placement are stand-ins.
+ * @param instance - the store instance the face reads and writes.
+ * @returns the bound face.
+ */
+function bareFace(instance: FilesStoreInstance) {
+  const navigation = { getSnapshot: () => ({ address: '', params: undefined, revision: 0 }), subscribe: () => () => {} }
+  const canOpen = { getSnapshot: () => () => true, subscribe: () => () => {} }
+  return filesFace(vi.fn() as never, vi.fn() as never, canOpen, () => navigation, new WeakMap())(SESSION, instance, () => () => {})
+}
+
 describe('face history reads', () => {
   /** A face over one store instance, with the listing and watching dependencies stubbed. */
   const faceOf = () => {
     const instance = createFilesStore().create()
-    return { instance, face: filesFace(vi.fn() as never, vi.fn() as never)(SESSION, instance.actions) }
+    return { instance, face: bareFace(instance) }
   }
 
   it('reads each history route and returns the validated answer with its generation', async () => {
@@ -637,35 +648,29 @@ describe('face history reads', () => {
   })
 
   it('keeps a settlement from the record a reused tab id replaced', async () => {
-    const instance = createFilesStore().create()
-    const script = scriptedList()
-    const face = filesFace(script.list, script.watch)(SESSION, instance.actions)
+    const face = bareFace(createFilesStore().create())
     const pending: Array<(response: Response) => void> = []
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { pending.push(resolve) })))
     const signal = new AbortController().signal
     const first = new AbortController()
     face.start(TAB, ROOT, first.signal)
-    const stream = await script.watches.ready(ROOT)
     const before = face.historyRefs(TAB, ROOT, signal)
     // The tab's record ends and a new one takes the same id: the settlement
     // still held by the record that ended must not match the new record's
     // first read of the same kind.
     first.abort()
-    await stream.released.promise
     const second = new AbortController()
     face.start(TAB, ROOT, second.signal)
-    const reopened = await script.watches.ready(ROOT, 1)
     const after = face.historyRefs(TAB, ROOT, signal)
     pending[1]!(Response.json(REFS))
     await expect(after).resolves.toEqual({ value: REFS, current: true })
     pending[0]!(Response.json(REFS))
     await expect(before).resolves.toEqual({ value: REFS, current: false })
     second.abort()
-    await reopened.released.promise
-    await script.dispose()
   })
 
-  it('marks an answer a newer read of the same kind superseded', async () => {    const { face } = faceOf()
+  it('marks an answer a newer read of the same kind superseded', async () => {
+    const { face } = faceOf()
     const pending: Array<(response: Response) => void> = []
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { pending.push(resolve) })))
     const signal = new AbortController().signal

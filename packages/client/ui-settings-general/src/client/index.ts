@@ -35,6 +35,8 @@ import { createSettingsShellStore } from './shell-store.ts'
 import { SettingsRoot } from './SettingsRoot.tsx'
 import { DesktopUpdateBadge } from './DesktopUpdateIndicator.tsx'
 import type { DesktopUpdateBridge, DesktopWebAccessBridge } from '../types.ts'
+import { DesktopChannelSource } from './desktop-channel-source.ts'
+import { DesktopChannelRow, DesktopChannelToast } from './DesktopChannelRow.tsx'
 import { DesktopUpdateSource } from './desktop-update-source.ts'
 import { DesktopWebAccessSource } from './web-access-source.ts'
 import { WebAccessRow, type WebAccessRowInjected } from './WebAccessRow.tsx'
@@ -132,6 +134,21 @@ export function apply(ctx: ClientContext): void {
       }),
     }, WebAccessRow))
   }
+  const channelBridge = carrier?.protocolVersion === 1 ? carrier.updates?.channels : undefined
+  if (channelBridge !== undefined) {
+    const channel = new DesktopChannelSource(channelBridge)
+    ctx.effect(() => () => { channel.dispose() }, 'ui-settings-general: desktop channel')
+    ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+      name: 'settings.general.item', id: 'desktop-update-channel', order: 95, locale: NS,
+      inject: () => ({ hooks: { channel: channel.store }, select: (value: 'nightly' | 'stable') => channel.select(value) }),
+    }, DesktopChannelRow))
+    ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+      name: 'shell.overlay', id: 'desktop-channel-toast', locale: NS,
+      inject: () => ({ hooks: { channel: channel.store },
+        dismiss: (sequence: number) => { channel.dismissNotice(sequence) }, openConfiguration: () => { desktopUpdate.open() } }),
+    }, DesktopChannelToast))
+  }
+
   ctx.slots.inject('sidebar.toggle.badge', () => ctx.slots.register({
     name: 'sidebar.toggle.badge', locale: NS,
     inject: () => ({ hooks: { desktopUpdate: desktopUpdate.store, connectionState: connection.state } }),
@@ -251,6 +268,7 @@ export function apply(ctx: ClientContext): void {
           'settings.action': { kind: 'list', scope: 'root' },
           'settings.close': { kind: 'single', scope: 'root' },
           'settings.section': { kind: 'list', scope: 'root' },
+          'settings.section.icon': { kind: 'list', scope: 'root', inline: true },
           'settings.onboarding': { kind: 'list', scope: 'root' },
         },
         inject: shellInjected,

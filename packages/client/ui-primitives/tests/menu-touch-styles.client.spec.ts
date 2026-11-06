@@ -1,4 +1,4 @@
-/** Menu touch geometry: touch-sized rows and a viewport-bounded card on coarse pointers. */
+/** Menu touch geometry: touch-sized rows on coarse pointers and a viewport-bounded card. */
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
@@ -81,10 +81,9 @@ describe('Menu.module.css touch geometry', () => {
     }
   })
 
-  it('bounds the card width to the viewport on touch without changing the desktop cap', () => {
-    expect(declarations(withoutCoarseBlocks(css), '.list')?.get('max-width')).toBe('360px')
-    const coarse = lastCoarseBlock(css)
-    expect(declarations(coarse, '.list')?.get('max-width')).toBe('min(360px, calc(100vw - 24px))')
-    expect(declarations(coarse, '.submenu')?.get('max-width')).toBe('min(360px, calc(100vw - 24px))')
+  it('bounds the card width to the viewport for every pointer', () => {
+    for (const selector of ['.list', '.submenu']) {
+      expect(declarations(withoutCoarseBlocks(css), selector)?.get('max-width')).toBe('min(360px, calc(100vw - 24px))')
+    }
   })
 })

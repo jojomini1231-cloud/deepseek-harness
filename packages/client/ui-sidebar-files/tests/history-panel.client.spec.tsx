@@ -312,6 +312,18 @@ describe('HistoryPanel refs filter', () => {
     expect(hands.onSelectRef).toHaveBeenLastCalledWith(undefined)
   })
 
+  it('anchors the portalled popover to the chip through CSS anchors', () => {
+    const { container } = mountHistory({ refs: REFS })
+    const chip = container.querySelector<HTMLElement>('[data-files-history-refs]')!
+    const popover = openFilter(container)
+    expect(popover.parentElement).toBe(document.body)
+    expect(chip.style.anchorName).not.toBe('')
+    expect(popover.style.positionAnchor).toBe(chip.style.anchorName)
+    expect(popover.style.left).toBe('')
+    expect(popover.style.top).toBe('')
+    expect(popover.style.visibility).toBe('')
+  })
+
   it('draws the selected ref and its check mark in the filter', () => {
     const { container } = mountHistory({ refs: REFS, ref: 'refs/heads/dev' })
     expect(container.querySelector('[data-files-history-refs]')?.textContent).toBe('dev')

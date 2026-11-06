@@ -336,7 +336,7 @@ it('keeps the phone composer above the keyboard while the visual viewport pans',
           viewport.dispatchEvent(new Event('resize'))
           viewport.dispatchEvent(new Event('scroll'))
         }, state)
-        await expect.poll(() => page.locator('[data-mobile-shell][data-mobile-drawer]').evaluate((frame) => {
+        await expect.poll(() => page.locator('[data-mobile-shell][data-sidebar-drawer]').evaluate((frame) => {
           const box = frame.getBoundingClientRect()
           return { top: box.top - window.visualViewport!.offsetTop, height: box.height }
         })).toEqual({ top: 0, height: state.height })

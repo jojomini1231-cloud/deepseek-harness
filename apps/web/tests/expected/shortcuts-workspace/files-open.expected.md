@@ -4,11 +4,12 @@
 - button "More ways to open"
 - paragraph: Choose a file from the tree on the right.
 - separator "Resize the file preview and file tree"
+- text: Project
 - toolbar "File tree actions":
   - button "Expand All"
   - button "Collapse All"
-- text: Project
-- list:
-  - listitem: Empty directory
+- complementary "Workspace files":
+  - list:
+    - listitem: Empty directory
 - toolbar "View containers":
   - button "Files"

@@ -12,7 +12,7 @@
 - button "回退到这条消息"
 - button "编辑这条消息"
 - status: 已完成
-- button "已完成，用时 {{duration}}" [disabled]
+- button "已完成，用时 {{duration}}"
 - paragraph: MESSAGES_WEB_READY
 - button "复制"
 - button "好的回答"

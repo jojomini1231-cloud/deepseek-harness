@@ -41,6 +41,7 @@ apps/web/dist/
 .artifacts/
 .dsh-build/
 .dsh-report/
+.ui-review/
 .playwright-mcp/
 .orig
 .worktrees/
@@ -49,3 +50,6 @@ worktrees/
 .typert-*/
 native/system/test/bin/
 .gstack
+
+# Generated company-signed CUA release record.
+/packages/experimental/cua-macos/cua-helper.json

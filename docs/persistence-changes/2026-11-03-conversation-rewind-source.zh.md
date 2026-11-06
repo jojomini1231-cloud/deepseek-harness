@@ -27,27 +27,27 @@ id: 2026-11-03-conversation-rewind-source
 baseline: false
 changes:
   - root: "event:agent/inbox/spliced"
-    previous: "2026-10-13-liveshare-share-viewer-principal"
-    after: "82b1a321bd2bffbd80a6c7293d9f0255f00c37d13d4d73ee5acfff2dc7887b90"
+    previous: "2026-10-27-retry-control-input"
+    after: "929f58aa2d47a73d6c4717a1e32a3692e98c780eff38c2bb2ddc2e256c7cca97"
     decision: same-version
   - root: "event:developer/message"
-    previous: "2026-10-13-liveshare-share-viewer-principal"
-    after: "ca95c28d51c7c012048f9c196589447efb210e922f5a2488862a17d184c3bbcf"
+    previous: "2026-10-27-retry-control-input"
+    after: "90eea3e13bf48c0feed7130230eb361d642c5117030b82ef37eeb7151da9d561"
     decision: same-version
   - root: "event:session/title-llm-request"
-    previous: "2026-10-13-liveshare-share-viewer-principal"
-    after: "e31d8ead75e13e76b41165526f3e26dae55834eca94699f5f0977b1b83341b4a"
+    previous: "2026-10-27-retry-control-input"
+    after: "8d6521e118b733c6a12600b83130d077b784663aa6c33e08c3bcc0c43fcf298a"
     decision: same-version
   - root: "event:user/message"
-    previous: "2026-10-13-liveshare-share-viewer-principal"
-    after: "36d181a3b3ba581dbea24d460168a61b3ec1fb2df76adf92b2c230acbbf436ac"
+    previous: "2026-10-27-retry-control-input"
+    after: "52f70013ff05a571780b4c1b87d296bdc350e7d7b96a85dc1e933be0f1104da3"
     decision: same-version
 ```
 
 <a id="compatibility"></a>
 ## 兼容性
 
-新的写入方只在内容为空的 `developer/message` 上使用该来源，因此没有任何推导出的模型可见消息依赖解释它；同一条标记进入 Inbox 时也保持同样形态。旧读取方把未知的可合并扩展来源类型当作不透明生产者元数据保留记录，因此既有记录含义不变，也无需改写读取方。该来源携带被撤回的目标序号，仅用于展示。
+新的写入方只在内容为空的 `developer/message` 上使用该来源，因此没有任何推导出的模型可见消息依赖解释它；同一条标记进入 Inbox 时也保持同样形态。旧读取方把未知的可合并扩展来源类型当作不透明生产者元数据保留记录，因此既有记录含义不变，也无需改写读取方。该来源携带被撤回的目标序号；消费方据此隐藏被撤回的行，且目标不晚于符合继续条件的失败 `turn/end` 时，会撤销空 prompt 继续资格。
 
 <a id="verification"></a>
 ## 验证

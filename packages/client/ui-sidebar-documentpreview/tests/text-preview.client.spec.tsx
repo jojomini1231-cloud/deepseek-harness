@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { contextMenuHook } from '@deepseek-ai/dsh-client-test-runtime'
 /**
  * What the body draws from its pages and the file's metadata, and what it does
  * with a navigation: load until the asked line is held, jump to it once, then
@@ -12,6 +13,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
+import type { FileNavigatorInput } from '@deepseek-ai/dsh-client-ui-sidebar-files/client'
 import type { OwnerOf } from '@deepseek-ai/dsh-client-ui-slots'
 import { DocumentPreview } from '../src/client/DocumentPreview.tsx'
 import type { DocumentPreviewFactoryProps } from '../src/client/DocumentPreview.tsx'
@@ -20,6 +22,7 @@ import type { DocumentPreviewDefinition } from '../src/client/document/registry.
 import { TextBody } from '../src/client/text/TextBody.tsx'
 import { PLAIN_BODY_ID } from '../src/client/text/index.ts'
 import { documentSlots, ABSOLUTE_PATH, ADDRESS, PATH, SESSION, TAB_ID, failure, harness, page, settle } from './fixtures.client.ts'
+import type { HostedPreviewProps } from './fixtures.client.ts'
 
 const LINE_HEIGHT = 20
 
@@ -97,7 +100,7 @@ class PendingIntersectionObserver {
 function codeProps(h: ReturnType<typeof harness>, navigation: { params?: unknown; revision: number }): DocumentPreviewFactoryProps {
   const props = h.props(navigation)
   const definition: DocumentPreviewDefinition = {
-    id: 'code', extensions: ['md'], title: () => 'Code', loading: 'text-pages', wrap: true,
+    id: 'code', extensions: ['md'], title: () => 'Code', loading: 'text-pages', wrap: true, sourceLines: true,
   }
   return {
     ...props,
@@ -490,37 +493,86 @@ describe('TextPreview — navigation and view', () => {
     expect(h.instance.getSnapshot().byView[TAB_ID]?.scrollTop).toBe(360)
   })
 
-  it.each([
-    ['Code', 'code', 2 * LINE_HEIGHT],
-    ['Plain text', PLAIN_BODY_ID, 2 * LINE_HEIGHT],
-  ])('retries a Markdown line navigation after switching to %s', async (_name, rendererId, expectedScrollTop) => {
-    PendingIntersectionObserver.instances = []
-    vi.stubGlobal('IntersectionObserver', PendingIntersectionObserver)
-    const h = harness({ 1: page(1, ['a', 'b', 'c'], true) })
-    const definitions: DocumentPreviewDefinition[] = [
-      { id: 'markdown', extensions: ['md'], title: () => 'Markdown', loading: 'text-pages', wrap: false },
-      { id: 'code', extensions: ['md'], title: () => 'Code', loading: 'text-pages', wrap: true },
-      { id: PLAIN_BODY_ID, extensions: [], title: () => 'Plain text', loading: 'text-pages', wrap: true },
-    ]
-    const base = h.props({ params: { line: 3 }, revision: 1 })
-    const props: DocumentPreviewFactoryProps = {
+  const CODE_DEFINITION: DocumentPreviewDefinition = {
+    id: 'code', extensions: ['md'], title: () => 'Code', loading: 'text-pages', wrap: true, sourceLines: true,
+  }
+  const PLAIN_DEFINITION: DocumentPreviewDefinition = {
+    id: PLAIN_BODY_ID, extensions: [], title: () => 'Plain text', loading: 'text-pages', wrap: true, sourceLines: true,
+  }
+
+  /**
+   * Offer `definitions` for a Markdown file; plain text renders lines, Code renders lines unless `codeDrawsLines` is false,
+   * and every other renderer draws no source lines.
+   */
+  function rendererProps(
+    h: ReturnType<typeof harness>,
+    navigation: { params?: unknown; revision: number },
+    definitions: DocumentPreviewDefinition[],
+    codeDrawsLines: boolean,
+  ): DocumentPreviewFactoryProps {
+    const base = h.props(navigation)
+    return {
       ...base,
       useDocumentPreviews: selector => selector(definitions),
       renderSlot: documentSlots((_key, owner, opts) => {
         const documentOwner = owner as unknown as OwnerOf<'sidebar.right.tab.document'>
         const view = () => ({ viewKey: base.viewKey, navigation: base.navigation, signal: base.signal })
-        if (opts.entryKey === 'code') return <CodeBody {...base} {...documentOwner} useDocumentView={view} t={key => key} />
+        if (opts.entryKey === 'code' && codeDrawsLines) return <CodeBody {...base} {...documentOwner} useDocumentView={view} t={key => key} />
         if (opts.entryKey === PLAIN_BODY_ID) return <TextBody {...base} {...documentOwner} useDocumentView={view} />
         return <div data-test-no-lines />
       }),
     }
+  }
+
+  /** A Markdown file that also offers Code and plain text; only the latter two expose source lines. */
+  function markdownProps(h: ReturnType<typeof harness>, navigation: { params?: unknown; revision: number }): DocumentPreviewFactoryProps {
+    const markdown: DocumentPreviewDefinition = { id: 'markdown', extensions: ['md'], title: () => 'Markdown', loading: 'text-pages', wrap: false }
+    return rendererProps(h, navigation, [markdown, CODE_DEFINITION, PLAIN_DEFINITION], true)
+  }
+
+  it.each([['Code', 'code'], ['Plain text', PLAIN_BODY_ID]])(
+    'answers a line navigation in Markdown without moving, and switching to %s does not jump later',
+    async (_name, rendererId) => {
+      PendingIntersectionObserver.instances = []
+      vi.stubGlobal('IntersectionObserver', PendingIntersectionObserver)
+      const h = harness({ 1: page(1, ['a', 'b', 'c'], true) })
+      const view = render(<DocumentPreview {...markdownProps(h, { params: { line: 3 }, revision: 1 })} />)
+      await settle()
+      expect(body(view.container).scrollTop).toBe(0)
+      expect(h.instance.getSnapshot().byView[TAB_ID]?.revision).toBe(1)
+      act(() => { h.instance.actions.selected(TAB_ID, rendererId) })
+      await settle()
+      expect(scrollport(view.container).scrollTop).toBe(0)
+      expect(marks(view.container)).toEqual([])
+    },
+  )
+
+  it('restores the reading position of a Markdown tab opened at a line, on a remount and after a reload', async () => {
+    const h = harness({ 1: page(1, ['a', 'b', 'c'], true) })
+    const navigation = { params: { line: 3 }, revision: 1 }
+    const first = render(<DocumentPreview {...markdownProps(h, navigation)} />)
+    await settle()
+    fireEvent.scroll(body(first.container), { target: { scrollTop: 300 } })
+    first.unmount()
+    const second = render(<DocumentPreview {...markdownProps(h, navigation)} />)
+    await settle()
+    expect(body(second.container).scrollTop).toBe(300)
+    h.script(1, page(1, ['A', 'B', 'C'], true, 'v2'))
+    click(second.container, '[data-textpreview-tool="reload"]')
+    body(second.container).scrollTop = 0
+    await settle()
+    expect(body(second.container).scrollTop).toBe(300)
+  })
+
+  it('keeps a line navigation pending while a source-line renderer has not drawn the line', async () => {
+    const h = harness({ 1: page(1, ['a', 'b', 'c'], true) })
+    const props = rendererProps(h, { params: { line: 3 }, revision: 1 }, [CODE_DEFINITION, PLAIN_DEFINITION], false)
     const view = render(<DocumentPreview {...props} />)
     await settle()
-    expect(body(view.container).scrollTop).toBe(0)
     expect(h.instance.getSnapshot().byView[TAB_ID]?.revision).toBeUndefined()
-    act(() => { h.instance.actions.selected(TAB_ID, rendererId) })
+    act(() => { h.instance.actions.selected(TAB_ID, PLAIN_BODY_ID) })
     await waitFor(() => { expect(h.instance.getSnapshot().byView[TAB_ID]?.revision).toBe(1) })
-    expect(scrollport(view.container).scrollTop).toBe(expectedScrollTop)
+    expect(body(view.container).scrollTop).toBe(2 * LINE_HEIGHT)
   })
 
   it('lands on code lines before and after syntax highlighting is ready', async () => {
@@ -636,6 +688,31 @@ describe('TextPreview — navigation and view', () => {
     act(() => { h.instance.actions.toggledWrap(TAB_ID) })
     expect(body(view.container).hasAttribute('data-textpreview-wrap')).toBe(false)
   })
+
+  it('lands each view on its own offset when the host switches the view a shared body shows', async () => {
+    const h = harness({ 1: page(1, ['a', 'b', 'c'], true) })
+    const first = h.props()
+    const second = { ...first, viewKey: 'view-2', signal: harness({}, 'view-2').controller.signal }
+    const view = render(<DocumentPreview {...first} />)
+    await settle()
+    const shared = body(view.container)
+    fireEvent.scroll(shared, { target: { scrollTop: 240 } })
+
+    view.rerender(<DocumentPreview {...second} />)
+    await settle()
+    expect(body(view.container)).toBe(shared)
+    // The new view starts at its own top, not below the offset the body still held.
+    expect(shared.scrollTop).toBe(0)
+    fireEvent.scroll(shared, { target: { scrollTop: 60 } })
+
+    view.rerender(<DocumentPreview {...first} />)
+    expect(shared.scrollTop).toBe(240)
+    view.rerender(<DocumentPreview {...second} />)
+    expect(shared.scrollTop).toBe(60)
+    expect(h.read).toHaveBeenCalledTimes(2)
+    expect(h.instance.getSnapshot().byView[TAB_ID]?.scrollTop).toBe(240)
+    expect(h.instance.getSnapshot().byView['view-2']?.scrollTop).toBe(60)
+  })
 })
 
 describe('TextPreview — header controls', () => {
@@ -696,5 +773,249 @@ describe('TextPreview — header controls', () => {
     expect(armed.mock.calls.filter(([type]) => type === 'abort')).toHaveLength(1)
     h.controller.abort()
     expect(h.instance.getSnapshot().byView[TAB_ID]).toBeUndefined()
+  })
+})
+
+
+it('opens a path menu with the preview pane and requested line', async () => {
+  const h = harness({ 1: page(1, ['first'], true) })
+  const openFileMenu = vi.fn()
+  const view = render(<DocumentPreview {...h.props({ revision: 1, params: { line: 1 } })} useContextMenu={contextMenuHook(openFileMenu)} />)
+  await settle()
+  fireEvent.contextMenu(view.container.querySelector('[data-textpreview-path]')!, { clientX: 33, clientY: 44 })
+  expect(openFileMenu).toHaveBeenCalledWith({ kind: 'file', value: { sessionId: SESSION, path: ABSOLUTE_PATH, line: 1, paneId: 'pane-1' } }, { x: 33, y: 44 })
+  const archive = 'dsh-resource://file/session/s/archive.zip'
+  view.rerender(<DocumentPreview {...h.props()} useContextMenu={contextMenuHook(openFileMenu)}
+    useDocumentPreviews={selector => selector([])}
+    address={archive} navigation={{ address: archive, revision: 2, params: undefined }} />)
+  fireEvent.contextMenu(view.container.querySelector('[data-textpreview-path]')!, { clientX: 55, clientY: 66 })
+  expect(openFileMenu).toHaveBeenLastCalledWith({ kind: 'file', value: { sessionId: SESSION, path: ABSOLUTE_PATH, paneId: 'pane-1' } }, { x: 55, y: 66 })
+  view.rerender(<DocumentPreview {...h.props({ revision: 3, params: { line: 42 } })}
+    useContextMenu={contextMenuHook(openFileMenu)} useDocumentPreviews={selector => selector([])}
+    address={archive} navigation={{ address: archive, revision: 3, params: { line: 42 } }} />)
+  fireEvent.keyDown(view.container.querySelector('[data-textpreview-path]')!, { key: 'F10', shiftKey: true })
+  expect(openFileMenu).toHaveBeenLastCalledWith({ kind: 'file', value: {
+    sessionId: SESSION, path: ABSOLUTE_PATH, line: 42, paneId: 'pane-1',
+  } }, { x: 0, y: 0 })
+})
+
+describe('TextPreview — reading position across reloads', () => {
+  const VIEW_HEIGHT = 100
+  const numbered = (from: number, count: number): string[] => Array.from({ length: count }, (_, i) => `l${from + i}`)
+
+  /** Lay the body out like a browser: one line height per line, offsets clamped to the content. */
+  function layOut(element: HTMLElement): void {
+    const max = (): number => Math.max(0, element.querySelectorAll('[data-textpreview-line]').length * LINE_HEIGHT - VIEW_HEIGHT)
+    let top = 0
+    Object.defineProperty(element, 'clientHeight', { configurable: true, get: () => VIEW_HEIGHT })
+    Object.defineProperty(element, 'scrollHeight', { configurable: true, get: () => max() + VIEW_HEIGHT })
+    Object.defineProperty(element, 'scrollTop', {
+      configurable: true,
+      get: () => { top = Math.min(top, max()); return top },
+      set: (value: number) => { top = Math.max(0, Math.min(value, max())) },
+    })
+  }
+
+  it('returns to an offset past the first page after a reload emptied the body', async () => {
+    const h = harness({ 1: page(1, numbered(1, 10), false), 11: page(11, numbered(11, 10), true) })
+    const view = render(<DocumentPreview {...h.props()} />)
+    await settle()
+    const scrolled = body(view.container)
+    layOut(scrolled)
+    click(view.container, '[data-textpreview-more]')
+    await settle()
+    fireEvent.scroll(scrolled, { target: { scrollTop: 300 } })
+    h.script(1, page(1, numbered(1, 10), false, 'v2'))
+    h.script(11, page(11, numbered(11, 10), true, 'v2'))
+    click(view.container, '[data-textpreview-tool="reload"]')
+    // The emptied body pins the browser's offset to 0 and reports it as a scroll.
+    expect(scrolled.scrollTop).toBe(0)
+    fireEvent.scroll(scrolled)
+    expect(h.instance.getSnapshot().byView[TAB_ID]?.scrollTop).toBe(300)
+    await settle()
+    expect(h.read).toHaveBeenLastCalledWith(SESSION, PATH, 11, h.controller.signal)
+    expect(scrolled.scrollTop).toBe(300)
+  })
+
+  it('keeps the remembered offset while a shorter file holds the view at its end', async () => {
+    const h = harness({ 1: page(1, numbered(1, 20), true) })
+    const view = render(<DocumentPreview {...h.props()} />)
+    await settle()
+    const scrolled = body(view.container)
+    layOut(scrolled)
+    fireEvent.scroll(scrolled, { target: { scrollTop: 300 } })
+    h.script(1, page(1, numbered(1, 10), true, 'v2'))
+    h.setVersion('v2')
+    view.rerender(<DocumentPreview {...h.props()} />)
+    await settle()
+    fireEvent.scroll(scrolled)
+    expect(scrolled.scrollTop).toBe(100)
+    expect(h.instance.getSnapshot().byView[TAB_ID]?.scrollTop).toBe(300)
+    h.script(1, page(1, numbered(1, 20), true, 'v3'))
+    h.setVersion('v3')
+    view.rerender(<DocumentPreview {...h.props()} />)
+    await settle()
+    expect(scrolled.scrollTop).toBe(300)
+  })
+
+  it('remembers where the reader scrolls up to, and the next reload keeps that place', async () => {
+    const h = harness({ 1: page(1, numbered(1, 20), true) })
+    const view = render(<DocumentPreview {...h.props()} />)
+    await settle()
+    const scrolled = body(view.container)
+    layOut(scrolled)
+    fireEvent.scroll(scrolled, { target: { scrollTop: 300 } })
+    fireEvent.scroll(scrolled, { target: { scrollTop: 120 } })
+    expect(h.instance.getSnapshot().byView[TAB_ID]?.scrollTop).toBe(120)
+    h.script(1, page(1, numbered(1, 20), true, 'v2'))
+    click(view.container, '[data-textpreview-tool="reload"]')
+    fireEvent.scroll(scrolled)
+    await settle()
+    expect(scrolled.scrollTop).toBe(120)
+  })
+})
+
+describe('TextPreview — workspace navigator Factories', () => {
+  /** The navigator occurrences a render holds: the header's toggle, and the content row's navigator after the body. */
+  function seats(container: HTMLElement) {
+    const row = container.querySelector('[data-textpreview-content]')
+    const header = container.querySelector('[data-textpreview-path]')?.parentElement
+    return {
+      toggle: header?.lastElementChild?.getAttribute('data-navigator-factory'),
+      navigator: row?.lastElementChild?.getAttribute('data-navigator-factory'),
+    }
+  }
+
+  it('keeps the Factory positions\' and the handoff\'s DOM identity while the preview goes from waiting to loaded', async () => {
+    const h = harness({ 1: page(1, ['a'], true) })
+    const props = h.props()
+    const renderFactorySlot = vi.fn(props.renderFactorySlot)
+    const none: HostedPreviewProps['useDocumentPreviews'] = select => select([])
+    const view = render(<DocumentPreview {...props} renderFactorySlot={renderFactorySlot} useDocumentPreviews={none} />)
+    expect(renderFactorySlot.mock.calls).toEqual([
+      ['sidebar.files.navigator.toggle', { useTabInfo: props.useTabInfo }],
+      ['sidebar.files.navigator', { useTabInfo: props.useTabInfo, page: false, onOpen: expect.any(Function) as FileNavigatorInput['onOpen'] }],
+    ])
+    expect(view.container.querySelector('[data-textpreview-state="loading"]')).not.toBeNull()
+    expect(seats(view.container)).toEqual({
+      toggle: 'sidebar.files.navigator.toggle', navigator: 'sidebar.files.navigator',
+    })
+    const navigator = view.container.querySelector<HTMLElement>('[data-textpreview-content] > [data-navigator-factory]')!
+    const toggle = view.container.querySelector('[data-textpreview-path]')?.parentElement?.lastElementChild
+    const handoff = view.container.querySelector('[data-slot="sidebar.right.tab.document.actions"]')
+    expect(handoff?.getAttribute('data-slot-path')).toBe(ABSOLUTE_PATH)
+    expect(toggle?.previousElementSibling).toBe(handoff)
+    navigator.tabIndex = 0
+    navigator.focus()
+    navigator.scrollTop = 64
+    view.rerender(<DocumentPreview {...props} renderFactorySlot={renderFactorySlot} />)
+    await settle()
+    expect(view.container.querySelector('[data-textpreview-state="text"]')).not.toBeNull()
+    expect(seats(view.container)).toEqual({
+      toggle: 'sidebar.files.navigator.toggle', navigator: 'sidebar.files.navigator',
+    })
+    expect(view.container.querySelector('[data-textpreview-content] > [data-navigator-factory]')).toBe(navigator)
+    expect(view.container.querySelector('[data-textpreview-path]')?.parentElement?.lastElementChild).toBe(toggle)
+    // The handoff keeps its seat between the tools and the toggle in every state.
+    expect(view.container.querySelector('[data-slot="sidebar.right.tab.document.actions"]')).toBe(handoff)
+    expect(toggle?.previousElementSibling).toBe(handoff)
+    expect(document.activeElement).toBe(navigator)
+    expect(navigator.scrollTop).toBe(64)
+  })
+
+  it.each([false, true])('owns the navigator open callback and replaces itself (floating: %s)', async (isFloating) => {
+    const h = harness({ 1: page(1, ['a'], true) })
+    const props = h.props()
+    const info = props.useTabInfo()
+    const openResource = vi.fn()
+    const useTabInfo: HostedPreviewProps['useTabInfo'] = () => ({
+      ...info, panel: { ...info.panel, isFloating }, tab: { ...info.tab, actions: { ...info.tab.actions, openResource } },
+    })
+    let open: FileNavigatorInput['onOpen'] | undefined
+    const renderFactorySlot: HostedPreviewProps['renderFactorySlot'] = (name, input) => {
+      if (name === 'sidebar.files.navigator') open = (input as FileNavigatorInput).onOpen
+      return null
+    }
+    render(<DocumentPreview {...props} useTabInfo={useTabInfo} renderFactorySlot={renderFactorySlot} />)
+    await settle()
+    expect(open).toBeTypeOf('function')
+    open!('dsh-resource://file/session/s-1/b.txt', '/workspace/b.txt')
+    expect(openResource).toHaveBeenCalledExactlyOnceWith('dsh-resource://file/session/s-1/b.txt', { replaceTab: true })
+  })
+
+  it('starts a text preview without a notice with its header', async () => {
+    const h = harness({ 1: page(1, ['a'], true) })
+    const view = render(<DocumentPreview {...h.props()} />)
+    await settle()
+    const preview = view.container.querySelector('[data-textpreview-state="text"]')
+    expect(preview?.firstElementChild?.contains(view.container.querySelector('[data-textpreview-path]'))).toBe(true)
+    expect(view.container.querySelector('[data-textpreview-changed], [data-textpreview-meta-failed]')).toBeNull()
+  })
+
+  it('keeps the navigator\'s and the toggle\'s DOM nodes from unsupported through loading to text', async () => {
+    const h = harness({ 1: page(1, ['a'], true) })
+    const base = h.props()
+    const address = 'dsh-resource://file/session/s-1/work/clip.mp4'
+    const video: DocumentPreviewDefinition = { id: 'video', extensions: ['mp4'], title: () => 'Video', loading: 'text-pages' }
+    const none: HostedPreviewProps['useDocumentPreviews'] = select => select([])
+    const some: HostedPreviewProps['useDocumentPreviews'] = select => select([video])
+    const props = { ...base, address, navigation: { ...base.navigation, address } }
+    const view = render(<DocumentPreview {...props} useDocumentPreviews={none} />)
+    await settle()
+    const nodes = () => ({
+      navigator: view.container.querySelector('[data-textpreview-content]')?.lastElementChild,
+      toggle: view.container.querySelector('[data-textpreview-path]')?.parentElement?.lastElementChild,
+    })
+    expect(view.container.querySelector('[data-textpreview-state="unsupported"]')).not.toBeNull()
+    const first = nodes()
+    expect(first.navigator?.getAttribute('data-navigator-factory')).toBe('sidebar.files.navigator')
+    expect(first.toggle?.getAttribute('data-navigator-factory')).toBe('sidebar.files.navigator.toggle')
+    const live = h.useResource()
+    h.useResource.mockReturnValue({ status: 'none', value: undefined, failure: undefined })
+    view.rerender(<DocumentPreview {...props} useDocumentPreviews={some} />)
+    await settle()
+    expect(view.container.querySelector('[data-textpreview-state="loading"]')).not.toBeNull()
+    expect(nodes().navigator).toBe(first.navigator)
+    expect(nodes().toggle).toBe(first.toggle)
+    h.useResource.mockReturnValue(live)
+    view.rerender(<DocumentPreview {...props} useDocumentPreviews={some} />)
+    await settle()
+    expect(view.container.querySelector('[data-textpreview-state="text"]')).not.toBeNull()
+    expect(nodes().navigator).toBe(first.navigator)
+    expect(nodes().toggle).toBe(first.toggle)
+  })
+
+  it('does not re-render the navigator Factories for a preview-only update', async () => {
+    const h = harness({ 1: page(1, ['a', 'b'], true) })
+    const props = h.props()
+    const renderFactorySlot = vi.fn(props.renderFactorySlot)
+    const view = render(<DocumentPreview {...props} renderFactorySlot={renderFactorySlot} />)
+    await settle()
+    renderFactorySlot.mockClear()
+    h.useResource.mockClear()
+    fireEvent.scroll(body(view.container), { target: { scrollTop: 40 } })
+    expect(h.instance.getSnapshot().byView[TAB_ID]?.scrollTop).toBe(40)
+    // The preview read its metadata again, so it re-rendered.
+    expect(h.useResource).toHaveBeenCalled()
+    expect(renderFactorySlot).not.toHaveBeenCalled()
+  })
+
+  it('draws neither navigator position, and leaves the pane out of the path menu, for a host that is not a tab', async () => {
+    const h = harness({ 1: page(1, ['a'], true) })
+    const props = h.props()
+    const renderFactorySlot = vi.fn(props.renderFactorySlot)
+    const openFileMenu = vi.fn()
+    const view = render(<DocumentPreview {...props} paneId={undefined} useTabInfo={undefined}
+      renderFactorySlot={renderFactorySlot} useContextMenu={contextMenuHook(openFileMenu)} />)
+    await settle()
+    expect(view.container.querySelector('[data-textpreview-state="text"]')).not.toBeNull()
+    expect(seats(view.container)).toEqual({ toggle: null, navigator: null })
+    expect(renderFactorySlot).not.toHaveBeenCalled()
+    // The file handoff closes the header row, and the body is the content row's only child.
+    expect(view.container.querySelector('[data-textpreview-path]')?.parentElement?.lastElementChild)
+      .toBe(view.container.querySelector('[data-slot="sidebar.right.tab.document.actions"]'))
+    expect(view.container.querySelector('[data-textpreview-content]')?.children).toHaveLength(1)
+    fireEvent.contextMenu(view.container.querySelector('[data-textpreview-path]')!, { clientX: 7, clientY: 8 })
+    expect(openFileMenu.mock.calls).toStrictEqual([[{ kind: 'file', value: { sessionId: SESSION, path: ABSOLUTE_PATH } }, { x: 7, y: 8 }]])
   })
 })

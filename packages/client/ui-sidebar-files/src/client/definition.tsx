@@ -3,7 +3,7 @@
  *
  * The type is a page, not a viewer: it claims no address. The guide page offers
  * it as an entry box, and the tree opens files as chips the workbench's own
- * content column previews through the `sidebar.document.preview` Factory.
+ * content column previews through the `sidebar.right.tab.files.preview` seat.
  */
 import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/client'
 import type { SidebarRightTabDefinition } from '@deepseek-ai/dsh-client-ui-sidebar-right/client'

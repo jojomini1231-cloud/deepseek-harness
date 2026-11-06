@@ -36,27 +36,20 @@ it('reserves bottom content height without remounting it on main-panel navigatio
       await page.goto(scaffold.authenticatedUrl)
       await page.locator('[data-shell-bottom]').waitFor({ state: 'attached' })
       const expected: string[] = []
-      const check = async (height: number, caption = 0, phone = false) => {
+      const check = async (height: number, caption = 0) => {
         await expect.poll(async () => (await geometry(page)).bottom.height).toBe(height)
         const result = await geometry(page)
         const viewportHeight = page.viewportSize()!.height
         expect(result.bottom).toEqual({ top: viewportHeight - height, height, bottom: viewportHeight })
         expect(result.main).toEqual({ top: caption, height: viewportHeight - caption - height, bottom: viewportHeight - height })
-        if (phone) {
-          // The phone drawer is a fixed overlay over the frame, so its column
-          // spans the viewport instead of the reserved centre height.
-          const readDrawer = async () => await page.evaluate(() => {
-            const column = document.querySelector('[data-slot="sidebar"]')!.parentElement!
-            const box = column.getBoundingClientRect()
-            const style = getComputedStyle(column)
-            return { height: box.height, position: style.position, visibility: style.visibility }
-          })
-          // The closed drawer keeps its width during the 280ms slide-out, so
-          // the hidden state lands one transition after the resize.
-          await expect.poll(async () => (await readDrawer()).visibility, { timeout: 5_000 }).toBe('hidden')
-          expect(await readDrawer()).toEqual({ height: viewportHeight, position: 'fixed', visibility: 'hidden' })
-        } else {
-          expect(result.sidebar).toEqual(result.main)
+        const drawer = page.viewportSize()!.width < 768
+        expect(result.sidebar).toEqual(drawer
+          ? { top: 0, height: viewportHeight, bottom: viewportHeight } : result.main)
+        if (drawer) {
+          // The closed drawer becomes hidden one slide transition after it collapses.
+          const sidebarColumn = page.locator('[data-slot="sidebar"]').locator('..')
+          await expect.poll(() => sidebarColumn.evaluate(column => getComputedStyle(column).visibility), { timeout: 5_000 })
+            .toBe('hidden')
         }
         expect(result.rightbar).toEqual(result.main)
         expect(result.overlay).toEqual({ top: 0, height: viewportHeight, bottom: viewportHeight })
@@ -87,24 +80,22 @@ it('reserves bottom content height without remounting it on main-panel navigatio
         }, platform)
         expected.push(`${platform}: ${JSON.stringify(await check(360, platform === 'windows' ? 40 : 0))}`)
       }
-      let phone = false
       await page.setViewportSize({ width: 520, height: 600 })
-      phone = true
       await expect.poll(() => page.locator('[data-shell-bottom]').locator('..').getAttribute('data-sidebar-collapsed')).toBe('true')
-      // 520px is inside the phone shell: the sidebar becomes the fixed drawer.
-      expected.push(`narrow: ${JSON.stringify(await check(360, 0, phone))}`)
+      // 520px is inside the drawer range: the closed drawer spans the frame's full height.
+      expected.push(`narrow: ${JSON.stringify(await check(360))}`)
       scaffold.ctx.loader.remove(entryId)
       await page.locator('[data-bottom-fixture]').waitFor({ state: 'detached' })
-      expected.push(`unregistered: ${JSON.stringify(await check(0, 0, phone))}`)
+      expected.push(`unregistered: ${JSON.stringify(await check(0))}`)
       const nextEntryId = await scaffold.ctx.loader.create({ name: '@fixture/layout-bottom' })
       await input.waitFor()
       expect(await input.inputValue()).toBe('')
-      await check(240, 0, phone)
+      await check(240)
       await page.getByRole('button', { name: 'Collapse bottom', exact: true }).click()
-      expected.push(`collapsed: ${JSON.stringify(await check(0, 0, phone))}`)
+      expected.push(`collapsed: ${JSON.stringify(await check(0))}`)
       scaffold.ctx.loader.remove(nextEntryId)
       await expect.poll(() => page.locator('[data-slot="shell.bottom"] > *').count()).toBe(0)
-      expect(await check(0, 0, phone)).toBeDefined()
+      expect(await check(0)).toBeDefined()
       expect(console.pageErrors).toEqual([])
       expect(console.warnings).toEqual([])
       await compareOrRefreshGolden(fileURLToPath(new URL('./expected/layout-bottom/geometry.expected.md', import.meta.url)),

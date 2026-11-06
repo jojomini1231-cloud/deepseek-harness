@@ -18,7 +18,7 @@ Status: implemented
 
 启动令牌不会传给渲染进程。`status()` 返回的 `address` 是 `host:port`，不含令牌；`open()` 在主进程内通过 `shell.openExternal` 花费已认证的 URL —— 与既有的更新载体同形：渲染进程只声明动作，主进程持有权限。
 
-该行位于 `packages/client/ui-settings-general`，即已经承载桌面更新桥接的通用设置区所有者，并且仅在 `globalThis.dshDesktop.webAccess` 存在时注册。因此普通 Web 部署永远看不到它，也不需要新包、新 roster 行或新 i18n 命名空间。端口范围分别出现在 `apps/desktop/src/settings.ts` 与该行的注册处；由于该行无法导入 Electron 侧的代码，`apps/desktop/tests/web-access.spec.ts` 把两者钉在一起。
+该行位于 `packages/client/ui-settings-general`，即已经承载桌面更新桥接的通用设置区所有者，并且仅在 `globalThis.dshDesktop.webAccess` 存在时注册。因此普通 Web 部署永远看不到它，也不需要新包、新 roster 行或新 i18n 命名空间。端口范围分别出现在 `apps/desktop/src/settings-file.ts` 与该行的注册处；由于该行无法导入 Electron 侧的代码，`apps/desktop/tests/web-access.spec.ts` 把两者钉在一起。
 
 ## Alternatives considered
 
@@ -36,4 +36,4 @@ Status: implemented
 
 开启该设置会扩大能够到达此 Host 的范围：本机上任何拿到已认证 URL 的进程都能驱动会话，而该 URL 的查询串携带令牌。令牌仍是每次启动都会变化的进程凭据，监听仍在回环地址上，且该行渲染的地址从不包含它；[桌面端参考](../../../../apps/desktop/README.zh.md#web-access-for-this-machine-s-browsers)说明分享规则。
 
-`web` 字段在启动时读取，因此手工编辑文档与通过设置行操作行为一致：下次启动时应用。`web` 段无效的文档会使校验失败，整份文档回退到默认值，这与既有 `updates` 字段遵循同一规则 —— 一个坏字段不会静默保留一个用户并未选择的端口。`trustedHost` 同样在读取时校验：它是在拼装子进程 argv 时被消费的，在那里抛错会中止启动，而不是回退。
+`web` 字段在启动时读取，因此手工编辑文档与通过设置行操作行为一致：下次启动时应用。无效的 `web` 字段只让 `web` 段回退到默认值；弹窗偏好与更新通道各自独立解析，而非对象的 `web` 属于无效的文档结构，与非对象的 `updates` 相同。一个坏字段绝不会静默保留一个用户并未选择的端口。`trustedHost` 同样在读取时校验：它是在拼装子进程 argv 时被消费的，在那里抛错会中止启动，而不是回退。

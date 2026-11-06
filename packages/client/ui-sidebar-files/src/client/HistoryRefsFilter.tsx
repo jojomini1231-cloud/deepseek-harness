@@ -3,34 +3,24 @@
  * with "all refs" (`HEAD`) and the repository's local branches, remotes, and
  * tags grouped.
  *
- * The popover portals to the document body and follows the chip through the
- * shared anchored-position hook, because the history columns clip their
- * overflow; its material is the shared `MenuSurface`, so it carries the
- * product's menu fill and blur. The filter only changes what the list walks —
- * it never switches branches.
+ * The popover portals to the document body and follows the chip through CSS
+ * anchors, because the history columns clip their overflow; its material is
+ * the shared `MenuSurface`, so it carries the product's menu fill and blur.
+ * The filter only changes what the list walks — it never switches branches.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import type { KeyboardEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import {
   Button, focusWithoutRing, IconCheckOutlineRegular, IconChevronDownOutlineRegular, IconSearchOutlineRegular,
-  Input, MenuGroup, MenuSurface, observeStickyMenuGroups, useAnchoredPosition, useDismissOnOutsidePointer,
+  Input, MenuGroup, MenuSurface, observeStickyMenuGroups, useDismissOnOutsidePointer,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import type { WorkspaceGitRef } from '@deepseek-ai/dsh-workspace-changes/types'
 import { refDisplayName } from './history.ts'
 import type {} from './locales.ts'
 import css from './HistoryPanel.module.css'
-
-/** Distance between the chip and the popover. */
-const MENU_GAP = 4
-
-/** Viewport margin the popover keeps clear. */
-const VIEWPORT_MARGIN = 12
-
-/** Unplaced popover: laid out but hidden, so the first placement measures real dimensions. */
-const MEASURE_STYLE: CSSProperties = { visibility: 'hidden', left: 0, top: 0 }
 
 /** The ref groups the popover draws, in order. */
 const GROUPS = ['local', 'remote', 'tag'] as const
@@ -76,9 +66,7 @@ export function HistoryRefsFilter({
   const panelRef = useRef<HTMLDivElement>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
-  const position = useAnchoredPosition({
-    open, anchorRef: triggerRef, panelRef, gap: MENU_GAP, margin: VIEWPORT_MARGIN, align: 'end',
-  })
+  const anchorName = `--dsh-history-refs-${useId().replaceAll(':', '')}`
   const close = (): void => {
     setOpen(false)
     setQuery('')
@@ -206,21 +194,23 @@ export function HistoryRefsFilter({
     <MenuSurface
       ref={panelRef}
       className={css.refsMenu}
-      style={position ?? MEASURE_STYLE}
+      style={{ positionAnchor: anchorName }}
       role="dialog"
       aria-label={t('history.refs.menu')}
       onKeyDown={onKeyDown}
     >
-      <Input
-        ref={searchRef}
-        className={clsx(css.refsSearch)}
-        icon={<IconSearchOutlineRegular />}
-        value={query}
-        placeholder={t('history.refs.search')}
-        aria-label={t('history.refs.search')}
-        data-files-history-refs-search
-        onChange={(event) => { setQuery(event.target.value) }}
-      />
+      <div className={css.refsSearchRow}>
+        <Input
+          ref={searchRef}
+          className={css.refsSearch ?? ''}
+          icon={<IconSearchOutlineRegular />}
+          value={query}
+          placeholder={t('history.refs.search')}
+          aria-label={t('history.refs.search')}
+          data-files-history-refs-search
+          onChange={(event) => { setQuery(event.target.value) }}
+        />
+      </div>
       {refs === undefined
         ? (
           <div className={css.refsNote} data-files-history-refs-state={refsFailure ? 'failed' : 'loading'}>
@@ -257,6 +247,7 @@ export function HistoryRefsFilter({
     <>
       <button
         ref={triggerRef}
+        style={{ anchorName }}
         type="button"
         className={css.refsChip}
         aria-expanded={open}

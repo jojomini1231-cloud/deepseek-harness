@@ -12,7 +12,10 @@
 - button "Retract to this message"
 - button "Edit this message"
 - status: Stopped
-- button "Stopped" [disabled]
+- button "Stopped" [disabled] [expanded]
+- button "Injected context" [expanded]
+- button "Context injection runtime-context"
+- button "Context injection time-context"
 - paragraph: partial
 - text: Stopped
 - button "Copy"

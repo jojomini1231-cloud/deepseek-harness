@@ -156,7 +156,7 @@ describe('git route contract', () => {
 describe('git slice', () => {
   it('records a status read, dropping a selection the new status no longer lists', () => {
     const store = createFilesStore().create()
-    store.actions.start(TAB, ROOT)
+    store.actions.workbenchStarted(TAB, ROOT)
     store.actions.gitLoading(TAB)
     expect(store.getSnapshot().byTab[TAB]?.git.loading).toBe(true)
     store.actions.gitStatusLoaded(TAB, REPOSITORY)
@@ -179,7 +179,7 @@ describe('git slice', () => {
 
   it('keeps a selection listed by a new status and syncs its rename origin', () => {
     const store = createFilesStore().create()
-    store.actions.start(TAB, ROOT)
+    store.actions.workbenchStarted(TAB, ROOT)
     store.actions.gitStatusLoaded(TAB, REPOSITORY)
     store.actions.gitEntrySelected(TAB, 'src/a.ts', undefined)
     store.actions.gitStatusLoaded(TAB, REPOSITORY)
@@ -193,7 +193,7 @@ describe('git slice', () => {
 
   it('returns to the files container when the directory stops being a repository', () => {
     const store = createFilesStore().create()
-    store.actions.start(TAB, ROOT)
+    store.actions.workbenchStarted(TAB, ROOT)
     store.actions.containerSelected(TAB, 'git')
     // An unavailable read is retryable and keeps the git container.
     store.actions.gitStatusLoaded(TAB, { kind: 'unavailable', entries: [], total: 0 })
@@ -204,7 +204,7 @@ describe('git slice', () => {
 
   it('keeps a comparison only for the path the panel shows', () => {
     const store = createFilesStore().create()
-    store.actions.start(TAB, ROOT)
+    store.actions.workbenchStarted(TAB, ROOT)
     store.actions.gitStatusLoaded(TAB, REPOSITORY)
     store.actions.gitEntrySelected(TAB, 'src/a.ts', undefined)
     // A selection the store already shows as loading asks only once.
@@ -596,7 +596,9 @@ describe('GitPanel', () => {
 describe('face git reads', () => {
   const faceOf = () => {
     const instance = createFilesStore().create()
-    return filesFace(vi.fn() as never, vi.fn() as never)(SESSION, instance.actions)
+    const navigation = { getSnapshot: () => ({ address: '', params: undefined, revision: 0 }), subscribe: () => () => {} }
+    const canOpen = { getSnapshot: () => () => true, subscribe: () => () => {} }
+    return filesFace(vi.fn() as never, vi.fn() as never, canOpen, () => navigation, new WeakMap())(SESSION, instance, () => () => {})
   }
 
   it('returns the Host answers it validates with their read generation', async () => {
@@ -757,7 +759,7 @@ describe('git view through the body', () => {
     try {
       // The Sidebar is collapsed: the tab body stays mounted, but the view must
       // not keep reading a working tree nobody is looking at.
-      const hidden = mountBody(ROOT, undefined, { status: REPOSITORY }, { expanded: false })
+      const hidden = mountBody(ROOT, { sidebarExpanded: false }, { status: REPOSITORY })
       await act(() => hidden.script.watches.ready(ROOT))
       await act(() => hidden.script.settle({ ok: true, value: { entries: [], truncated: false } }))
       fireEvent.click(hidden.view.container.querySelector('[data-files-rail-item="git"]')!)
@@ -766,7 +768,7 @@ describe('git view through the body', () => {
       expect(hidden.gitStatus.mock.calls.length).toBe(idle)
       cleanup()
       // A visible panel polls, and a tab that is hidden by its pane behaves the same.
-      const visible = mountBody(ROOT, undefined, { status: REPOSITORY }, { expanded: true, visible: false })
+      const visible = mountBody(ROOT, { visible: false }, { status: REPOSITORY })
       await act(() => visible.script.watches.ready(ROOT))
       await act(() => visible.script.settle({ ok: true, value: { entries: [], truncated: false } }))
       fireEvent.click(visible.view.container.querySelector('[data-files-rail-item="git"]')!)

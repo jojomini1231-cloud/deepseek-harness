@@ -1,5 +1,5 @@
 ---
-description: "dsh Web 客户端右侧 Sidebar 的工作区工作台：尾随侧是会话工作区目录树，引导侧是打开文件的 chips 与共享文档预览；仓库工作区还会从工作台的活动栏打开工作区 git 视图与仓库历史。"
+description: "dsh Web 客户端右侧 Sidebar 的工作区工作台：文件页，以及停靠与浮动文件预览旁每个分栏一棵的工作区目录树，通过网络逐层列出；目录树旁是打开文件的 chips，仓库工作区还会从活动栏打开工作区 git 视图与仓库历史。"
 kind: "package-reference"
 ---
 
@@ -9,13 +9,15 @@ kind: "package-reference"
 
 ## 概述
 
-浏览 Session 的工作区目录树，并在同一 tab 内就地读取文件：点击文件行会在工作台内容栏打开一个 chip，由共享文档预览绘制该文件。根目录与已展开目录通过直接子项监听自动刷新，手动重新读取仍可用。仓库工作区还会在活动栏中多出两个只读容器：工作区 git 视图与仓库的提交历史。该 tab 从引导页进入，不认领资源地址。
+在预览文件的同时浏览 Session 的工作区目录树。每个分栏（停靠或浮动）保留一棵目录树，切换文件时保留其宽度、展开状态与滚动位置，并标出当前文件。预览旁的目录树在该预览的位置打开文件；从引导页进入的 `files` 页是一个工作台，其目录树把文件作为 chip 打开在内容栏中，且不认领资源地址。受监听的目录自动刷新，手动重新读取仍可用。仓库工作区还会在工作台的活动栏中提供只读的 git 视图与提交历史。
 
 ## 目录
 
 - [注册了什么](#what-it-registers)
 - [工作台](#the-workbench)
+- [导航栏](#the-navigator)
 - [树](#the-tree)
+- [复用目录树 Factory](#tree-factory)
 - [历史视图](#the-history-view)
 - [模型体验](#model-experience)
 - [已知限制与暂缓事项](#known-limitations-and-deferred-work)
@@ -26,15 +28,20 @@ kind: "package-reference"
 <a id="what-it-registers"></a>
 ## 注册了什么
 
-命令 `workspace.files` 在焦点分栏内打开或聚焦文件页；从聊天区触发时使用当前会话的活动停靠分栏。文件页替换开始页，同一分栏内重复打开仍保留一个文件页。桌面默认键为 Mod+P。开始页入口显示有效快捷键；Windows 和 macOS Web 使用[快捷键服务的平台默认值](../shortcuts/README.zh.md)；Linux Web 默认不绑定此命令。
+命令 `workspace.files` 在焦点分栏内显示画在停靠 tab 内容旁的导航栏，并把键盘焦点移到目录树，保留该 tab；从聊天区触发时使用当前会话的活动停靠分栏。其他情况下（文件页本身、不带导航栏的 tab、没有工作目录的会话、浮动 tab）打开或聚焦文件页，文件页的目录树始终显示。文件页替换开始页，同一分栏内重复打开仍保留一个文件页。桌面默认键为 Mod+P。开始页入口显示有效快捷键；Windows 和 macOS Web 使用[快捷键服务的平台默认值](../shortcuts/README.zh.md)；Linux Web 默认不绑定此命令。
 
 - **类型**：`ctx.sidebarRightTabs.register(...)`，kind 为 `files`，id 为 `@deepseek-ai/dsh-client-ui-sidebar-files`，档位 `builtin`，没有 patterns，另有一个打开该类型的引导页入口（order 10，标题与描述取自 `sidebarFiles` 命名空间，图标为黄色文件夹）。
-- **正文**：以该 id 为键的 `sidebar.right.pane.tab` slot：strip 下的一行标题行，然后是工作台。共享的 [`PathLabel`](../ui-primitives/README.zh.md#component-catalog) 显示根路径，目录使用弱化颜色，最后一段使用主色。路径过长时保留尾部字符并在左侧渐隐；悬停显示完整路径。重新读取控件和 Session 作用域的 `sidebar.right.tab.files.actions` 列表位于右端，并通过 `absolutePath` 传入当前显示的根目录；[`ui-open-in-app`](../ui-open-in-app/README.zh.md) 在此提供工作区目录打开按钮。
+- **文件页正文**：以该 id 为键的 `sidebar.right.pane.tab` slot。其标题行横跨页面，通过共享的 [`PathLabel`](../ui-primitives/README.zh.md#component-catalog) 显示根路径，目录使用弱化颜色，最后一段使用主色；路径过长时保留尾部字符并在左侧渐隐，悬停显示完整路径。末端依次是目录树的重新读取控件、由文件页注册声明的 Session 作用域 `sidebar.right.tab.files.actions` 列表（通过 `absolutePath` 传入当前显示的根目录），顺序与预览标题行末端的重新读取与文件操作一致；[`ui-open-in-app`](../ui-open-in-app/README.zh.md) 在此提供工作区目录打开按钮。标题行下方由[工作台](#the-workbench)铺满整页，停靠与浮动时都一样；它的树栏就是该分栏的导航栏，这里没有开关。
+- **各行**：root 作用域的 Component Factory `sidebar.files.tree`，接收调用方的条目和局部 `accessory` slot；见[复用目录树 Factory](#tree-factory)。
+- **导航栏**：Session 作用域的 Component Factory `sidebar.files.navigator`。工作台的树栏和 [`ui-sidebar-documentpreview`](../ui-sidebar-documentpreview/README.zh.md) 直接渲染它，后者把它显示在每个预览旁，无论停靠还是浮动。它绘制目录树，在预览旁还绘制调整宽度的边缘，没有自己的标题行：预览旁只有预览自己的标题行，目录树的重新读取与目录操作留在 `files` 页上。
+- **开关**：Session 作用域的 Factory `sidebar.files.navigator.toggle`，在预览头部末端直接渲染，传入 `useTabInfo`。两个 Factory 共用文件页的 store handle 和 inject face，每个分栏保留一份开关状态；文件页正文没有开关。
+- **预览**：Session 作用域的单项 slot `sidebar.right.tab.files.preview`，由文件页注册声明，由工作台的内容栏渲染。[`ui-sidebar-documentpreview`](../ui-sidebar-documentpreview/README.zh.md#the-reusable-preview) 用其可复用的 `sidebar.document.preview` Factory 填充它，读取、渲染器选择与文档工具栏都归该 Factory 所有，因此本包不持有任何文档格式。
 - **标签页标题**：以该 id 为键的 `sidebar.right.pane.tab.title` slot：类型标签前的一枚 16px 共享 `FileTypeIcon` 文件夹图标。树本身的行不画这枚图标。
+- **行菜单项**：贡献给共享右键菜单 `file` 与 `directory` 操作对象的菜单项：在目录树行上提供「打开」或「展开」「收起」，然后是「复制相对路径」；见[树](#the-tree)。
 
-- **预览**：内容栏显示的文件由 [`ui-sidebar-documentpreview`](../ui-sidebar-documentpreview/README.zh.md#the-reusable-preview) 的可复用 `sidebar.document.preview` Factory 绘制，读取、渲染器选择与文档工具栏都归它所有。本包传入文件地址、作为视图键的绝对路径、新的导航修订号，以及该 tab 的中止 signal 作为视图生命周期，因此本包不持有任何文档格式。
+[注册入口](src/client/index.ts) 在共享 [files face](src/client/face.ts) 与 [store](src/client/store.ts) 上组装文件页、导航栏、开关和目录树 Factory；store 为每个分栏保存一份记录，也为每个 `files` tab 保存一份记录。
 
-`src/client/` 下的源文件：`definition.tsx`（类型是什么）、`store.ts`（它保存什么）、`face.ts`（Remote 读取与监听）、`directory-node.ts`（打开的目录及其生命周期）、`FilesBody.tsx`（工作台：标题行、容器与预览 Factory 调用）、`tree.tsx`（树的行、排序与失败行）、`FileTabs.tsx`（打开文件的 chips）、`SplitView.tsx`（两栏与分隔条）、`HistoryPanel.tsx`（历史视图：导航器与提交图行）、`CommitPage.tsx`（单个提交的页面）、`HistoryRefsFilter.tsx`（引用筛选 chip 与其弹层）、`DiffModeControl.tsx`（git 视图与提交页共用的对比布局控件）、`layout.ts`（各容器共用的按实测宽度切换窄布局）、`drill-down-focus.ts`（各窄布局下钻共用的键盘交接）、`history.ts` 与 `history-graph.ts`（纯历史辅助函数与提交图的车道布局）、`FilesTitle.tsx`（标签页标题）、`locales.ts`（它说什么）、`index.ts`（接线，包含六条 git 路由）。`src/git.ts` 保存两面共享的路由路径与校验器。
+`src/client/` 下的源文件：`definition.tsx`（类型是什么）、`store.ts`（它保存什么）、`face.ts`（Remote 读取与监听，以及每个分栏的定位、焦点与实测行宽）、`directory-node.ts`（打开的目录及其生命周期）、`workspace-tree.ts`（把分栏已列出的层转换为目录树的条目）、`FileTree.tsx`（目录树 Factory 的行、排序与失败行）、`FileNavigator.tsx`（单个分栏的导航栏）、`NavigatorToggle.tsx`（预览标题行的开关）、`navigator-layout.ts`（导航栏的宽度规则）、`FilesBody.tsx`（工作台：标题行、容器、树栏与预览 slot）、`WorkbenchRail.tsx`（活动栏）、`FileTabs.tsx`（打开文件的 chips）、`SplitView.tsx`（两栏与分隔条）、`GitPanel.tsx`（git 视图）、`HistoryPanel.tsx`（历史视图：导航器与提交图行）、`CommitPage.tsx`（单个提交的页面）、`HistoryRefsFilter.tsx`（引用筛选 chip 与其弹层）、`RefPills.tsx`（历史行与提交页共用的引用 pill）、`DiffModeControl.tsx` 与 `DiffScopeControl.tsx`（git 视图与提交页共用的对比布局与范围开关）、`layout.ts`（各容器共用的按实测宽度切换窄布局）、`drill-down-focus.ts`（各窄布局下钻共用的键盘交接）、`use-scroll-restore.ts`（分栏在卸载前后保留的滚动位置）、`use-now.ts`（历史视图按分钟更新的时钟）、`history.ts` 与 `history-graph.ts`（纯历史辅助函数与提交图的车道布局）、`FilesTitle.tsx`（标签页标题）、`locales.ts`（它说什么）、`index.ts`（接线，包含行菜单项）。`src/index.ts` 注册六条 git 路由，`src/git.ts` 保存两面共享的路由路径与校验器。
 
 <a id="the-workbench"></a>
 ## 工作台
@@ -43,36 +50,62 @@ kind: "package-reference"
 
 `FilesBody` 把工作台排成两栏，再在尾随边缘放一条固定活动栏：活动栏是 48px 宽、纯图标的纵向列，每个视图容器一项 —— `files` 容器始终存在，工作目录位于 git 工作树内或 git 不可用时，`git` 与 `history` 容器并列其后。每项都带 tooltip 与可访问名，并标出当前容器；活动栏不参与分隔条，两栏缩放时它保持自己的宽度，分隔线画在它的引导边。`container` 记录活动栏选中的容器，因此新增容器只扩展活动栏数组与 store，不改布局。
 
-文件树列顶部是 Panel Header：inline 起始侧是面板标题（`tree.title`，"项目"），末尾侧是两个图标操作。Expand All（`tree.expand`）打开树已列出的每一个目录，只在该次展开才出现的层级需再按一次；Collapse All（`tree.collapse`）经 face 把目录全部收回到根，结束它们的读取与监视，但保留已加载的层级，重新展开是即时生效的。这些操作挂在该 tab 的 action 上（`sidebar.right.pane.tab.actions`）；活动栏与面板头分别带 `data-files-rail`/`data-files-rail-item` 与 `data-files-tree-header`/`data-files-tree-action` 供浏览器用例定位。
+文件树栏顶部是面板标题行：inline 起始侧是面板标题（`tree.title`，"项目"），末尾侧是两个图标操作。Expand All（`tree.expand`）打开树已列出的每一个目录，只在该次展开才出现的层级需再按一次。Collapse All（`tree.collapse`）经 face 把目录全部收回到根，结束它们的读取与监听，但保留已加载的层级，因此重新展开的目录立即画出保留的行；它还会结束进行中的定位，目录树因此不会再朝当前显示的文件展开。两者都作用于该分栏的目录树，同一分栏内预览旁的导航栏也随之变化。活动栏与面板标题行分别带 `data-files-rail`/`data-files-rail-item` 与 `data-files-tree-header`/`data-files-tree-action` 供浏览器用例定位。
 
 当工作目录位于 git 工作树内，或 git 不可用（`git.status` 报 `repository` 或 `unavailable`）时，活动栏在文件项旁边多出一个 git 视图容器；不可用的读取会保留该容器，重试始终可达。选中它时，两栏被 git 视图（`GitPanel`）替换：引导侧显示选中路径与 `HEAD` 的对比，尾随侧按"更改"与"未跟踪文件"分组列出改动路径（每组可从标题折叠，默认展开；分组标题吸附在列表固定标题行之下——`Git` 标题、分支 chip、重读控件，以及带完整改动文件数和"已同步 / 读取失败"状态的摘要行——行在下方滚动）；两栏之间是与文件视图相同的可拖拽分隔条。容器实测宽度低于 560px 时，列表与对比变成一栏：列表独立显示，点击行下钻到对比，返回控件回到列表。每行带 git 的状态字母与文件名，二者按改动类型上色（修改为蓝色、新增为绿色、新建但仍未跟踪为红褐色、删除为错误红、重命名为弱化色），所在目录保持该行的安静墨色。修改 / 新增 / 未跟踪三色参考 IntelliJ IDEA 的文件状态配色。对比由 `workspace-changes` 的工作区能力计算（git 针对 `HEAD` 的自身补丁，`HEAD` 不含的路径则用 `git diff --no-index /dev/null <路径>`），并由 `ui-primitives` 的带行号渲染器 `DiffHunks` 绘制 —— 与轮次变更评审用的是同一个 —— 因此工作台用的是项目自己的差异渲染而不是第二套。对比区头部有两个纯图标开关，与轮次变更评审的同类控件一致。第一个切换布局：按下即在单栏（保留一列带行号的行）与左右（新旧两侧并排、对齐滚动）之间切换，切到左右时图标旋转四分之一圈，悬停提示写出这次按下会切到哪种布局。第二个切换内容范围：默认只画改动部分，按下则扩展到整个文件、把未改动的每一行都作为上下文行画出；图标写出当前范围，悬停提示写出这次按下会切到哪种范围。两个选择都按 tab 记住，切换范围会重新读取该对比。选择总是生效：纯新增或纯删除的对比也会切到左右，只是没有内容的一侧留空。二进制与超限文件只列出不给行；没有未提交改动的仓库只画出一个居中的干净状态 —— 两栏都在屏幕上时画在对比栏，否则画在那唯一的一栏 —— 重读失败时保留上次列表，并由摘要与横幅说明失败、提供重试。对比占满剩余列高并在自己的滚动区内滚动，因此一行改动不会只填半列。面板的重读控件会重新读取工作区；重读只在读者仍停在原路径时刷新该对比，重读期间改选的路径保留自己的读取。视图在屏幕上时它还会自动刷新：每三秒一次安静读取，只有工作区确实变了才写入，因此列表不会闪成空态、未变化的一次读取不产生渲染，而当前显示的文件又被改动时它的对比也会就地更新。侧栏收起或 tab 隐藏时停止读取，重新显示时立即刷新一次。活动栏在 git 项旁还画历史项；已提交的历史见[历史视图](#the-history-view)。
 
 git 视图与历史视图读取本包 Host 半注册的六条鉴权路由：工作区侧为 `/api/git.status` 与 `/api/git.diff`，仓库历史侧为 `/api/git.refs`、`/api/git.history`、`/api/git.commit` 与 `/api/git.commit-diff`。六条都按浏览器传来的会话 id 读取会话头（先实时会话头，后存储的会话头，不会恢复会话的 agent），并拒绝与该会话头记录的工作目录不一致的请求（409）；对比与提交比较路由还拒绝逃出该目录的路径。这项检查只把请求绑定到 Host 已知的某个会话，并不把它绑定到发起请求的标签页所查看的会话：所有浏览器连接共用一个已鉴权的所有者对端，因此应用里任何一个打开的标签页都能读取任一会话的工作目录。缺失或格式错误的坐标、路径、引用、分页坐标与提交哈希返回 400，未知的会话、提交或比较返回 404，仓库读取失败返回 503。每条应答都带 `cache-control: no-store`；路由自身不含 git 代码 —— 运行器与比较由 `workspaceChanges.workingTree`、`workingDiff`、`historyRefs`、`history`、`commit` 与 `commitDiff` 提供（[服务约定](../../deliverables/workspace-changes/README.zh.md#use-this-package)）。
 
-内容栏在读者选中的文件上方放打开文件的 chips。文件行调用 `fileOpened`，追加一个 chip 并显示该文件；再次打开同一路径会复用它已有的 chip。chips 条不画滚动条：滚轮让它横向滚动（纵向滚轮滚动该行，行模式或横向 delta 同样生效，没有可滚内容的条会把该次滚动留给祖先），在条边界之外打开或成为当前显示的文件会被滚回可见范围内且不移动任何祖先的滚动位置，每个被隐藏的边缘会把 chips 渐隐 24px，让该行读起来是继续而非被截断。chips 最小只缩到 100px，因此长行会溢出而不是一路缩小。点击 chip 调用 `fileActivated`；chip 的关闭控件（或中键点击）调用 `fileClosed`，它会显示下一个 chip，被关闭的是最后一个时显示上一个，关闭最后一个 chip 后内容栏清空。次键点击打开该 chip 的菜单：关闭、关闭其他标签页、关闭所有标签页、关闭左侧标签页与关闭右侧标签页分别调用 `fileClosed`、`filesClosedExcept`、`filesClosedAll`、`filesClosedBefore` 与 `filesClosedAfter`，而不会删掉任何 chip 的那一项是禁用而不是隐藏。这些臂之后是其他插件贡献到 `sidebar.right.tab.files.chip.actions` 的行，`ui-open-in-app` 在此放一个把文件所在文件夹交给桌面文件管理器的行。清空状态说明文件从哪里来，而不是留一片空白。
+内容栏在读者选中的文件上方放打开文件的 chips。点击文件行或选择其菜单中的「打开」都会调用 `fileOpened`，追加一个 chip 并显示该文件；再次打开同一路径会复用它已有的 chip。chips 条不画滚动条：滚轮让它横向滚动（纵向滚轮滚动该行，行模式或横向 delta 同样生效，没有可滚内容的条会把该次滚动留给祖先），在条边界之外打开或成为当前显示的文件会被滚回可见范围内且不移动任何祖先的滚动位置，每个被隐藏的边缘会把 chips 渐隐 24px，让该行读起来是继续而非被截断。chips 最小只缩到 100px，因此长行会溢出而不是一路缩小。点击 chip 调用 `fileActivated`；chip 的关闭控件（或中键点击）调用 `fileClosed`，它会显示下一个 chip，被关闭的是最后一个时显示上一个，关闭最后一个 chip 后内容栏清空。次键点击打开该 chip 的菜单：关闭、关闭其他标签页、关闭所有标签页、关闭左侧标签页与关闭右侧标签页分别调用 `fileClosed`、`filesClosedExcept`、`filesClosedAll`、`filesClosedBefore` 与 `filesClosedAfter`，而不会删掉任何 chip 的那一项是禁用而不是隐藏。这些臂之后是其他插件贡献到 `sidebar.right.tab.files.chip.actions` 的行，`ui-open-in-app` 在此放一个把文件所在文件夹交给桌面文件管理器的行。清空状态说明文件从哪里来，而不是留一片空白。
 
-文件通过 `renderFactorySlot('sidebar.document.preview', { address, viewKey, navigation, signal })` 绘制：存储里保存绝对路径，地址由 `@deepseek-ai/dsh-util-workspace-path` 的 `fileAddressFor` 生成，视图键在文件的绝对路径前加上 tab id，因此两个工作台 tab 看同一个文件时，滚动、缩放、换行与查看器选择各自独立，因为 Factory 按视图键分桶。无法预览的文件、Host 路径未知的文件、以及没有注册渲染器的二进制容器，都是 Factory 自己的状态，与在侧栏预览 tab 中完全一致。
+文件由填充 Session 作用域 slot `sidebar.right.tab.files.preview` 的插件绘制，该 slot 收到 `{ address, viewKey, navigation, signal, paneId }`：存储里保存绝对路径，地址由 `@deepseek-ai/dsh-util-workspace-path` 的 `fileAddressFor` 生成，视图键在文件的绝对路径前加上 tab id，因此两个工作台 tab 看同一个文件时，滚动、缩放、换行与查看器选择各自独立，因为 `sidebar.document.preview` Factory 按视图键分桶。`signal` 是该 chip 自己的预览生命周期，关闭一个 chip 只释放它的预览，不影响其他 chip；`paneId` 为预览标题行的文件菜单指明分栏；该 slot 不传 `useTabInfo`，因为工作台自己绘制导航栏。由 `ui-sidebar-documentpreview` 填充该 slot 时，无法预览的文件、Host 路径未知的文件、以及没有注册渲染器的二进制容器，都是 Factory 自己的状态，与在侧栏预览 tab 中完全一致。
 
-工作台保存的一切都在类型自己的存储里，按 tab id 分桶：`root`、`levels`、`expanded`、`scrollTop`、`autoRefresh`、打开的文件（`open`）、当前显示的路径（`active`）、活动栏选中的容器（`container`）、git 视图（`git`：上次状态、当前显示的路径、该路径的对比、布局选择与窄布局下钻的打开状态）、历史视图（`history`：引用列表与当前行走的引用、已加载的提交页与其后是否还有提交、当前显示的提交及其改动文件、文件区折叠状态、该文件的对比、对比布局、两栏比例、两处滚动位置与窄布局下钻页的打开状态）`ratio`，以及文件容器窄布局下预览下钻的打开状态（`pageOpen`）。存储比 body 活得久，切到其他侧栏 tab 再切回来时，chips、当前文件、git 或历史选择、分隔条位置与树都保持原样。
+工作台在目录树之外保存的一切都在类型自己的存储里，每个 `files` tab 一份记录：`root`、打开的文件（`open`）、当前显示的路径（`active`）、活动栏选中的容器（`container`）、git 视图（`git`：上次状态、当前显示的路径、该路径的对比、布局选择与窄布局下钻的打开状态）、历史视图（`history`：引用列表与当前行走的引用、已加载的提交页与其后是否还有提交、当前显示的提交及其改动文件、文件区折叠状态、该文件的对比、对比布局、两栏比例、两处滚动位置与窄布局下钻页的打开状态）、`ratio`，以及文件容器窄布局下预览下钻的打开状态（`pageOpen`）；目录树是分栏的记录，见[树](#the-tree)。存储比 body 活得久，切到其他侧栏 tab 再切回来时，chips、当前文件、git 或历史选择、分隔条位置与树都保持原样。tab 的中止 signal 终结它的记录：中止时忘掉该 tab，每个 chip 的预览生命周期随之结束，其后才结算的 git 或历史读取什么也不写。
+
+<a id="the-navigator"></a>
+## 导航栏
+
+用 `FileNavigatorInput` 渲染 `sidebar.files.navigator`：`{ useTabInfo, page, onOpen, current? }`。必填的 `onOpen: (address: string, path: string) => void` 回调收到所选文件的地址与绝对路径，由容纳它的插件提供并决定打开的含义；导航栏构造文件地址，不决定落位。`page` 只控制呈现：`true` 时始终铺满文件页的树栏，`false` 时遵循预览所在分栏的偏好与可用宽度。`current` 是目录树标出并定位的地址，省略时为该 tab 自身的内容；文件页传入其内容栏显示的文件。
+
+导航栏画在横跨分栏的预览标题行下方，位于它与正文共用的那一行的右侧。在预览旁，是否显示由其分栏的记录决定：分栏默认隐藏，这一选择对分栏内的每个文件 tab 都有效，直到开关、Escape、工作区命令，或导航到被目录树遮住的预览改变它。自身没有记录的分栏（例如 tab 拖出后所在的浮窗）从隐藏、默认宽度开始。点击目录树以外的地方不会隐藏它；在另一分栏打开内容也不会隐藏它。在文件页上，目录树铺满工作台的树栏，停靠与浮动时都一样，不显示分隔条，且始终显示：文件页不画开关，Escape 也不关闭它。
+
+在文件页上，树栏的宽度由工作台的分隔条决定。在预览旁，其宽度是分栏的偏好，在读者用主键拖动左缘分隔条，或用方向键、Home（最窄）、End（最宽）调整之前为 260px，并限制在这一行内：行宽允许时至少 180px；与正文并排时至多为行宽减去 336px，悬浮时至多为行宽减去 120px。在预览旁、视口至少 768px 时，face 测得的行宽决定三种布局之一。行宽至少 560px 时，导航栏是正文旁的浮起面板，距行的上、右、下边缘各 8px，与正文相隔 8px；正文让出面板及其外边距的宽度而变窄，但至少保留 320px。行宽在 400px 到 560px 之间时，同样的面板悬浮在正文右侧之上，因此正文保持完整宽度，面板未覆盖的部分仍可滚动、可交互；正文的滚动条和渲染器的吸顶工具栏在面板下方的部分会被它遮住。两种面板都带圆角：浅色模式采用浮动停靠面板的背景与阴影，深色模式采用与紧凑目录树一致的深背景和柔和白色阴影。560px 这一界限只取决于行宽，因此调整目录树宽度不会让它在两种布局之间切换。在窄于 400px 的行中，或窄于 768px、右侧 Sidebar 以全屏呈现面板的视口中，导航栏铺满标题行下方的整行，不显示分隔条，导航到该预览后会隐藏目录树，让文件显示出来。铺满时，被覆盖的正文及其内嵌框架会隐藏，不能通过键盘进入。若行宽或视口进入此布局时正文持有焦点（包括目录树首次绘制时），焦点移到目录树内，不改变分栏的开关选择。浏览器可能在新宽度报告之前就让被隐藏的正文失焦；除非读者在报告之前移动了键盘焦点或指针，或窗口失去焦点，这一焦点同样移到目录树内。停靠与浮动分栏遵循相同规则；目录树开启时，在每种布局下浮窗的缩放手柄都仍可操作。在预览旁，从这一行内的正文或目录树传到页面 document 的不带修饰键的 Escape，在任何行宽下都会关闭导航栏，并把键盘焦点移到开关上；内嵌框架的 document 持有焦点时，按键不会冒泡到页面 document，因此导航栏保持打开。Escape 在 document 上接收，晚于这一行自己的处理器，因此行内处理器若阻止了默认行为，这次按键就留给它。
+
+预览的 `onOpen` 传入 [`replaceTab: true`](../ui-sidebar-right/README.zh.md#ctxsidebarright)，由右侧 Sidebar 负责原位替换与揭示；原位替换保留分栏的目录树。文件页的 `onOpen` 把文件作为 chip 打开在文件页自己的内容栏中，因此在文件页上选中文件不会离开文件页。目录树持有键盘焦点时，若打开操作在同一分栏内替换或切换 tab，或改变宽布局文件页显示的文件，下次绘制会聚焦当前文件所在行；揭示其他分栏时，发起侧的目录树与焦点保持不变。
+
+新的 `tab.navigation.revision` 只关闭目标预览的目录树，而且仅在它按目标当前宽度铺满内容行时关闭。该规则适用于任何导航来源，包括从浮动预览自己的目录树发起的打开。隐藏的目录树也消费导航，因此手动显示它不会重放旧的关闭操作。普通 tab 切换、浮出或停靠，以及刷新或 undo 恢复的 revision `0` 都不关闭目录树。files face 的消费记录按 tab 生命周期保存；导航订阅在 tab 关闭或插件卸载时释放。文件页始终可见的目录树不因导航而关闭。
+
+树用 `aria-current` 标出当前文件所在行。目录树绘制期间，分栏内尚未定位过的文件会逐层展开其已列出的祖先目录，并把该行滚动到可见区域；保留的某一层正在重新列出时（例如隐藏的目录树重新显示，或收起的目录重新展开），定位会等它列完，再认定其中缺少的名称不存在；分栏记住上次定位的文件，因此同一 tab 重新挂载时既不改变展开状态，也不改变滚动位置。定位期间读者收起某个目录会结束这次定位，分栏把该文件记为已定位。工作区根目录之外的文件或其他 Session 的文件不会被定位；在 Windows 盘符或 UNC 根目录下，判断是否位于根目录内时不区分大小写和斜杠方向，在 POSIX 根目录下区分大小写。在文件页上，当前文件就是内容栏显示的文件，因此切换 chip 会以同样方式定位新显示的文件。
 
 <a id="the-tree"></a>
 ## 树
 
-根是会话的工作目录，读自 `useSessions().byId[sessionId].cwd`。`/` 和 Windows 盘根等文件系统根路径均可作为树的根。每一层以绝对路径为键；子路径是父路径以 `/` 拼上条目名。一层在首次展开时经 `@deepseek-ai/dsh-api-workspace-files` 命名空间的 `remote.workspaceFiles.list(sessionId, absolutePath)` 列出；适配器保留列表的条目与截断标志，丢弃其工作区相对路径。行序为目录优先，其后按自然序、不分大小写的名称排列；dotfiles 与其他条目一样显示。
+根是会话的工作目录，读自 `useSessions().byId[sessionId].cwd`。`/` 和 Windows 盘根等文件系统根路径均可作为树的根。每一层以绝对路径为键；子路径是父路径以 `/` 拼上条目名。一层在首次展开时经 `@deepseek-ai/dsh-api-workspace-files` 命名空间的 `remote.workspaceFiles.list(sessionId, absolutePath)` 列出。各行由[目录树 Factory](#tree-factory) 绘制并排序；`workspace-tree.ts` 传入每个已列出的条目，名字取目录列表中的拼写，类型作为 `meta.kind`，根的键去掉末尾分隔符，并传入已本地化的失败行。Factory 自行从 files locale 读取文案。dotfiles 与其他条目一样显示。
 
 | 条目类型 | 行 |
 |---|---|
 | `directory` | 切换展开与折叠；再次打开时重新列举，并恢复仍存在的已展开后代。折叠期间保留已显示条目的缓存。 |
-| `file` | 调用 `fileOpened`，传入条目的绝对路径、由 `fileAddressFor` 生成的 `dsh-resource://file/session/<sessionId>/<encoded path relative to the root>` 地址与文件名：该文件加入内容栏的 chips 并成为当前显示的文件。行上会标出当前显示的文件，树因此回答了读者所在的位置。 |
+| `file` | 按[导航栏](#the-navigator)所述经容纳它的插件的 `onOpen` 打开 `dsh-resource://file/session/<sessionId>/<encoded path relative to the root>`，地址由 `@deepseek-ai/dsh-util-workspace-path` 的 `fileAddressFor` 从条目的绝对路径与树的根生成：文件页把该文件加入内容栏的 chips 并显示它，预览旁的目录树则在该预览的位置打开它。没有已注册的 tab 类型能打开该地址时（例如未启用 `ui-sidebar-documentpreview`），该行灰显、不可点击并说明原因；一旦有能打开它的类型注册，就变为可点击。 |
 | `other` | 灰显且不可点击，从而完整呈现目录内容。 |
-
-次键点击文件行或目录行会在指针处打开该行的菜单：打开，或按该次点击效果命名的目录展开与收起，然后是复制路径与复制相对路径——该行的绝对路径，以及它相对工作区根的同一条路径——之后是其他插件贡献到 `sidebar.right.tab.files.chip.actions` 的行，chip 的菜单用的是同一个座位，因为两者命名的是同一个文件。再次点击同一行、点击别处、Escape 或选中任一项都会关闭它，树同时最多只有一个行菜单。列表绘制在行之外、落在 document body 上并以点击点为锚，因此树的滚动容器和行都剪不到它，菜单打开时每一行的盒子都保持不变；不带指针位置的点击（键盘上下文菜单键的情况）改以行的盒子为锚。
 
 被端点条目上限截断的层以一条标记收尾；空层如实说明；失败的层按错误码各显示一行（`workspace-file/not-found`、`outside-workspace`、`not-directory`），其他情况显示传输层自己的消息。重新读取就地刷新根与展开中的层，读取期间保留显示条目，不重置整棵树；折叠的层在下次打开时重新拉取。没有工作目录的会话只显示一行说明，而不是树。
 
-状态保存在类型自己的存储里，按 tab id 分桶：`root`、`levels`（每个绝对路径的 loading / ready / failed）、`expanded`、`autoRefresh` 与 `scrollTop`——滚动期间偏移由正文自己记录，卸载时一次性写入。树的层与滚动位置比 body 活得久，工作台重新挂载时按原样绘制。owner 的 `signal` 终结一个桶：中止时忘掉该 tab，其后才结算的列表与卸载时的偏移提交都什么也不写。
+状态保存在绘制之外，以 `useTabInfo().panel` 报告的分栏 id 为键。类型自己的存储按分栏保存导航栏的 `open` 选择与 `width`，以及首次显示后的 `tree`：`root`、`levels`（每个绝对路径的 loading / ready / failed，ready 层重新列出期间标记 `refreshing`）、`expanded` 与 `autoRefresh`。分栏内的每个文件 tab 读取同一份记录，因此切换、打开或关闭 tab 时导航栏重新绘制，已加载的层、展开状态、宽度与滚动位置保持不变；切换 tab 不会重新列目录。隐藏目录树，或只显示不带目录树的 tab，会关闭其目录监听；再次显示时就地重新列出根目录与已展开的目录，期间保留的行照常显示。根目录不是 Session 当前工作目录的树会被替换，其滚动位置与已定位文件随之重置。分栏在显示导航栏、或仍有打开的 tab 最近一次在该分栏绘制导航栏时保留其目录树：移到另一分栏的文件 tab 显示那个分栏的目录树；原位替换的 tab（如选中的文件替换预览）保留它；浮动或停靠 tab 本身从不终结它。最后一个这样的 tab 关闭或在别处绘制导航栏后，分栏的目录树即被忘掉。文件页与每个预览的导航栏在同一 Session 中共用一个 face，并在每个分栏共用一棵工作区目录树；文件页的工作台另按 tab 保存自己的记录，见[工作台](#the-workbench)。
 
-每个打开的 `DirectoryNode` 在 Tab 生命周期内持有自己的目标监听；折叠关闭该节点及其不可见后代。祖先恢复期间的展开状态变化会更新存储和待恢复节点，后代恢复时遵循最新展开偏好。自动刷新默认开启；独立开关暂时隐藏，状态、文案、样式与切换逻辑保留。目录读取期间或收尾时收到的变化仍会留待下一次刷新。
+每个打开的 `DirectoryNode` 在目录树绘制期间持有自己的目标监听；折叠关闭该节点及其不可见后代。祖先恢复期间的展开状态变化会更新存储和待恢复节点，后代恢复时遵循最新展开偏好。自动刷新默认开启；独立开关暂时隐藏，状态、文案、样式与切换逻辑保留。目录读取期间或收尾时收到的变化仍会留待下一次刷新。
+
+文件行提供共享[右键菜单](../ui-context-menu/README.zh.md)的 `file` 操作对象，并携带分栏 id，不会同时触发普通点击导航。文件夹行和根路径使用 `directory` 操作对象，提供本机显示位置和复制路径操作，不会展开目录。在目录树行弹出的菜单上，本包为文件行加入「打开」，效果与点击该行相同；为文件夹行加入按该次点击效果命名的「展开」或「收起」。两者的 order 均为 50，排在 `ui-open-in-app` 以 order 100 贡献的各项之前。随后是 order 150 的「复制相对路径」：它复制该行相对工作区根的路径，成功时提示「已复制」，剪贴板拒绝时显示失败说明。同样的操作对象在别处弹出时（例如根路径）不带这些项。
+
+<a id="tree-factory"></a>
+## 复用目录树 Factory
+
+要绘制工作区列表、变更文件或本地 diff，在模块级声明 `const TREE_OPTIONS = { slots: { accessory: ModuleLevelComponent }, fallback: null }`，再调用 `renderFactorySlot('sidebar.files.tree', input, TREE_OPTIONS)`。保持 options 及其 `slots` 对象稳定；重新创建局部选择会让整棵树随父组件渲染而重画。该 root 作用域 Factory 仅在 files 插件加载时可用；未加载时，`renderFactorySlot` 绘制传入的 `fallback`，省略时不绘制内容。从 `@deepseek-ai/dsh-client-ui-sidebar-files/client` 仅以类型方式导入声明以及 `FileTreeInput`、`TreeEntry`、`TreeEntryMeta`、`TreeEntryKind`、`TreeDirectoryState`；不导出组件值。
+
+`FileTreeInput` 携带 `root`、扁平 `entries`、`expanded`、`onToggle(entry, expanded)` 和 `onOpen(entry)`。可选的 `directories` 按键提供加载、本地化失败和截断状态；`current` 与 `currentRef` 标记并提供当前文件按钮。`canOpen(entry)` 可以拒绝打开文件而不禁用其附件。`rowTriggerProps(entry, kind)` 为文件夹行和可打开的文件行提供右键菜单处理器。Factory 通过 files locale 拥有加载、空目录、截断与不可用文案；调用方负责数据访问、展开、打开、祖先定位和滚动。
+
+`TreeEntry` 为 `{ path, name, meta?: { kind?, hidden?, size? } }`。只有 `/` 分隔层级；父级是最后一个 `/` 前的部分，没有 `/` 时为 `root`。名字保持调用方传入的值；重复路径保留首个条目。根键条目被忽略，包括空根。缺少的中间目录只补一次，显式条目优先。省略 kind 时，路径下有条目则为目录，否则为文件。隐藏行用弱化文字颜色显示，不过滤；大小不显示。只有可见层排序，目录优先，再按名字的自然顺序、不区分大小写排列；各层保留排序缓存，直到名字或目录类型变化。
+
+局部 `accessory` slot 使用 root 作用域，owner props 为 `{ entry: TreeEntry }`；其组件还可使用派生的 `FactoryLocalComponentPropsOf<'sidebar.files.tree', 'accessory'>` 席位。它只收到 `entry` 和 Factory 自己的席位，拿不到调用方的 store 或 inject face。传入模块级组件以保持身份稳定。附件位于主按钮旁，不在其操作或禁用范围内。默认组件不渲染内容。附件包装容器始终存在于 DOM 中；未提供 slot 或其组件返回空内容时，CSS 将其隐藏且不占用行空间。
 
 <a id="the-history-view"></a>
 ## 历史视图
@@ -127,6 +160,6 @@ git 视图与历史视图读取本包 Host 半注册的六条鉴权路由：工�
 
 无。
 
-页面刷新快捷键通过常规目录读取器刷新聚焦的文件树。重新读取控件在悬停和键盘聚焦时显示有效绑定。
+页面刷新快捷键在文件页上、目录树显示期间通过常规目录读取器刷新其树，在预览中重新载入预览。文件页的重新读取控件在悬停和键盘聚焦时显示有效绑定。
 
 </details>
