@@ -54,6 +54,9 @@ class Relationships {
   step: number | null = null
   nextTurn = 1
   nextStep = 1
+  /** End of the last closed step: the position a retraction marker may occupy between steps. */
+  closedTurn: number | null = null
+  closedStep: number | null = null
   provider: SessionFormatJsonValue | undefined
   surface: number[] = []
   protectedHead: number | undefined
@@ -83,9 +86,10 @@ class Relationships {
   }
 
   requireStep(event: SessionFormatEvent, data: SessionFormatJsonObject): void {
-    if (this.turn === null || this.step === null || data['turn'] !== this.turn || data['step'] !== this.step) {
-      throw new SessionFormatError(`${event.type} does not match an open turn and step`)
-    }
+    if (this.turn !== null && this.step !== null && data['turn'] === this.turn && data['step'] === this.step) return
+    if (event.type === 'developer/message' && this.step === null
+      && retractionPosition(data, this.turn ?? this.closedTurn, this.closedStep)) return
+    throw new SessionFormatError(`${event.type} does not match an open turn and step`)
   }
 
   closeTools(type: string): void {
@@ -276,11 +280,13 @@ class Relationships {
         if (this.turn !== null || data['turn'] !== this.nextTurn) throw new SessionFormatError('turn/start does not open the expected turn')
         this.turn = this.nextTurn
         this.nextStep = 1
+        this.closedStep = 0
         this.tools.clear()
         break
       case 'turn/end':
         if (this.turn === null || data['turn'] !== this.turn || this.step !== null) throw new SessionFormatError('turn/end does not match the open turn with no open step')
         this.closeTools(event.type)
+        this.closedTurn = this.turn
         this.turn = null
         this.nextTurn += 1
         break
@@ -291,6 +297,7 @@ class Relationships {
       case 'step/end':
         this.requireStep(event, data)
         this.closeTools(event.type)
+        this.closedStep = this.step
         this.step = null
         this.nextStep += 1
         break
@@ -327,6 +334,20 @@ class Relationships {
       case 'session/end-seed': this.compaction = undefined; break
     }
   }
+}
+
+/**
+ * A conversation retraction appends between steps, so its marker names the last
+ * closed step instead of an open one and carries no content of its own.
+ */
+function retractionPosition(data: SessionFormatJsonObject, turn: number | null, step: number | null): boolean {
+  if (turn === null || step === null || data['turn'] !== turn || data['step'] !== step) return false
+  const message = data['message']
+  if (!isSessionFormatJsonObject(message)) return false
+  const content = message['content']
+  const source = message['source']
+  return Array.isArray(content) && content.length === 0
+    && isSessionFormatJsonObject(source) && source['kind'] === 'conversation-rewind'
 }
 
 function notStartedRepair(

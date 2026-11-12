@@ -237,7 +237,7 @@ System image 接纳要求非空 attachment id、PNG／JPEG／WebP／GIF MIME 类
 |---|---|
 | `turn/start`、`turn/end`、`step/start`、`step/end` | Turn／step 编号有序，开放所有者匹配，turn／step 不重叠，结束边界不遗留已声明或已开始但未解决的工具调用。未完成尾部保持开放。 |
 | `assistant/message`、`tool/call`、追加的 `tool/result` | 匹配开放 step；声明的调用 id 唯一，开始保留 name／arguments，结果结算一个已声明调用。开始之前的结果必须是精确获准的 `TOOL_NOT_STARTED` 修复。工具结果的表面替换要求开放 turn，不重放原始调用生命周期。 |
-| `system/message`、`developer/message`、`assistant/attempt` | 匹配开放 turn 与 step。Request header 和 context 要求开放 turn。 |
+| `system/message`、`developer/message`、`assistant/attempt` | 匹配开放 turn 与 step。会话撤回标记可以改为命名开放或最近关闭 turn 的最后一个已关闭 step。Request header 和 context 要求开放 turn。 |
 | `tool/ptc-dispatch-start`、`tool/ptc-dispatch` | 要求开放 turn、唯一 sub-call 开始与结算、稳定的 root／parent／name／arguments，以及属于同一 root 的嵌套 parent。 |
 | `llm/retry`、`llm/retry-started` | 匹配当前请求 provider 和 turn／step，每条策略链的尝试连续、retry 身份稳定，每次 start 匹配一个先前已调度的尝试。 |
 | `session/title`、`session/title-llm-request` | 引用互异且更早的真人 `user/message` 事件。用户指定标题没有引用；其他标题具有引用。LLM 标题请求带非空引用和一个来源为 `dsh-session-title-llm` 的 user 角色文本消息。 |

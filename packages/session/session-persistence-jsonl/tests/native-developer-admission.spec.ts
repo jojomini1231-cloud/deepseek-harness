@@ -18,7 +18,14 @@ const developer = { type: 'developer/message', surfaceOp: 'append', data: {
 } }
 
 describe.each(modes)('native developer admission ($compression, $access)', ({ compression, access }) => {
-  async function stored(event: object, corruptPrefix = false) {
+  async function stored(event: object, corruptPrefix = false, prefix: readonly object[] = [
+    { type: 'turn/start', data: { turn: 1 } },
+    { type: 'step/start', data: coordinates },
+    { type: 'system/message', surfaceOp: 'append', data: {
+      ...coordinates, message: { id: 'system', role: 'system', source: { kind: 'system-prompt' }, content: [{ type: 'text', text: 'System' }] },
+    } },
+    { type: 'request/header', data: { reason: 'initial', header: { config: { provider: 'test', model: 'test' }, tools: [{ name: 'search', description: 'Historical', parameters: {} }] } } },
+  ]) {
     const root = await mkdtemp(join(tmpdir(), 'dsh-native-developer-'))
     const ctx = new Context()
     onTestFinished(async () => {
@@ -29,12 +36,7 @@ describe.each(modes)('native developer admission ($compression, $access)', ({ co
       }
     })
     const events = [
-      { type: 'turn/start', data: { turn: 1 } },
-      { type: 'step/start', data: coordinates },
-      { type: 'system/message', surfaceOp: 'append', data: {
-        ...coordinates, message: { id: 'system', role: 'system', source: { kind: 'system-prompt' }, content: [{ type: 'text', text: 'System' }] },
-      } },
-      { type: 'request/header', data: { reason: 'initial', header: { config: { provider: 'test', model: 'test' }, tools: [{ name: 'search', description: 'Historical', parameters: {} }] } } },
+      ...prefix,
       event,
     ].map((row, seq) => ({ ...row, seq, time: seq + 1 }))
     const header = { type: 'session', version: SESSION_FORMAT_VERSION, id, createdAt: 1, delegationDepth: 0, isSeeded: false }
@@ -65,6 +67,37 @@ describe.each(modes)('native developer admission ($compression, $access)', ({ co
       ...developer.data.message, content: [{ type: 'tool-removal', toolName: 'old' }, { type: 'tool-addition', toolName: 'search' }],
     } } }
     const { ctx, path, bytes, events } = await stored(event)
+    const handle = await ctx.sessionPersistence.open(id, access)
+    try {
+      expect((await handle.read()).events).toEqual(events)
+    } finally {
+      await handle.close()
+    }
+    expect(await readFile(path)).toEqual(bytes)
+  })
+
+  it('reopens a retraction marker that stands after its target turn closed', async () => {
+    const marker = {
+      type: 'developer/message',
+      surfaceOp: { op: 'replace', startSeq: 3, endSeq: 3 },
+      sourceEventSeqs: [3],
+      data: { turn: 1, step: 1, message: {
+        id: 'rewind', role: 'developer', source: { kind: 'conversation-rewind', targetSeq: 3 }, content: [],
+      } },
+    }
+    const prefix = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'step/start', data: coordinates },
+      { type: 'system/message', surfaceOp: 'append', data: {
+        ...coordinates, message: { id: 'system', role: 'system', source: { kind: 'system-prompt' }, content: [{ type: 'text', text: 'System' }] },
+      } },
+      { type: 'user/message', surfaceOp: 'append', data: {
+        id: 'input', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'input' }],
+      } },
+      { type: 'step/end', data: coordinates },
+      { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } },
+    ]
+    const { ctx, path, bytes, events } = await stored(marker, false, prefix)
     const handle = await ctx.sessionPersistence.open(id, access)
     try {
       expect((await handle.read()).events).toEqual(events)

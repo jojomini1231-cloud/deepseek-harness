@@ -313,7 +313,11 @@ export interface SessionEventMap {
    * project their `content` verbatim; `source` tells them apart.
    */
   'user/message': UserMessage
-  /** An incremental agent session change admitted at the named turn and step. */
+  /**
+   * An incremental agent session change admitted at the named turn and step.
+   * A conversation retraction marker stands between steps and names the last
+   * closed step of the open or most recently closed turn.
+   */
   'developer/message': {
     turn: number
     step: number

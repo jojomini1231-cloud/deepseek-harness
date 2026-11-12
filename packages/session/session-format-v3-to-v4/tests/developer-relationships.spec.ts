@@ -110,3 +110,64 @@ describe('V4 developer relationship admission', () => {
     expect(() => restoreReleasedV4Artifact(input, known)).toThrow()
   })
 })
+
+const user: Row = { type: 'user/message', surfaceOp: 'append', data: {
+  id: 'input', role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'input' }],
+} }
+const closedTurn: Row[] = [
+  { type: 'turn/start', data: { turn: 1 } },
+  { type: 'step/start', data: coordinates },
+  system,
+  user,
+  { type: 'step/end', data: coordinates },
+  { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } },
+]
+/** The marker a retraction appends, replacing the retracted user node at seq 3. */
+const retraction = (changes: Record<string, unknown> = {}): Row => ({ type: 'developer/message',
+  surfaceOp: { op: 'replace', startSeq: 3, endSeq: 3 }, sourceEventSeqs: [3], data: {
+    ...coordinates,
+    message: { id: 'rewind', role: 'developer', source: { kind: 'conversation-rewind', targetSeq: 3 }, content: [] },
+    ...changes,
+  } })
+
+describe('V4 conversation retraction positions', () => {
+  it('admits the marker after the target turn closed and hides the retracted node', () => {
+    const input = restore([...closedTurn, retraction()])
+    const session = Session.fromRestore(SessionId(input.header.id), input.events as SessionEvent[],
+      input.header as unknown as SessionHeader, SessionLogOffset(0), 'detached')
+    expect(session.surface.nodes).toEqual([2, 6])
+    expect(session.deriveMessages().map(message => message.role)).toEqual(['system'])
+  })
+
+  it('admits the marker between a closed step and its turn end', () => {
+    const rows = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'step/start', data: coordinates },
+      system,
+      user,
+      retraction(),
+      { type: 'step/end', data: coordinates },
+      { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } },
+    ] as Row[]
+    expect(() => restore(rows)).not.toThrow()
+  })
+
+  it('still requires an open turn and step for other developer changes', () => {
+    const registry = retraction({ message: { id: 'developer', role: 'developer', source: { kind: 'tool-registry' }, content: [] } })
+    expect(() => restore([...closedTurn, registry])).toThrow(/open turn and step/)
+  })
+
+  it('rejects a marker that names any other step', () => {
+    expect(() => restore([...closedTurn, retraction({ step: 2 })])).toThrow(/open turn and step/)
+  })
+
+  it('rejects a marker that names a turn other than the open or last closed one', () => {
+    const second = [
+      { type: 'turn/start', data: { turn: 2 } },
+      { type: 'step/start', data: { turn: 2, step: 1 } },
+      { type: 'step/end', data: { turn: 2, step: 1 } },
+      { type: 'turn/end', data: { turn: 2, reason: { kind: 'completed' } } },
+    ] as Row[]
+    expect(() => restore([...closedTurn, ...second, retraction()])).toThrow(/open turn and step/)
+  })
+})
