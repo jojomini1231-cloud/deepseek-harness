@@ -18,11 +18,16 @@
   - button "Split" [disabled]
 - text: {{cwd}}/workspace
 - button "Reload"
+- button "Search files" [expanded]
 - text: Project
 - toolbar "File tree actions":
   - button "Expand All"
   - button "Collapse All"
 - complementary "Workspace files":
+  - button "Search settings"
+  - searchbox "Search files"
+  - button "Show hidden entries"
+  - paragraph
   - list:
     - listitem:
       - button "t6-refresh.txt"

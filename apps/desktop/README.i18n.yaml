@@ -15,11 +15,11 @@
   en: d87af0c5eb8fc228
   zh: da193e79c1700872
 /deepseek-harness-desktop/application-overview:
-  en: 96a2486b6a3c83cd
-  zh: cd48a53bfa6bcce4
+  en: c94479f30fd04cc1
+  zh: d24869dc516c614e
 /deepseek-harness-desktop/web-access-for-this-machine-s-browsers:
-  en: ebcc893a7b160fcb
-  zh: c9e46881bfa5fe46
+  en: 88f6842412e3ac68
+  zh: 52fd9764d29c943e
 /deepseek-harness-desktop/terminal-command:
   en: 5f2d25a1d8472647
   zh: 2acb5c5d7d1917e2
@@ -30,8 +30,8 @@
   en: 994b5ecc7d99f09c
   zh: e8523b89b05656b6
 /deepseek-harness-desktop/key-technical-decisions/bundled-workspace-dependencies:
-  en: e5078879791f8317
-  zh: d8b9959df7516b10
+  en: 6a6182c0f24b8dbe
+  zh: 979cbf8d046773c0
 /deepseek-harness-desktop/bundled-command-runtime:
   en: 372297005b57a08b
   zh: 074a635ac17e4362
@@ -57,11 +57,11 @@
   en: ac31ebdd9de54f34
   zh: 921e534d5c4b3a16
 /deepseek-harness-desktop/windows-installer-interface:
-  en: 9b90a2651a6d2b52
-  zh: 86d4d9c4358aad80
+  en: f1302ed4a3ab58bb
+  zh: cb53b9b349815028
 /deepseek-harness-desktop/updates:
-  en: 67bf0a18faa7aa76
-  zh: 782e14ce62bb939f
+  en: 8b0b9efeb83727ef
+  zh: 5ee95de48ceab392
 /deepseek-harness-desktop/updates/local-desktop-settings:
   en: d42347fc3f3dff6a
   zh: 90e1cad1116ea85d

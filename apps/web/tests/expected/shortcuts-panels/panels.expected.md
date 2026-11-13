@@ -21,6 +21,7 @@
   - button "Split" [disabled]
 - text: {{cwd}}/workspace
 - button "Reload"
+- button "Search files" [expanded]
 - paragraph: Choose a file from the tree on the right.
 - separator "Resize the file preview and file tree"
 - text: Project
@@ -28,6 +29,10 @@
   - button "Expand All"
   - button "Collapse All"
 - complementary "Workspace files":
+  - button "Search settings"
+  - searchbox "Search files"
+  - button "Show hidden entries"
+  - paragraph
   - list:
     - listitem: Empty directory
 - toolbar "View containers":

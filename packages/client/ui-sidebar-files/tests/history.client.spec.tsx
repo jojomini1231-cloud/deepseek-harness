@@ -14,6 +14,7 @@ import type { FilesStoreInstance } from '../src/client/store.ts'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import { SESSION } from './mount.client.tsx'
+import { memoryBook } from './search-fixture.client.ts'
 import {
   COMMITS, DETAIL, DIFF, hash, HISTORY_ROOT as ROOT, historyState, PAGE, REFS,
 } from './history-fixtures.client.ts'
@@ -572,7 +573,8 @@ describe('history route validators', () => {
 function bareFace(instance: FilesStoreInstance) {
   const navigation = { getSnapshot: () => ({ address: '', params: undefined, revision: 0 }), subscribe: () => () => {} }
   const canOpen = { getSnapshot: () => () => true, subscribe: () => () => {} }
-  return filesFace(vi.fn() as never, vi.fn() as never, canOpen, () => navigation, new WeakMap())(SESSION, instance, () => () => {})
+  return filesFace(vi.fn() as never, vi.fn() as never, canOpen, () => navigation,
+    vi.fn() as never, memoryBook(), new WeakMap())(SESSION, instance, () => () => {})
 }
 
 describe('face history reads', () => {

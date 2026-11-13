@@ -81,7 +81,7 @@ export function PreviewFrame({
         {useTabInfo !== undefined && <NavigatorToggleSeat useTabInfo={useTabInfo} renderFactorySlot={renderFactorySlot} />}
       </div>
       {findBar}
-      <div className={css.content} data-textpreview-content>
+      <div className={css.content} data-textpreview-content data-files-navigator-row>
         {children}
         {useTabInfo !== undefined && <NavigatorSeat useTabInfo={useTabInfo} renderFactorySlot={renderFactorySlot} />}
       </div>

@@ -394,7 +394,7 @@ type SessionTreeProps = Pick<
   WorkspaceBrowserProps,
   'startSession' | 'open' | 'renderFactorySlot' | 'useContextMenuTarget' | 'useContextMenu'
   | 'insertWorkspaceBefore' | 't' | 'usePanelInfo'
-  | 'useRemoteAccess' | 'useSessionAccess' | 'useWorkspaceAccess'
+  | 'useSessionAccess' | 'useWorkspaceAccess'
 > & PropsRenderSlots<
   | 'sidebar.workspaces.session.row.action'
   | 'sidebar.session.row.trailing'
@@ -456,7 +456,7 @@ function EmptySessions({ rowState, onLeaveArchivedOnly, t }: Pick<SessionTreePro
 function SessionTree({
   list, statuses, startSession, open, workspaces, ungroupedSessionIds,
   rowState, onLeaveArchivedOnly,
-  workspaceReady, animationResetKey, usePanelInfo, useRemoteAccess, useSessionAccess, useWorkspaceAccess,
+  workspaceReady, animationResetKey, usePanelInfo, useSessionAccess, useWorkspaceAccess,
   onSessionRenameRequest,
   renderSlot, renderFactorySlot, useContextMenuTarget, useContextMenu,
   insertWorkspaceBefore,
@@ -698,7 +698,6 @@ function SessionTree({
           newShortcut={shortcuts.find(row => row.id === 'session.new')}
           group={group}
           renderFactorySlot={renderFactorySlot} useContextMenu={useContextMenu} useContextMenuTarget={useContextMenuTarget}
-          useRemoteAccess={useRemoteAccess}
           useWorkspaceAccess={useWorkspaceAccess}
           containsCurrentDescendant={currentAncestors.has(group.key)}
           home={home}
@@ -707,13 +706,9 @@ function SessionTree({
             if (group.expanded) dropWatermarks(key => withinGroup(key, group.key))
             setGroupExpanded(group.key, !group.expanded)
           }}
-          onCreate={() => {
-            // Only real Workspaces reach this branch: the Temporary bucket is
-            // rendered by the section above this tree, not as a group in it.
-            if (group.workspaceId !== undefined) {
-              setGroupExpanded(group.key, true)
-              startSession(group.workspaceId)
-            }
+          onCreate={(workspaceId) => {
+            setGroupExpanded(group.key, true)
+            startSession(workspaceId)
           }}
           drag={workspaceDragProps}
         />
@@ -1067,7 +1062,6 @@ export function WorkspaceBrowser({
   useSectionScroller,
   useSessions,
   useSessionStatus,
-  useRemoteAccess,
   useSessionAccess,
   useWorkspaceAccess,
   useWorkspaces,
@@ -1630,7 +1624,6 @@ export function WorkspaceBrowser({
             : (
               <>
                 <SessionTree
-                  useRemoteAccess={useRemoteAccess}
                   useSessionAccess={useSessionAccess}
                   useWorkspaceAccess={useWorkspaceAccess}
                   usePanelInfo={usePanelInfo}

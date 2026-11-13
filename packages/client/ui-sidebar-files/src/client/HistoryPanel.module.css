@@ -261,17 +261,17 @@
   stroke-opacity: 0.35;
 }
 
-/* Lane hues are categorical: no semantic alias names a lane, so these take the
-   static scale directly, as the trajectory accent does, and mix it for the
-   violet and teal lanes the scale does not hold. Each hue is pulled 30% toward
-   the theme's primary ink, which darkens it on the light theme and lightens it
-   on the dark one, so a thin 1.4px lane keeps above 3:1 against both fills. */
-.lane0 { color: color-mix(in srgb, var(--dsw-static-deepseek-450) 70%, var(--dsw-alias-label-primary)); }
-.lane1 { color: color-mix(in srgb, var(--dsw-static-green-400) 70%, var(--dsw-alias-label-primary)); }
-.lane2 { color: color-mix(in srgb, var(--dsw-static-amber-500) 70%, var(--dsw-alias-label-primary)); }
-.lane3 { color: color-mix(in srgb, var(--dsw-static-red-400) 70%, var(--dsw-alias-label-primary)); }
-.lane4 { color: color-mix(in srgb, color-mix(in srgb, var(--dsw-static-deepseek-450) 52%, var(--dsw-static-red-400)) 70%, var(--dsw-alias-label-primary)); }
-.lane5 { color: color-mix(in srgb, color-mix(in srgb, var(--dsw-static-deepseek-450) 55%, var(--dsw-static-green-400)) 70%, var(--dsw-alias-label-primary)); }
+/* Lane hues are categorical: no alias names a lane, so each takes the nearest
+   semantic alias of its hue, and the teal lane mixes the indigo and green ones.
+   Each hue is pulled 30% toward the theme's primary ink, which darkens it on the
+   light theme and lightens it on the dark one, so a thin 1.4px lane keeps above
+   3:1 against both fills. */
+.lane0 { color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 70%, var(--dsw-alias-label-primary)); }
+.lane1 { color: color-mix(in srgb, var(--dsw-alias-state-success-secondary) 70%, var(--dsw-alias-label-primary)); }
+.lane2 { color: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 70%, var(--dsw-alias-label-primary)); }
+.lane3 { color: color-mix(in srgb, var(--dsw-alias-state-error-secondary) 70%, var(--dsw-alias-label-primary)); }
+.lane4 { color: color-mix(in srgb, var(--dsw-alias-chart-tools) 70%, var(--dsw-alias-label-primary)); }
+.lane5 { color: color-mix(in srgb, color-mix(in srgb, var(--dsw-alias-state-business-primary) 55%, var(--dsw-alias-state-success-secondary)) 70%, var(--dsw-alias-label-primary)); }
 
 .commitMain {
   display: flex;

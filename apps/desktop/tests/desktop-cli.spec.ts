@@ -3,13 +3,10 @@
 import { delimiter, join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
 import { runCli } from '@deepseek-ai/dsh/lib/bin.js'
-import { runDesktopCli } from '../../desktop-host/src/cli.ts'
-import { installOfficeEngineResolution } from '../../desktop-host/src/office-engine.ts'
+import { packagedApplicationPath, runDesktopCli, runtimeArchivePath } from '../../desktop-host/src/cli.ts'
 
 vi.mock('@deepseek-ai/dsh/lib/bin.js', () => ({ runCli: vi.fn() }))
-vi.mock('../../desktop-host/src/office-engine.ts', () => ({ installOfficeEngineResolution: vi.fn() }))
 
-const RUNTIME = join('Application 中文 with spaces', 'resources', 'app.asar', 'dsh')
 const SUPPORT = join('Application 中文 with spaces', 'resources', 'runtime')
 
 /** Run one dispatch as though this process were an Electron Host in Node mode. */
@@ -37,9 +34,8 @@ afterEach(() => {
 it.each(['system-bin', undefined])('dispatches with bundled pnpm when PATH is %s', async (path) => {
   vi.stubEnv('PATH', path)
 
-  await runDesktopCli(RUNTIME, SUPPORT)
+  await runDesktopCli(SUPPORT)
 
-  expect(installOfficeEngineResolution).toHaveBeenCalledExactlyOnceWith(RUNTIME)
   expect(runCli).toHaveBeenCalledExactlyOnceWith(expected({
     DSH_DESKTOP_NODE_EXECUTABLE: process.execPath,
     PATH: `${join(SUPPORT, 'bin')}${delimiter}${path ?? ''}`,
@@ -49,11 +45,25 @@ it.each(['system-bin', undefined])('dispatches with bundled pnpm when PATH is %s
 it('marks Electron Node mode for an Electron Host only', async () => {
   vi.stubEnv('PATH', 'system-bin')
 
-  await asElectronHost(() => runDesktopCli(RUNTIME, SUPPORT))
+  await asElectronHost(() => runDesktopCli(SUPPORT))
 
   expect(runCli).toHaveBeenCalledExactlyOnceWith(expected({
     ELECTRON_RUN_AS_NODE: '1',
     DSH_DESKTOP_NODE_EXECUTABLE: process.execPath,
     PATH: `${join(SUPPORT, 'bin')}${delimiter}system-bin`,
   }))
+})
+
+it('locates the archive of an ASAR-contained runtime and leaves a prepared runtime without one', () => {
+  const resources = join('Application 中文', 'resources')
+  expect(runtimeArchivePath(join(resources, 'app.asar', 'dsh'))).toBe(join(resources, 'app.asar'))
+  expect(runtimeArchivePath(join(resources, 'app.asar.unpacked', 'dsh'))).toBeUndefined()
+  expect(runtimeArchivePath(join(resources, 'dsh'))).toBeUndefined()
+})
+
+it('treats an unpacked application directory of a runtime as packaged', () => {
+  const resources = join('Application 中文', 'resources')
+  expect(packagedApplicationPath(join(resources, 'app', 'dsh'))).toBe(join(resources, 'app'))
+  expect(packagedApplicationPath(join(resources, 'app.asar', 'dsh'))).toBe(join(resources, 'app.asar'))
+  expect(packagedApplicationPath(join(resources, 'dsh'))).toBeUndefined()
 })

@@ -14,6 +14,7 @@
 - button "Edit this message" [disabled]
 - text: Unavailable while the session is running
 - button "Context injection runtime-context"
+- button "Context injection skill-catalog"
 - button "Context injection time-context"
 - button "Think The user wants me to ask them a checkpoint question first, then continue with whatever they interject. Let me do exactly that."
 - status: Deep diving

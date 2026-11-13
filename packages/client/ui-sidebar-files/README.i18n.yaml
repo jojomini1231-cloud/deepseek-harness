@@ -9,26 +9,29 @@
   en: ae5625c23b3a864f
   zh: 20cf48a229e806bf
 /deepseek-ai-dsh-client-ui-sidebar-files/summary:
-  en: 18adb52125087f93
-  zh: 1523bd9905058901
+  en: b6c7df3a4e8fd7ca
+  zh: ab73620b33082673
 /deepseek-ai-dsh-client-ui-sidebar-files/table-of-contents:
-  en: 8330af81c5cdee98
-  zh: 96405de2ac9200a6
+  en: b49bba565d11acdf
+  zh: 297d8b2757530001
 /deepseek-ai-dsh-client-ui-sidebar-files/what-it-registers:
-  en: 1f2fbffef105482a
-  zh: 7dc2d3a763dd37db
+  en: 8f9fa8f31c439130
+  zh: afdc6a976c19ec01
 /deepseek-ai-dsh-client-ui-sidebar-files/the-workbench:
   en: 331c278024bb278e
   zh: f8b2163498ae66ee
 /deepseek-ai-dsh-client-ui-sidebar-files/the-navigator:
-  en: e0ed64690db3fc0d
-  zh: 607e77ab9c23560f
+  en: eebf31434a66cb55
+  zh: ec0c07ca7484340b
 /deepseek-ai-dsh-client-ui-sidebar-files/the-tree:
-  en: 9a9ea347a84a40c3
-  zh: 2cf8816f64e14106
+  en: 6ab62b9b9c075d13
+  zh: aba3adc1bbb59a8c
+/deepseek-ai-dsh-client-ui-sidebar-files/search:
+  en: 275bc2aa20907881
+  zh: 4dac902558cb29f5
 /deepseek-ai-dsh-client-ui-sidebar-files/reusable-tree-factory:
-  en: 09dee1c50e30f7ea
-  zh: f40f8c8fbdddaf0d
+  en: 5d5c6a3f20fbb20b
+  zh: 84ad1dc30b40af69
 /deepseek-ai-dsh-client-ui-sidebar-files/the-history-view:
   en: f5eb4c350e16a5fb
   zh: 6fce1756ea8254ae
@@ -36,11 +39,11 @@
   en: 236ed63563721cdf
   zh: a9890a1b7774c275
 /deepseek-ai-dsh-client-ui-sidebar-files/model-experience/kv-cache-effect:
-  en: 195a527debeefade
-  zh: 4ed9c697da44f075
+  en: ef1ce1ef176f95a7
+  zh: 326bb0f203da3b0c
 /deepseek-ai-dsh-client-ui-sidebar-files/known-limitations-and-deferred-work:
-  en: 64a0bcb78d17c890
-  zh: 59250e28f0bb1818
+  en: 3b150da9a9998e27
+  zh: 145b836ee7e852bf
 /deepseek-ai-dsh-client-ui-sidebar-files/known-limitations-and-deferred-work/dev-note:
   en: 1ec99e9fb6b4c948
   zh: c4f7883934307c3c

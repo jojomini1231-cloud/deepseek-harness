@@ -1,5 +1,6 @@
 - text: {{cwd}}/keyboard-project
 - button "Reload"
+- button "Search files"
 - button "Open in Finder"
 - button "More ways to open"
 - paragraph: Choose a file from the tree on the right.
@@ -9,6 +10,7 @@
   - button "Expand All"
   - button "Collapse All"
 - complementary "Workspace files":
+  - paragraph
   - list:
     - listitem: Empty directory
 - toolbar "View containers":

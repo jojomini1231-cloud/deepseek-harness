@@ -13,6 +13,10 @@
  * `sidebar.right.tab.files.preview` seat, so this package owns no document
  * format.
  *
+ * The header spans the page: the workspace root's path, the tree's reload, the
+ * search-bar toggle, and the directory actions. Picking a file opens a chip in
+ * the content column rather than leaving the page.
+ *
  * The body owns one lifetime per open chip: the workbench record (chips,
  * ratio, views) belongs to the tab, while each chip's preview state belongs to
  * a signal the face composes from the tab's and the chip's own controller, so
@@ -22,7 +26,8 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import {
   IconChevronLeftOutlineRegular, IconChevronsInwardOutlineRegular, IconChevronsUpDownOutlineRegular,
-  IconPauseOutlineRegular, IconPlayOutlineRegular, IconRefreshOutlineRegular, PathLabel, Tooltip,
+  IconPauseOutlineRegular, IconPlayOutlineRegular, IconRefreshOutlineRegular, IconSearchOutlineRegular, PathLabel,
+  Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {} from '@deepseek-ai/dsh-client-ui-context-menu/client'
 import type {
@@ -60,10 +65,14 @@ const GIT_SILENT_REFRESH_MS = 3_000
 /** Milliseconds between the history view's quiet repository reads. */
 const HISTORY_SILENT_REFRESH_MS = 3_000
 
-/** The files workbench: the workspace root and whatever the reader has open under it. */
+/**
+ * The files workbench: the workspace root and whatever the reader has open under it.
+ * @param props - composed slot props.
+ * @returns the header above the rail and its views, or the workspace line.
+ */
 export function FilesBody({
   useTabInfo, sessionId, useSessions, useStore, actions, renderSlot, renderFactorySlot, useContextMenu,
-  start, refresh, setAutoRefresh, expandAll, collapseAll, chipSignal, chipsClosed,
+  start, refresh, focus, placeBeside, setAutoRefresh, expandAll, collapseAll, chipSignal, chipsClosed,
   gitStatus, gitDiff, historyRefs, history: readHistory, commit, commitDiff, t,
 }: FilesBodyProps): ReactNode {
   const { tab, panel: pane, sidebar } = useTabInfo()
@@ -78,6 +87,8 @@ export function FilesBody({
     const tree = store.byPane[paneId]?.tree
     return tree?.root === cwd ? tree?.autoRefresh : undefined
   })
+  const searchBarOpen = useStore(store => store.byPane[paneId]?.searchBarOpen) === true
+  useEffect(() => cwd === undefined ? undefined : placeBeside(tab.id), [cwd, placeBeside, tab.id])
   // The workbench's own measured width decides every container's one-column
   // fallback, not a window media query: the Sidebar is resizable.
   const { setRoot: setContainerHost, narrow } = useNarrowLayout()
@@ -640,7 +651,7 @@ export function FilesBody({
     return (
       <>
         {treeHeader}
-        <div className={css.content} data-files-content>
+        <div className={css.content} data-files-content data-files-navigator-row>
           {renderFactorySlot('sidebar.files.navigator', { useTabInfo, page: true, onOpen, current: activeAddress })}
         </div>
       </>
@@ -717,6 +728,23 @@ export function FilesBody({
             onClick={reload}
           >
             <IconRefreshOutlineRegular />
+          </button>
+        </Tooltip>
+        <Tooltip label={t('search.placeholder')} side="bottom" delayMs={500}>
+          <button
+            type="button"
+            className={css.tool}
+            aria-label={t('search.placeholder')}
+            aria-expanded={searchBarOpen}
+            data-files-search-toggle
+            onClick={(event) => {
+              if (searchBarOpen) {
+                event.currentTarget.focus()
+                actions.searchBarShown(paneId, false)
+              } else focus(paneId)
+            }}
+          >
+            <IconSearchOutlineRegular />
           </button>
         </Tooltip>
         {renderSlot('sidebar.right.tab.files.actions', {

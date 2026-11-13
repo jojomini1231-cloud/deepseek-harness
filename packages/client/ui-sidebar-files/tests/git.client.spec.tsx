@@ -13,6 +13,7 @@ import { en, zh } from '../src/client/locales.ts'
 import { createFilesStore } from '../src/client/store.ts'
 import type { GitTabState } from '../src/client/store.ts'
 import { mountBody, ROOT, SESSION, TAB } from './mount.client.tsx'
+import { memoryBook } from './search-fixture.client.ts'
 
 afterEach(() => {
   cleanup()
@@ -598,7 +599,8 @@ describe('face git reads', () => {
     const instance = createFilesStore().create()
     const navigation = { getSnapshot: () => ({ address: '', params: undefined, revision: 0 }), subscribe: () => () => {} }
     const canOpen = { getSnapshot: () => () => true, subscribe: () => () => {} }
-    return filesFace(vi.fn() as never, vi.fn() as never, canOpen, () => navigation, new WeakMap())(SESSION, instance, () => () => {})
+    return filesFace(vi.fn() as never, vi.fn() as never, canOpen, () => navigation,
+      vi.fn() as never, memoryBook(), new WeakMap())(SESSION, instance, () => () => {})
   }
 
   it('returns the Host answers it validates with their read generation', async () => {

@@ -29,6 +29,7 @@ import { FilesBody } from '../src/client/FilesBody.tsx'
 import type { FilesBodyProps } from '../src/client/FilesBody.tsx'
 import { NavigatorToggle } from '../src/client/NavigatorToggle.tsx'
 import { zh } from '../src/client/locales.ts'
+import type { WorkspaceSearchPreferenceBook } from '../src/client/search-preferences.ts'
 import { createFilesStore } from '../src/client/store.ts'
 import type { FilesStoreInstance } from '../src/client/store.ts'
 import type {
@@ -37,6 +38,7 @@ import type {
 } from '@deepseek-ai/dsh-workspace-changes/types'
 import { scriptedList } from './scripted-list.client.ts'
 import type { ScriptedList } from './scripted-list.client.ts'
+import { memoryBook, scriptedSearch, type ScriptedSearch } from './search-fixture.client.ts'
 
 export const SESSION = 's-test' as SessionId
 export const ROOT = '/work/app'
@@ -95,6 +97,12 @@ export interface Mounted {
   readonly view: RenderResult
   readonly instance: FilesStoreInstance
   readonly script: ScriptedList
+  /** The search the face calls; it matches nothing until a spec gives it matches. */
+  readonly search: ScriptedSearch['search']
+  /** That search's script: the searches it started, and how it answers later ones. */
+  readonly searches: ScriptedSearch
+  /** The search preferences of every workspace, which another mount may share. */
+  readonly book: WorkspaceSearchPreferenceBook
   readonly face: FilesInjected
   /** The tree rows' recorded menu arms, as the plugin's menu contributions read them. */
   readonly rows: TreeRowMenus
@@ -141,9 +149,17 @@ export interface Mounted {
 }
 
 /** One store instance, one face, one owner share. */
-function harness(placement: Placement, controller: AbortController, git: MountedGit, history: MountedHistory) {
+function harness(
+  placement: Placement,
+  controller: AbortController,
+  git: MountedGit,
+  history: MountedHistory,
+  book: WorkspaceSearchPreferenceBook,
+) {
   const instance = createFilesStore().create()
   const script = scriptedList()
+  const searches = scriptedSearch()
+  const search = searches.search
   // Whether some tab type opens files: one predicate per answer, as registrations change it.
   const listeners = new Set<() => void>()
   let check = (_address: string): boolean => true
@@ -164,7 +180,7 @@ function harness(placement: Placement, controller: AbortController, git: Mounted
   const placed = new Map<TabId, number>()
   const navigation = createSnapshotStore({ address: placement.contentId, params: undefined, revision: 0 })
   const rows: TreeRowMenus = new WeakMap()
-  const real = filesFace(script.list, script.watch, canOpen, () => navigation, rows)(SESSION, instance, (tabId) => {
+  const real = filesFace(script.list, script.watch, canOpen, () => navigation, search, book, rows)(SESSION, instance, (tabId) => {
     placed.set(tabId, (placed.get(tabId) ?? 0) + 1)
     return () => { placed.set(tabId, placed.get(tabId)! - 1) }
   })
@@ -241,10 +257,14 @@ function harness(placement: Placement, controller: AbortController, git: Mounted
     },
     useCanOpen: <S,>(sel: (check: (address: string) => boolean) => S) =>
       sel(useSyncExternalStore(listener => hooks.canOpen.subscribe(listener), () => hooks.canOpen.getSnapshot())),
+    useSearchPreferences: (cwd: string) => {
+      const source = keyedHooks.searchPreferences(cwd)
+      return useSyncExternalStore(listener => source.subscribe(listener), () => source.getSnapshot())
+    },
     t,
   }
   return {
-    instance, script, face, rows, controller, viewers, tabActions, onOpen, beside, shared, renderSlot,
+    instance, script, search, searches, book, face, rows, controller, viewers, tabActions, onOpen, beside, shared, renderSlot,
     gitStatus, gitDiff, historyRefs, historyRead, commit, commitDiff,
   }
 }
@@ -360,6 +380,7 @@ function bodyProps(shared: object): FilesBodyProps {
  * @param recordObservers - capture navigator measurement notifications.
  * @param git - the working-tree reads' scripted answers.
  * @param history - the history reads' scripted answers.
+ * @param book - the search preferences, shared with another mount when given.
  * @returns the mounted hands.
  */
 function mount(
@@ -368,10 +389,11 @@ function mount(
   recordObservers = false,
   git: MountedGit = {},
   history: MountedHistory = {},
+  book: WorkspaceSearchPreferenceBook = memoryBook(),
 ): Mounted {
   const controller = new AbortController()
   const placement: Placement = { ...given, tabId: TAB, signal: controller.signal }
-  const { shared, historyRead, ...hands } = harness(placement, controller, git, history)
+  const { shared, historyRead, ...hands } = harness(placement, controller, git, history, book)
   const { row, viewport } = measureRows(recordObservers)
   const element = (): ReactNode => <div data-test-row>{draw(shared)}</div>
   const view = render(element())
@@ -412,9 +434,15 @@ export function mountBody(
  * @param contentId - the previewed file's address.
  * @param placement - the pane's presentation.
  * @param cwd - the session's working directory; `null` for a session without one.
+ * @param book - the search preferences, shared with another mount when given.
  * @returns the mounted hands.
  */
-export function mountNavigator(contentId: string, placement: Partial<Placement> = {}, cwd: string | null = ROOT): Mounted {
+export function mountNavigator(
+  contentId: string,
+  placement: Partial<Placement> = {},
+  cwd: string | null = ROOT,
+  book?: WorkspaceSearchPreferenceBook,
+): Mounted {
   return mount({ contentId, ...placement, cwd }, shared => (
     <>
       <NavigatorToggle {...factoryProps(shared)} />
@@ -423,5 +451,5 @@ export function mountNavigator(contentId: string, placement: Partial<Placement> 
         <FileNavigator {...factoryProps(shared)} page={false} />
       </div>
     </>
-  ), true)
+  ), true, {}, {}, book)
 }
