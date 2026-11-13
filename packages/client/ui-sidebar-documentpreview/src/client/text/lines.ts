@@ -3,15 +3,9 @@ import clsx from 'clsx'
 import type { DocumentTextPage } from '../document/contract.ts'
 import type { TextPage } from '../store.ts'
 import css from '../TextPreview.module.css'
+import { lineElement } from '../source-lines.ts'
 
-/**
- * Split a loaded page into its source lines.
- * @param page - source page.
- * @returns its lines, preserving one empty line but excluding a zero-line page.
- */
-export function linesOf(page: TextPage): string[] {
-  return page.lines === 0 ? [] : page.text.split('\n')
-}
+export { linesOf } from '../source-lines.ts'
 
 /** Loaded source page with its 1-based start position. */
 export type LoadedPage = DocumentTextPage
@@ -44,11 +38,8 @@ export function lastLineLoaded(pages: readonly LoadedPage[]): number {
  * @returns The revealed line element, or undefined when the current renderer does not expose that line.
  */
 export function scrollToLine(body: HTMLElement, line: number): HTMLElement | undefined {
-  const innerCode = body.hasAttribute('data-code-block-content')
-  const plain = body.querySelector(`[data-textpreview-line="${line}"]`)
-  const code = innerCode ? body.querySelectorAll('pre .line').item(line - 1) : null
-  const row = plain ?? code
-  if (!(row instanceof HTMLElement)) return undefined
+  const row = lineElement(body, line)
+  if (row === undefined) return undefined
   body.scrollTop = Math.max(0, row.offsetTop)
   return row
 }

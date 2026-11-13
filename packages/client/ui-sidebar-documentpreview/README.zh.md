@@ -20,6 +20,7 @@ kind: "package-reference"
 - [Excel 预览](#excel-preview)
 - [Office 预览](#office-preview)
 - [导航](#navigation)
+- [内容搜索](#content-search)
 - [模型体验](#model-experience)
 - [已知限制与延期工作](#known-limitations-and-deferred-work)
 - [开发备注](#dev-note)
@@ -39,7 +40,7 @@ kind: "package-reference"
 - **可复用的预览** —— `ctx.slots.registerFactory({ name: 'sidebar.document.preview', scope: 'session', ... })` 声明四个文档 slot，并渲染一个文件。`text` tab 正文为自身地址渲染它。对于[文件工作台](../ui-sidebar-files/README.zh.md#the-workbench)，本包填充单项 slot `sidebar.right.tab.files.preview`，工作台的内容栏为某个 chip 显示的文件渲染该 slot，填充组件以该 slot 的 `{ address, viewKey, navigation, signal, paneId }` 渲染该 Factory，且不传 `useTabInfo`。它的输入是 `{ address, viewKey, navigation, signal, bindRefresh?, refreshShortcut?, paneId?, useTabInfo? }`：地址与视图生命周期归宿主所有，读取、渲染器选择、工具栏与各 slot 归 Factory 所有。`viewKey` 为渲染器状态分桶，因此两个宿主看同一个文件（或一个宿主看两个文件）时，滚动、缩放、换行与查看器选择各自独立。
 - **类型** —— `ctx.sidebarRightTabs.register(...)`，id 为 `@deepseek-ai/dsh-client-ui-sidebar-documentpreview`（这个实现在 tab 系统中的身份，也是其正文注册所用的键），kind `text`，匹配完整文件资源地址的 pattern，档位 `fallback`。`canOpen` 只接受 Session 地址，其中路径可为相对或绝对路径；不认领裸 `absolute` 地址。在 `extension` 或 `builtin` 档以更窄 pattern（比如 `*.png`）注册的类型接走那些地址；其他受支持文件落到这里。整个地址就是内容身份，所以不同目录下同名的两个文件、或同一路径在两个会话之下，是两个 tab；解码后的 basename 是 tab 标题，keyed slot `sidebar.right.pane.tab.title` 会在标题前放置按扩展名选择的 `FileTypeIcon`。
 - **正文** —— keyed slot `sidebar.right.pane.tab`，键为类型的 id。固定头部在可用时显示 Host 的绝对路径，否则显示请求路径；共享的 [`PathLabel`](../ui-primitives/README.zh.md#component-catalog) 弱化目录颜色，以左侧渐隐保留被裁剪路径的尾部字符，并在悬停时展示完整值。有多个受支持的渲染器时才显示下拉菜单。仅文本兼容的源文件提供纯文本选项；只有一个渲染器时不显示查看器控件。已知的二进制容器后缀没有注册渲染器时，在路径头部下方显示文件类型图标和不支持预览的说明，并且不会发起读取。两个 Session 作用域的 list 子 slot 在文件元数据报出 Host 路径后把当前文件交给其他插件，owner prop 为 `absolutePath`：`sidebar.right.tab.document.actions` 在每个显示头部的状态里渲染在头部自有控件之后、导航栏开关之前，位置在各状态间相同，因此状态切换时不会重新挂载；`sidebar.right.tab.document.unpreviewable` 渲染在不支持预览的空态里，以及可读但本预览无法渲染的文件（`not-text`、`too-large`）的空态里，占据原本放重试的位置；载体或未分类的读取失败仍保留重试，不存在或非普通文件的路径只给说明。两者已发布的占位者都是 [`ui-open-in-app`](../ui-open-in-app/README.zh.md)。正文把所在窗格与自己的 `useTabInfo` 钩子交给预览，预览因此渲染 [`ui-sidebar-files`](../ui-sidebar-files/README.zh.md#the-navigator) 的 Session 作用域 Factory：`sidebar.files.navigator` 位于内容行的文档正文之后，传入 `{ useTabInfo, page: false, onOpen }`，其中 `onOpen(address)` 调用 `tab.actions.openResource(address, { replaceTab: true })`；`sidebar.files.navigator.toggle` 位于头部末端，传入 `{ useTabInfo }`。两者在停靠与浮动分栏中从加载到完成保持挂载；未注册的 Factory 不绘制内容。导航栏在内容行的定位框与层叠上下文内决定宽度，让正文变窄或覆盖正文，不遮挡浮窗缩放手柄。自行处理 Escape 的渲染器浮层需调用 `preventDefault()`，避免同时关闭导航栏。仅当所选渲染器声明 `wrap: true` 时显示换行开关；图标表示点击后切换到的模式，该偏好按视图保存，初始开启。重新载入仍在此头部，不放入 Sidebar 的 tab 条。自动刷新默认开启；独立开关暂时隐藏，状态、文案、样式与切换逻辑保留。正文贴合格的每条边，各渲染器自行提供内容留白，并可拥有内部滚动区。这与文件树右侧预留 2px 滚动条间距的布局有意不同：Preview 使用格的完整宽度，使贴边 HTML 与代码滚动区终止于格的边缘。
-- **共享加载与视图状态**，会话作用域、按视图键分桶。store 持有累计页或完整字节、读取与观察版本、待处理 Resource 变化、自动刷新状态、加载/失败状态、渲染器选择、滚动位置、换行和已响应的导航 revision。普通 inject face 调用 Remote 读取，并经声明的 store action 写入。重新载入和加载模式变化会淘汰旧请求；视图的中止信号清理其状态。
+- **共享加载与视图状态**，会话作用域、按视图键分桶。store 持有累计页或完整字节、读取与观察版本、待处理 Resource 变化、自动刷新状态、加载/失败状态、渲染器选择、滚动位置、换行、已响应的导航 revision，以及内容搜索的打开状态、查询与当前匹配。普通 inject face 调用 Remote 读取，并经声明的 store action 写入。重新载入和加载模式变化会淘汰旧请求；视图的中止信号清理其状态。
 
 文档实现在 `ctx.documentPreviews.register({ id, extensions, binaryExtensions?, priority, title, loading, wrap?, sourceLines? })` 注册元数据，并以相同 `id` 向 keyed、Session 作用域的子 slot `sidebar.right.tab.document` 注册正文。`binaryExtensions` 列出 `extensions` 中不可按文本阅读的后缀，这些后缀不提供纯文本选项。`sourceLines` 声明 `text-pages` 正文为[导航](#navigation)提供源码行锚点。两处注册都由 effect 持有，通过 `ctx.slots.inject` 等待子 slot。正文接收 `resourceAddress`、`content`、`wrap`、`scrollportRef`、`addResource`、`setResources`、框架绑定的 `useDocumentView` 读取器（其 `viewKey`、`navigation` 与 `signal`），以及标准的 `useResource` 钩子。依赖成员由 tab 持有的 `ResourceGroup` 管理；替换依赖始终保留根 Resource。内部滚动元素挂载 `scrollportRef`；卸载时恢复共享正文的滚动职责。注册表保留所有匹配备选：`extension`（默认）优先于 `builtin`，随后按更长的后缀、再按注册顺序排列。所选实现仍可用时，下拉选择保持不变。HTML、SVG 和未匹配的扩展名保留纯文本回退，与加载方式无关。
 
@@ -135,6 +136,15 @@ Office Remote 通过 Connection 的 multipart 二进制传输返回原生 `Uint8
 `ctx.sidebarRight.openResource(address, { params: { line } })` 通过 `file` 参数携带 1 起算的源码行号。在 `text-pages` 模式下，owner 顺序加载到该行或 EOF。纯文本与代码渲染器声明 `sourceLines`；Markdown 不声明。未声明 `sourceLines` 的渲染器直接响应导航、不移动正文，之后切换到纯文本或代码也不会重放。`sourceLines` 渲染器尚未画出该行时，导航保持待处理。代码导航直接滚动内部源码视口。落定的行显示一条高亮带，停留 0.6 秒后在 1.4 秒内渐隐；切换换行或调整预览尺寸会提前移除它；重新挂载的 tab 恢复滚动位置时不显示高亮带。字节模式渲染器不消费源码行导航。每个完成的导航 revision 只响应一次。不带 `revealIfOpened: false` 打开同一文件时聚焦已有 tab，并送达新 revision。
 
 文档路径标签提供文件[右键菜单](../ui-context-menu/README.zh.md)，保留选中行号；宿主指明窗格时也保留该窗格。
+
+<a id="content-search"></a>
+## 内容搜索
+
+渲染器声明了 `sourceLines` 的预览（纯文本与代码）在工具栏提供"在文档中查找"。查找栏直接打开在头部之下，获得焦点，按 Escape 关闭且不会同时关闭文档旁的导航栏。计数器按已加载源码显示 `当前/总数`；当前已加载页不含该查询时显示"无结果"，此时 owner 继续顺序读取，直到出现匹配或文件结束 —— 也就是读者滚动到底会取到的那些页。
+
+匹配是查询在已加载源码中的出现位置，忽略大小写，且不与自己重叠。当前匹配通过与[导航](#navigation)相同的行偏移滚入视图。匹配、绘制与定位都针对绘出的文档而非渲染器自己的模型，因此会重排源码的正文（Markdown，未声明 `sourceLines`）不提供搜索：它没有可定位的行。绘制使用 CSS Custom Highlight API，不改写任何节点，因此增量语法高亮与渲染器自身的装饰都能在搜索期间保留；没有该 API 的引擎仍可计数与跳转，只是不绘制。两个注册名 `dsw-document-find` 与 `dsw-document-find-active` 由 `FindBar.module.css` 通过 `:global(::highlight(…))` 设置样式，从而不进入 CSS Modules 的哈希。
+
+打开状态、查询与当前序号保存在该视图的 store 桶里，正文重新挂载后仍停在原处；关闭查找栏会清空查询与序号，因此重新打开的搜索从空白开始。
 
 <a id="model-experience"></a>
 ## 模型体验

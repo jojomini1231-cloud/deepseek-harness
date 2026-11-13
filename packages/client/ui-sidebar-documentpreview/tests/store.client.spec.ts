@@ -77,6 +77,25 @@ describe('text store', () => {
     })
   })
 
+  it('opens a content search from a blank query, and closes it without keeping either', () => {
+    const instance = createTextStore().create()
+    instance.actions.findOpened(TAB_1, true)
+    expect(instance.getSnapshot().byView[TAB_1]).toMatchObject({ findOpen: true, findQuery: '', findActive: 0 })
+    instance.actions.findQueryChanged(TAB_1, 'needle')
+    instance.actions.findMoved(TAB_1, 4)
+    expect(instance.getSnapshot().byView[TAB_1]).toMatchObject({ findQuery: 'needle', findActive: 4 })
+    instance.actions.findOpened(TAB_1, false)
+    expect(instance.getSnapshot().byView[TAB_1]).toMatchObject({ findOpen: false, findQuery: '', findActive: 0 })
+  })
+
+  it('searches from the first match whenever the query changes', () => {
+    const instance = createTextStore().create()
+    instance.actions.findQueryChanged(TAB_1, 'a')
+    instance.actions.findMoved(TAB_1, 2)
+    instance.actions.findQueryChanged(TAB_1, 'ab')
+    expect(instance.getSnapshot().byView[TAB_1]?.findActive).toBe(0)
+  })
+
   it('forgets one tab and keeps the rest', () => {
     const instance = createTextStore().create()
     instance.actions.toggledWrap(TAB_1)

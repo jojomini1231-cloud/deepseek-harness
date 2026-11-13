@@ -1028,6 +1028,108 @@ describe('web e2e: shipped right Sidebar', () => {
       }
     }, 120_000)
 
+    it('finds text in the open document and keeps the navigator beside it', async () => {
+      onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-right-find'))
+      const column = await resetSidebar(page)
+      const panel = column.locator('[data-sidebar-right-open]')
+      await proseChip(page).click()
+      await column.locator('[data-textpreview-state="text"]').waitFor({ timeout: 15_000 })
+      await expect.poll(async () => await column.locator('[data-textpreview-line]').count()).toBeGreaterThan(1)
+      // The navigator beside the document is a toggle, and it starts closed on a preview.
+      const navigatorToggle = column.locator('[data-files-navigator-toggle]')
+      expect(await navigatorToggle.getAttribute('aria-expanded')).toBe('false')
+      await navigatorToggle.click()
+      await expect.poll(async () => await column.locator('[data-files-navigator]').count()).toBe(1)
+
+      const tool = column.locator('[data-textpreview-tool="find"]')
+      const bar = column.locator('[data-textpreview-find]')
+      const field = bar.locator('input')
+      const count = bar.locator('[data-textpreview-find-count]')
+      expect(await tool.getAttribute('aria-expanded')).toBe('false')
+      expect(await bar.count()).toBe(0)
+      await tool.click()
+      await expect.poll(async () => await bar.count()).toBe(1)
+      expect(await tool.getAttribute('aria-expanded')).toBe('true')
+      // The field takes focus, so the reader types without reaching for the pointer.
+      expect(await field.evaluate(node => node === document.activeElement)).toBe(true)
+      expect(await count.innerText()).toBe('')
+      // The bar sits between the header and the document, not inside the scroller.
+      expect(await bar.evaluate(node => node.nextElementSibling?.hasAttribute('data-textpreview-content') ?? false)).toBe(true)
+
+      // The counter describes the loaded source, so the expected number comes
+      // from the drawn lines rather than from a guess about the seed.
+      const occurrences = await column.locator('[data-textpreview-line]').evaluateAll((rows) => {
+        let total = 0
+        for (const row of rows) {
+          const text = (row.textContent ?? '').toLowerCase()
+          for (let at = text.indexOf('e'); at !== -1; at = text.indexOf('e', at + 1)) total += 1
+        }
+        return total
+      })
+      expect(occurrences).toBeGreaterThan(1)
+      await field.fill('e')
+      await expect.poll(async () => await count.innerText()).toBe(`1 of ${occurrences}`)
+      // The painted ranges are read back through the text they cover, which is
+      // what the reader sees highlighted.
+      const painted = (): Promise<{ all: number; active: string[] }> => page.evaluate(() => {
+        const covered = (name: string): string[] => {
+          const set = CSS.highlights.get(name)
+          if (set === undefined) return []
+          return [...set].map(range => (range.startContainer.textContent ?? '')
+            .slice(range.startOffset, range.endOffset))
+        }
+        return { all: covered('dsw-document-find').length, active: covered('dsw-document-find-active') }
+      })
+      expect(await painted()).toEqual({ all: occurrences, active: ['e'] })
+
+      // Stepping wraps at both ends, and Enter steps from the field.
+      const next = bar.locator('[data-textpreview-find-step="next"]')
+      const previous = bar.locator('[data-textpreview-find-step="previous"]')
+      await next.click()
+      await expect.poll(async () => await count.innerText()).toBe(`2 of ${occurrences}`)
+      await previous.click()
+      await expect.poll(async () => await count.innerText()).toBe(`1 of ${occurrences}`)
+      await previous.click()
+      await expect.poll(async () => await count.innerText()).toBe(`${occurrences} of ${occurrences}`)
+      await next.click()
+      await expect.poll(async () => await count.innerText()).toBe(`1 of ${occurrences}`)
+      await field.press('Enter')
+      await expect.poll(async () => await count.innerText()).toBe(`2 of ${occurrences}`)
+      await field.press('Shift+Enter')
+      await expect.poll(async () => await count.innerText()).toBe(`1 of ${occurrences}`)
+      expect((await painted()).active).toEqual(['e'])
+
+      // A query the file does not hold says so, and offers nowhere to step.
+      await field.fill('nothing here at all')
+      await expect.poll(async () => await count.innerText()).toBe('No results')
+      expect(await next.isDisabled()).toBe(true)
+      expect(await previous.isDisabled()).toBe(true)
+      // The paint is gone rather than stale.
+      expect((await painted()).all).toBe(0)
+
+      // Escape closes the bar and leaves the panel and its navigator alone.
+      await field.press('Escape')
+      await expect.poll(async () => await bar.count()).toBe(0)
+      expect(await column.locator('[data-files-navigator]').count()).toBe(1)
+      expect(await panel.count()).toBe(1)
+      // Focus returns to the control that opened the bar.
+      expect(await tool.evaluate(node => node === document.activeElement)).toBe(true)
+      expect(await page.evaluate(() => ['dsw-document-find', 'dsw-document-find-active']
+        .some(name => CSS.highlights.get(name) !== undefined))).toBe(false)
+
+      // Reopening starts blank, and searching again finds the same matches.
+      await tool.click()
+      await expect.poll(async () => await field.inputValue()).toBe('')
+      expect(await count.innerText()).toBe('')
+      await field.fill('e')
+      await expect.poll(async () => await count.innerText()).toBe(`1 of ${occurrences}`)
+      await shot(page, 'find-in-document')
+      await field.press('Escape')
+
+      expect(tripwire.pageErrors).toEqual([])
+      expect(tripwire.warnings).toEqual([])
+    }, 120_000)
+
     it('§9.3/§9.4 runs the whole pointer chain in a real browser', async () => {
       onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-right-gestures'))
       const column = await resetSidebar(page)

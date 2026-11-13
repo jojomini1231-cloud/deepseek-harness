@@ -23,10 +23,12 @@ import clsx from 'clsx'
 import type { FactoryComponentPropsOf } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   FileTypeIcon, IconNowrapFillRegular, IconPauseOutlineRegular, IconPlayOutlineRegular,
-  IconRefreshOutlineRegular, IconWrapFillRegular, Menu, Tooltip, classifyFileType,
+  IconRefreshOutlineRegular, IconSearchOutlineRegular, IconWrapFillRegular, Menu, Tooltip, classifyFileType,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { pathPartsOf } from '@deepseek-ai/dsh-util-workspace-path'
 import { emptyFailureRecourse, failureLine } from './failure-line.ts'
+import { FindBar } from './FindBar.tsx'
+import { clearFind, currentMatch, findInPages, paintFind, revealMatch, steppedMatch } from './find.ts'
 import { LoadingIndicator } from './LoadingIndicator.tsx'
 import { PreviewFrame } from './PreviewFrame.tsx'
 import { hostFileOf } from './rpc.ts'
@@ -88,6 +90,8 @@ export function DocumentPreview({
   // The view whose offset the scrollport last showed; another view restores its own offset exactly.
   const restoredViewRef = useRef<string | undefined>(undefined)
   const [menuOpen, setMenuOpen] = useState(false)
+  const findInputRef = useRef<HTMLInputElement | null>(null)
+  const findButtonRef = useRef<HTMLButtonElement | null>(null)
   const absolutePath = meta.value?.absolutePath ?? current?.complete?.absolutePath
   const displayPath = absolutePath ?? file.path
   // Contributions that hand the file to the Host wait for its Host path.
@@ -99,6 +103,19 @@ export function DocumentPreview({
   const loaded = useMemo(() => loadedPages(pages ?? {}), [pages])
   const loadedThrough = lastLineLoaded(loaded)
   const hasContent = mode === 'renderer' ? current?.version !== undefined : loaded.length > 0 || current?.complete !== undefined
+  // Search reads the loaded source, so it belongs to renderers that draw one row
+  // per source line; a renderer that reflows its text has no row to reveal. A
+  // file the Host reports as empty has nothing to find either, and the store
+  // still holds the page that said so.
+  const findable = mode === 'text-pages' && selected?.sourceLines === true
+    && loaded.some(page => page.lines > 0)
+  const findOpen = findable && state?.findOpen === true
+  const findQuery = state?.findQuery ?? ''
+  const matches = useMemo(() => findable ? findInPages(loaded, findQuery) : [], [findable, loaded, findQuery])
+  const findActive = currentMatch(state?.findActive ?? 0, matches.length)
+  // A query the loaded pages do not answer is only "no results" once the rest of
+  // the file has been read; before that the answer is merely unknown.
+  const findSettled = current === undefined || current.eof || current.failure !== undefined
   storedScrollTopRef.current = state?.scrollTop ?? 0
   const bindBody = useCallback((body: HTMLDivElement | null): void => {
     const previous = bodyRef.current
@@ -172,6 +189,66 @@ export function DocumentPreview({
     navigation.revision, line, loadedThrough, current?.eof, current?.loading, current?.failure, started,
     selected?.id, mode, file, canRead, meta.value?.version,
   ])
+
+  // Revealing happens once per match rather than on every render, so a page
+  // arriving while the reader looks elsewhere does not pull the body back.
+  const revealedFindRef = useRef('')
+  // Content search. The bar opens over the body and closes with its query, so a
+  // view that keeps its scroll keeps nothing else. Painting is a document-level
+  // side effect outside React's tree; revealing the current match is the same
+  // scroll the line navigator performs; neither writes store state.
+  // Stepping always scrolls, even back to a match already visited: the reader
+  // may have moved away from it since.
+  const stepFind = useCallback((delta: 1 | -1): void => {
+    revealedFindRef.current = ''
+    actions.findMoved(viewKey, steppedMatch(findActive, delta, matches.length))
+  }, [actions, viewKey, findActive, matches.length])
+  useEffect(() => {
+    const body = scrollportRef.current
+    if (body === null) return
+    paintFind(body, matches, findActive)
+  }, [matches, findActive, state?.wrap, pages])
+  // A query the loaded pages do not answer may sit in a page the body never
+  // read, so it reads on until a match appears or the file ends — the same pages
+  // a reader scrolling to the end would fetch, and only one page for a query the
+  // file does answer. A match always lies inside the loaded pages, which is why
+  // revealing needs no read of its own.
+  useEffect(() => {
+    if (!findOpen || findQuery === '' || matches.length > 0) return
+    if (current === undefined || current.eof || current.loading || current.failure !== undefined || !canRead) return
+    loadPage(viewKey, file, loadedThrough + 1, signal, meta.value?.version)
+  }, [
+    findOpen, findQuery, matches.length, loadedThrough, current?.eof, current?.loading, current?.failure,
+    canRead, file, viewKey, signal, meta.value?.version,
+  ])
+  // Revealing the current match, once per match shown.
+  useEffect(() => {
+    const body = scrollportRef.current
+    const match = matches[findActive]
+    if (body === null || match === undefined) return
+    const key = `${findQuery}\u0000${findActive}\u0000${match.line}`
+    if (revealedFindRef.current === key) return
+    revealedFindRef.current = key
+    revealMatch(body, match)
+    actions.scrolled(viewKey, body.scrollTop)
+  }, [matches, findActive, findQuery, actions, viewKey])
+  // The bar takes focus when it opens and hands it back to the control that
+  // opened it when it closes, but not on mount: a preview that never searched
+  // must not steal focus from the pane that just opened.
+  const findWasOpenRef = useRef(false)
+  useEffect(() => {
+    if (findOpen) findInputRef.current?.focus()
+    else if (findWasOpenRef.current) findButtonRef.current?.focus({ preventScroll: true })
+    findWasOpenRef.current = findOpen
+  }, [findOpen])
+  // A closed bar paints nothing, and a body that stops drawing the document
+  // leaves no range to paint.
+  useEffect(() => {
+    if (findOpen) return
+    revealedFindRef.current = ''
+    clearFind()
+  }, [findOpen])
+  useEffect(() => () => { clearFind() }, [])
 
   const rendererReload = useCallback((): void => {
     if (canRead && selected !== undefined) prepareRenderer(viewKey, signal, selected.id, meta.value?.version, true)
@@ -308,6 +385,21 @@ export function DocumentPreview({
                 dense
               />
             )}
+          {findable && (
+            <Tooltip label={t('find')} side="bottom" delayMs={500}>
+              <button
+                ref={findButtonRef}
+                type="button"
+                className={css.tool}
+                aria-label={t('find')}
+                aria-expanded={findOpen}
+                data-textpreview-tool="find"
+                onClick={() => { actions.findOpened(viewKey, !findOpen) }}
+              >
+                <IconSearchOutlineRegular />
+              </button>
+            </Tooltip>
+          )}
           {selected.wrap === true && (
             // The tooltip names the action while the stable aria name and
             // `aria-pressed` expose the control and its current state.
@@ -358,6 +450,28 @@ export function DocumentPreview({
         </>
       )}
       handoff={handoff}
+      findBar={findOpen && (
+        <FindBar
+          query={findQuery}
+          inputRef={findInputRef}
+          noResults={findQuery !== '' && matches.length === 0 && findSettled}
+          steppable={matches.length > 1}
+          labels={{
+            search: t('find.search'),
+            previous: t('find.previous'),
+            next: t('find.next'),
+            close: t('find.close'),
+            count: findQuery === ''
+              ? ''
+              : matches.length > 0
+                ? t('find.count', { current: findActive + 1, total: matches.length })
+                : findSettled ? t('find.noMatches') : '',
+          }}
+          onQuery={(query) => { actions.findQueryChanged(viewKey, query) }}
+          onStep={stepFind}
+          onClose={() => { actions.findOpened(viewKey, false) }}
+        />
+      )}
     >
       <div
         ref={bindBody}

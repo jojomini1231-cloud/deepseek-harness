@@ -29,6 +29,13 @@ export const zh = {
   'error.notText': '该格式文件暂时无法预览',
   'error.notRegularFile': '该路径不是普通文件，没有可显示的内容',
   'error.unavailable': '读取失败：{message}',
+  find: '在文档中查找',
+  'find.search': '在文档中查找',
+  'find.previous': '上一个匹配项',
+  'find.next': '下一个匹配项',
+  'find.close': '关闭查找',
+  'find.count': '{current}/{total}',
+  'find.noMatches': '无结果',
   retry: '重试',
 } satisfies Record<string, string>
 
@@ -58,6 +65,13 @@ export const en = {
   'error.notText': 'Preview is not available for this file type yet.',
   'error.notRegularFile': 'Not a regular file, nothing to display.',
   'error.unavailable': 'Read failed: {message}',
+  find: 'Find in document',
+  'find.search': 'Find in document',
+  'find.previous': 'Previous match',
+  'find.next': 'Next match',
+  'find.close': 'Close find',
+  'find.count': '{current} of {total}',
+  'find.noMatches': 'No results',
   retry: 'Retry',
 } satisfies Record<SidebarDocumentPreviewKey, string>
 
@@ -84,6 +98,13 @@ export const ja = {
   'error.notText': 'このファイル形式のプレビューはまだ利用できません。',
   'error.notRegularFile': '通常のファイルではないため、表示する内容がありません。',
   'error.unavailable': '読み込みに失敗しました: {message}',
+  find: '文書内を検索',
+  'find.search': '文書内を検索',
+  'find.previous': '前の一致',
+  'find.next': '次の一致',
+  'find.close': '検索を閉じる',
+  'find.count': '{current}/{total}',
+  'find.noMatches': '一致なし',
   'retry': '再試行',
 } satisfies Record<keyof typeof en, string>
 
@@ -110,6 +131,13 @@ export const es = {
   'error.notText': 'La vista previa aún no está disponible para este tipo de archivo.',
   'error.notRegularFile': 'No es un archivo normal, no hay nada que mostrar.',
   'error.unavailable': 'Error de lectura: {message}',
+  find: 'Buscar en el documento',
+  'find.search': 'Buscar en el documento',
+  'find.previous': 'Coincidencia anterior',
+  'find.next': 'Coincidencia siguiente',
+  'find.close': 'Cerrar búsqueda',
+  'find.count': '{current} de {total}',
+  'find.noMatches': 'Sin resultados',
   retry: 'Reintentar',
 } satisfies Record<keyof typeof en, string>
 
@@ -136,6 +164,13 @@ export const fr = {
   'error.notText': "L'aperçu n'est pas encore disponible pour ce type de fichier.",
   'error.notRegularFile': "Ce n'est pas un fichier normal, rien à afficher.",
   'error.unavailable': 'Échec de lecture : {message}',
+  find: 'Rechercher dans le document',
+  'find.search': 'Rechercher dans le document',
+  'find.previous': 'Correspondance précédente',
+  'find.next': 'Correspondance suivante',
+  'find.close': 'Fermer la recherche',
+  'find.count': '{current} sur {total}',
+  'find.noMatches': 'Aucun résultat',
   retry: 'Réessayer',
 } satisfies Record<keyof typeof en, string>
 
@@ -162,6 +197,13 @@ export const de = {
   'error.notText': 'Für diesen Dateityp ist noch keine Vorschau verfügbar.',
   'error.notRegularFile': 'Keine normale Datei, nichts zum Anzeigen.',
   'error.unavailable': 'Lesen fehlgeschlagen: {message}',
+  find: 'Im Dokument suchen',
+  'find.search': 'Im Dokument suchen',
+  'find.previous': 'Vorheriger Treffer',
+  'find.next': 'Nächster Treffer',
+  'find.close': 'Suche schließen',
+  'find.count': '{current} von {total}',
+  'find.noMatches': 'Keine Treffer',
   retry: 'Erneut versuchen',
 } satisfies Record<keyof typeof en, string>
 
@@ -188,6 +230,13 @@ export const ru = {
   'error.notText': 'Предварительный просмотр для этого типа файлов пока недоступен.',
   'error.notRegularFile': 'Не обычный файл, отображать нечего.',
   'error.unavailable': 'Не удалось прочитать: {message}.',
+  find: 'Найти в документе',
+  'find.search': 'Найти в документе',
+  'find.previous': 'Предыдущее совпадение',
+  'find.next': 'Следующее совпадение',
+  'find.close': 'Закрыть поиск',
+  'find.count': '{current} из {total}',
+  'find.noMatches': 'Нет совпадений',
   retry: 'Повторить',
 } satisfies Record<keyof typeof en, string>
 
@@ -214,5 +263,12 @@ export const pt = {
   'error.notText': 'A visualização ainda não está disponível para este tipo de arquivo.',
   'error.notRegularFile': 'Não é um arquivo normal, nada para exibir.',
   'error.unavailable': 'Falha na leitura: {message}',
+  find: 'Localizar no documento',
+  'find.search': 'Localizar no documento',
+  'find.previous': 'Ocorrência anterior',
+  'find.next': 'Próxima ocorrência',
+  'find.close': 'Fechar localização',
+  'find.count': '{current} de {total}',
+  'find.noMatches': 'Nenhum resultado',
   retry: 'Tentar novamente',
 } satisfies Record<keyof typeof en, string>

@@ -61,6 +61,12 @@ export interface TextTabState {
   wrap: boolean
   /** The `navigation.revision` the body already answered; absent before the first. */
   revision: number | undefined
+  /** Whether the content-search bar is open over this view. */
+  findOpen: boolean
+  /** What the reader is searching for; blank shows no matches. */
+  findQuery: string
+  /** Zero-based index of the match the bar shows as current. */
+  findActive: number
 }
 
 /** Every view's state, keyed by the host's identity for the view. */
@@ -86,6 +92,9 @@ export function fresh(): TextTabState {
     scrollTop: 0,
     wrap: true,
     revision: undefined,
+    findOpen: false,
+    findQuery: '',
+    findActive: 0,
   }
 }
 
@@ -109,6 +118,9 @@ type TextActions = {
   scrolled: (draft: TextState, viewKey: string, scrollTop: number) => void
   toggledWrap: (draft: TextState, viewKey: string) => void
   navigated: (draft: TextState, viewKey: string, revision: number) => void
+  findOpened: (draft: TextState, viewKey: string, open: boolean) => void
+  findQueryChanged: (draft: TextState, viewKey: string, query: string) => void
+  findMoved: (draft: TextState, viewKey: string, index: number) => void
   forget: (draft: TextState, viewKey: string) => void
 }
 
@@ -246,6 +258,40 @@ export function createTextStore(): EngineStoreHandle<TextState, TextActions> {
        */
       navigated: (d, viewKey: string, revision: number) => {
         bucket(d, viewKey).revision = revision
+      },
+      /**
+       * Open or close one view's content search. Opening starts from a blank
+       * query, and closing keeps neither the query nor its position.
+       * @param d - draft state.
+       * @param viewKey - the tab being drawn.
+       * @param open - whether the bar is open.
+       */
+      findOpened: (d, viewKey: string, open: boolean) => {
+        const state = bucket(d, viewKey)
+        state.findOpen = open
+        state.findQuery = ''
+        state.findActive = 0
+      },
+      /**
+       * Search for another query, from the first match.
+       * @param d - draft state.
+       * @param viewKey - the tab being drawn.
+       * @param query - what the reader typed.
+       */
+      findQueryChanged: (d, viewKey: string, query: string) => {
+        const state = bucket(d, viewKey)
+        state.findQuery = query
+        state.findActive = 0
+      },
+      /**
+       * Show one match as the current one. The caller wraps the index around the
+       * matches it found, which is where that arithmetic belongs.
+       * @param d - draft state.
+       * @param viewKey - the tab being drawn.
+       * @param index - zero-based match index.
+       */
+      findMoved: (d, viewKey: string, index: number) => {
+        bucket(d, viewKey).findActive = index
       },
       /**
        * Drop one view's state, for a view lifetime that ended.

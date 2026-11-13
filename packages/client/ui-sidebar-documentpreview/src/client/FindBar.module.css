@@ -1,0 +1,93 @@
+/* The content-search bar: one row under the header, holding the field, the
+   counter, and the two steps and the close at its end. */
+.bar {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  align-items: center;
+  box-sizing: border-box;
+  height: 38px;
+  padding: 0 6px 0 10px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l3);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+/* The shared field, taking the row's spare width instead of its content's. Its
+   own height and inset come from the primitive. A search field's own clear
+   button would sit as a second × a few pixels from the bar's close, so the row
+   keeps the one control and Escape does the same job. */
+.field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.field input::-webkit-search-cancel-button {
+  display: none;
+}
+
+/* "3 of 17": where the current match sits among the ones found. Tabular figures
+   keep the row from shifting as the numbers change. */
+.count {
+  flex: 0 0 auto;
+  min-width: 44px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  text-align: end;
+  white-space: nowrap;
+}
+
+/* A query that matched nothing is the one state the reader has to notice. */
+.count[data-empty] {
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.step {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+  color: var(--dsw-alias-label-secondary);
+  line-height: 1;
+  background: transparent;
+  border: none;
+  border-radius: var(--dsw-radius-sm);
+  cursor: pointer;
+}
+
+.step svg {
+  width: 14px;
+  height: 14px;
+}
+
+.step:disabled {
+  color: var(--dsw-alias-label-dimmed);
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .step:hover:not(:disabled) {
+    color: var(--dsw-alias-label-primary);
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+/* The two highlight layers a search paints. `:global()` keeps the registry name
+   out of the CSS Modules hash: the ranges are registered by `find.ts` under the
+   same literal, so a hashed selector would paint nothing. Every match takes the
+   first rule; the current one is drawn over it by the second, which the API
+   paints above the first regardless of source order. Both are translucent so the
+   syntax colors underneath stay readable, and the current one is the denser of
+   the two; the API allows only a few properties here, so weight rather than an
+   outline tells them apart. */
+:global(::highlight(dsw-document-find)) {
+  background-color: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 22%, transparent);
+}
+
+:global(::highlight(dsw-document-find-active)) {
+  background-color: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 60%, transparent);
+}

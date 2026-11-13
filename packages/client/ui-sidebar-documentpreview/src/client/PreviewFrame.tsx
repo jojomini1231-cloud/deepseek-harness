@@ -55,6 +55,8 @@ export type PreviewFrameProps = PropsRenderFactories & {
   readonly tools?: ReactNode
   /** The contributions that hand the file to the Host, in the same position in every state, before the navigator toggle. */
   readonly handoff?: ReactNode
+  /** The content-search bar, directly under the header when the reader opened it. */
+  readonly findBar?: ReactNode
   /** The content before the navigator. */
   readonly children: ReactNode
   /** Data attributes forwarded to the root element. */
@@ -67,7 +69,7 @@ export type PreviewFrameProps = PropsRenderFactories & {
  * @returns the preview root.
  */
 export function PreviewFrame({
-  path, pathTrigger, banner, tools, handoff, children, useTabInfo, renderFactorySlot, ...data
+  path, pathTrigger, banner, tools, handoff, findBar, children, useTabInfo, renderFactorySlot, ...data
 }: PreviewFrameProps): ReactNode {
   return (
     <div className={css.preview} {...data}>
@@ -78,6 +80,7 @@ export function PreviewFrame({
         {handoff}
         {useTabInfo !== undefined && <NavigatorToggleSeat useTabInfo={useTabInfo} renderFactorySlot={renderFactorySlot} />}
       </div>
+      {findBar}
       <div className={css.content} data-textpreview-content>
         {children}
         {useTabInfo !== undefined && <NavigatorSeat useTabInfo={useTabInfo} renderFactorySlot={renderFactorySlot} />}
