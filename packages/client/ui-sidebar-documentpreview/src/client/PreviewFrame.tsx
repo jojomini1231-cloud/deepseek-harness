@@ -77,7 +77,7 @@ export function PreviewFrame({
       <div className={css.header}>
         <PathLabel path={path} className={css.path} data-textpreview-path {...pathTrigger} />
         {tools}
-        {handoff}
+        <div className={css.externalActions}>{handoff}</div>
         {useTabInfo !== undefined && <NavigatorToggleSeat useTabInfo={useTabInfo} renderFactorySlot={renderFactorySlot} />}
       </div>
       {findBar}

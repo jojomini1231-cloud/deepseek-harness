@@ -747,9 +747,11 @@ export function FilesBody({
             <IconSearchOutlineRegular />
           </button>
         </Tooltip>
-        {renderSlot('sidebar.right.tab.files.actions', {
-          absolutePath: state.root,
-        })}
+        <div className={css.externalActions}>
+          {renderSlot('sidebar.right.tab.files.actions', {
+            absolutePath: state.root,
+          })}
+        </div>
       </div>
       <div className={css.railRow}>
         <div
