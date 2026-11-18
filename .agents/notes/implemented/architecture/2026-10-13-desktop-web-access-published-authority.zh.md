@@ -12,7 +12,7 @@ Status: implemented
 
 `isTrustedApiRequest`（`packages/client/connection/src/api-request-trust.ts`）只接受回环、监听器自身的绑定地址，以及 `trustedHosts` 中列出的 authority。隧道域名不属于其中任何一类，因此每个 `/api` 调用都返回 `403 forbidden`。索引请求则完全没有围栏：它直接进入 `BrowserAuth.authorizeIndex`，返回纯文本的 `401` 鉴权页。
 
-`BrowserAuth` 签发的是 host-only 会话 cookie，其名称与载荷都绑定签发它的 authority（`packages/client/connection/src/browser-auth.ts`）。在 `127.0.0.1:3080` 上取得的 cookie 既不会被发送到隧道域名，在那里也不被接受；而启动令牌兑换只在一个路径上应答：携带令牌的 `GET /`，随后重定向到 `./`。因此从公开 authority 访问该部署的浏览器必须在那里重新完成一次兑换，而这需要操作者持有携带本进程启动令牌的 URL。
+`BrowserAuth` 签发的是 host-only 会话 cookie，其名称与载荷都绑定签发它的 authority（`packages/host/authentication-token/src/browser-auth.ts`）。在 `127.0.0.1:3080` 上取得的 cookie 既不会被发送到隧道域名，在那里也不被接受；而启动令牌兑换只在一个路径上应答：携带令牌的 `GET /`，随后重定向到 `./`。因此从公开 authority 访问该部署的浏览器必须在那里重新完成一次兑换，而这需要操作者持有携带本进程启动令牌的 URL。
 
 Web profile 本就为这两半各有一个旗标 —— `--trusted-host` 接受某 authority，`--public-url` 发布根地址 —— 但桌面壳两者都没有提供，而 Host 子进程只上报自己的回环 URL，因此壳层既无法触达这些旗标，也无法发出一条可完成鉴权的链接。
 
