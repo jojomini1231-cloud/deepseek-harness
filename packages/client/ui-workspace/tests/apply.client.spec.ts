@@ -32,6 +32,7 @@ import { FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
 import { UNGROUPED_KEY, TEMPORARY_KEY } from '../src/client/tree.ts'
 import { apply as hostApply } from '../src/index.ts'
 import { SECTION_HOOK_CONTEXT, SECTION_INJECT } from './section-scroller.client.ts'
+import { provideSessionStatus } from './session-status.client.ts'
 
 const sid = (id: string) => id as SessionId
 const summary = (id: string, updatedAt: number): SessionSummary => ({
@@ -80,6 +81,7 @@ async function bench(access: 'fake' | 'static' = 'fake') {
     whileServed: (namespaces: readonly string[], register: (served: ReadonlySet<string>) => () => void) =>
       register(new Set(namespaces)),
   } as never)
+  const status = provideSessionStatus(ctx)
   await ctx.plugin(SlotRegistry).await()
   const accessSource = vi.fn((_kind: string, _id: string, _action: string): HostObservable<boolean> => ALLOWED)
   const stopGuard = vi.fn()
@@ -180,7 +182,8 @@ async function bench(access: 'fake' | 'static' = 'fake') {
   locale.setLocale('zh')
   ctx.provide('locale', locale)
   return {
-    ctx, slots: ctx.get('slots') as SlotRegistry, locale, create, rename, commands, accessSource, whenResourceAccess, stopGuard,
+    ctx, slots: ctx.get('slots') as SlotRegistry, locale, create, rename, commands, accessSource,
+    whenResourceAccess, stopGuard, status,
     retain, using, selectPanel, search, renameSession, binding, fork, pickDirectory, pinSession, unpinSession,
     deleteSession,
     workspacesSubscribe, initializeDefault, history, scope, sessionOf,
@@ -234,6 +237,7 @@ function sessionMenuActions(ctx: Context) {
     forkSession: (sessionId: SessionId) => { select('session.fork/fork', sessionId) },
     requestSessionRename: (sessionId: SessionId, title: string) => { select('session.rename/rename', sessionId, title) },
     copySessionId: async (sessionId: SessionId) => { select('session.id/copy', sessionId); await settled() },
+    toggleRead: (sessionId: SessionId) => { select('session.read-state/mark', sessionId) },
   }
 }
 
@@ -255,6 +259,7 @@ describe('ui-workspace apply', () => {
   it('declares the services it drives', () => {
     expect(inject).toEqual(['contextMenus',
       'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout', 'shortcuts', 'configForms', 'remoteAccess',
+      'uiSession', 'uiSession.sessionStatus',
     ])
   })
 
@@ -358,7 +363,7 @@ describe('ui-workspace apply', () => {
     const rowToastEntry = entry(b.slots, 'shell.overlay', 'workspace.row-toast')
     expect(rowToastEntry.store).toBeUndefined()
     expect(b.slots.entries('workspace.toast').map(row => row.options.key)).toEqual([
-      'deleted', 'sessionIdCopied', 'sessionIdCopyFailed', 'pinFailed', 'unpinFailed', 'archivedNotOpenable',
+      'readingFailed', 'deleted', 'sessionIdCopied', 'sessionIdCopyFailed', 'pinFailed', 'unpinFailed', 'archivedNotOpenable',
       'defaultWorkspaceFailed', 'shortcutForkFailed', 'createFailed', 'forkRequiresOpen', 'archived', 'stoppedAndArchived',
     ])
     for (const registration of b.slots.entries('workspace.toast')) {
@@ -375,6 +380,36 @@ describe('ui-workspace apply', () => {
     }
   })
 
+  it('marks cold Sessions silently and reports only failed writes', async () => {
+    const b = await bench()
+    onTestFinished(() => b.ctx.fiber.dispose())
+    declare(b.slots, 'sidebar.workspaces', 'shell.overlay')
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const action = sessionMenuActions(b.ctx)
+    const toast = faceOf(entry(b.slots, 'shell.overlay', 'workspace.row-toast')) as RowToastInjected
+    const menu = b.ctx.contextMenus.resolve({ kind: 'session', value: { sessionId: sid('cold'), displayTitle: 'Cold' } })
+    const readAction = () => menu.source.getSnapshot().find(item => item.id === 'session.read-state/mark')
+    expect(readAction()?.disabled).toBe(false)
+    b.status.readingReady.set(false)
+    expect(readAction()?.disabled).toBe(true)
+    menu.dispose()
+    b.status.readingReady.set(true)
+    for (const unread of [true, false]) {
+      b.status.setUnread(sid('cold'), !unread)
+      b.status.mark.mockResolvedValueOnce(undefined)
+      action.toggleRead(sid('cold'))
+      await Promise.resolve()
+      expect(b.status.mark).toHaveBeenLastCalledWith(sid('cold'), unread)
+      expect(toast.hooks.toast.getSnapshot()).toBeNull()
+    }
+    b.status.table.set(new Map())
+    action.toggleRead(sid('cold'))
+    await vi.waitFor(() => { expect(toast.hooks.toast.getSnapshot()).toMatchObject({ kind: 'readingFailed' }) })
+    expect(b.status.mark).toHaveBeenLastCalledWith(sid('cold'), true)
+    expect(b.retain).not.toHaveBeenCalled()
+    expect(b.binding).not.toHaveBeenCalled()
+  })
+
   it.each([true, false])('copies an ID directly without loading its Session (clipboard accepted: %s)', async (accepted) => {
     const b = await bench()
     onTestFinished(() => b.ctx.fiber.dispose())
@@ -386,6 +421,8 @@ describe('ui-workspace apply', () => {
       if (!accepted) throw new Error('clipboard denied')
     })
     vi.stubGlobal('navigator', { clipboard: { writeText } })
+    // This spec has no DOM; give the fallback a document without execCommand so a refused write stays refused.
+    vi.stubGlobal('document', {})
     onTestFinished(() => { vi.unstubAllGlobals() })
     await action.copySessionId(sid('cold-session'))
     expect(writeText).toHaveBeenCalledExactlyOnceWith('cold-session')
@@ -981,6 +1018,26 @@ describe('ui-workspace apply', () => {
     unsubscribe()
   })
 
+  it('registers the reusable picker Factory and its own directory-flow hole without an outside declaration', async () => {
+    const b = await bench()
+    const fiber = b.ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    expect(b.slots.snapshot('factory:workspace.picker')).toMatchObject([{
+      type: 'factory',
+      name: 'workspace.picker',
+      scope: 'root',
+      children: [{ type: 'slot', name: 'workspace.picker.directoryFlow', kind: 'single', scope: 'root', occupants: [] }],
+    }])
+    expect(b.slots.spec('workspace.picker.directoryFlow')).toEqual({ kind: 'single', scope: 'root' })
+    // The hole is independent of the hero and sidebar declarations, which stay absent here.
+    expect(b.slots.spec('conversation.hero.workspace.directoryFlow')).toBeUndefined()
+    expect(b.slots.spec('sidebar.workspaces.directoryFlow')).toBeUndefined()
+    // Registry-contribution disposal proof: the definition and its hole leave with the fiber.
+    await fiber.dispose()
+    expect(b.slots.snapshot('factory:workspace.picker')).toEqual([])
+    expect(b.slots.spec('workspace.picker.directoryFlow')).toBeUndefined()
+  })
+
   it('rejects the browser search callback on a Session Controller business error', async () => {
     const b = await bench()
     b.search.mockImplementationOnce(async () => ({
@@ -1013,6 +1070,7 @@ describe('ui-workspace apply', () => {
     expect(b.slots.entries('shell.overlay')).toHaveLength(0)
     expect(b.slots.entries('workspace.toast')).toHaveLength(0)
     expect(b.slots.snapshot('factory:workspace.toast.content')).toEqual([])
+    expect(b.slots.snapshot('factory:workspace.picker')).toEqual([])
   })
 })
 

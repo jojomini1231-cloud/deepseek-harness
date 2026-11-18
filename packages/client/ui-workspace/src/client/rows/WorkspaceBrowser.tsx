@@ -41,8 +41,8 @@ import type {
   ArchivedFilter, GroupNode, SessionNode, SessionOrderBy, SessionRowState, SessionStatuses,
 } from '../tree.ts'
 import {
-  deriveFlat, deriveGroups, deriveSearchResults, deriveTemporaryMemberIds, orderByRecency, owningGroupKey,
-  owningParentFolder, pinCurrentBlank, reconcileManualOrder, sessionMemberIds, TEMPORARY_KEY, UNGROUPED_KEY,
+  deriveFlat, deriveGroups, deriveSearchResults, deriveTemporaryMemberIds, orderByRecency, sessionSearchIndex,
+  owningGroupKey, owningParentFolder, pinCurrentBlank, reconcileManualOrder, sessionMemberIds, TEMPORARY_KEY, UNGROUPED_KEY,
 } from '../tree.ts'
 import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
 import { FLAT_SESSION_ORDER_KEY, type SessionGroupBy } from '../stores.ts'
@@ -983,6 +983,20 @@ function SearchResults({
   const currentRemote = remote.query === query
     ? remote
     : { query, status: 'loading' as const, items: [], hasMore: false }
+  // The Session list republishes while replies run; each republish updates the
+  // previous index so unchanged titles, labels, and ids keep their preparation.
+  const [built, setBuilt] = useState(() => ({
+    list, workspaces, archivedSessionIds, archivedFilter, temporarySessionIds, temporaryLabel: temporaryGroupName,
+    index: sessionSearchIndex(list, workspaces, archivedSessionIds, archivedFilter, temporarySessionIds, temporaryGroupName),
+  }))
+  let index = built.index
+  if (built.list !== list || built.workspaces !== workspaces
+    || built.archivedSessionIds !== archivedSessionIds || built.archivedFilter !== archivedFilter
+    || built.temporarySessionIds !== temporarySessionIds || built.temporaryLabel !== temporaryGroupName) {
+    index = sessionSearchIndex(list, workspaces, archivedSessionIds, archivedFilter,
+      temporarySessionIds, temporaryGroupName, built.index)
+    setBuilt({ list, workspaces, archivedSessionIds, archivedFilter, temporarySessionIds, temporaryLabel: temporaryGroupName, index })
+  }
   const results = useMemo(
     () => deriveSearchResults(
       list,
@@ -994,11 +1008,12 @@ function SearchResults({
       statuses,
       currentRemote,
       resultLimit,
+      index,
       temporaryGroupName,
     ),
     [
       list, workspaces, query, archivedSessionIds, archivedFilter, temporarySessionIds,
-      statuses, currentRemote, resultLimit, temporaryGroupName,
+      statuses, currentRemote, resultLimit, index, temporaryGroupName,
     ],
   )
   const pending = currentRemote.status === 'loading'

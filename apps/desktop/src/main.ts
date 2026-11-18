@@ -43,7 +43,7 @@ import { desktopUpdateChannel } from './update-channel.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { prepareDesktopUpdateWindow } from './update-window.ts'
 import { DesktopCommandManager } from './command-management.ts'
-import { serveWebDocument, authenticateWebHost, forwardWebRequest, removeLegacyHostCookies } from './web-document.ts'
+import { serveWebDocument, forwardWebRequest, removeLegacyHostCookies } from './web-document.ts'
 import { DesktopFatalRecovery } from './fatal-recovery.ts'
 import { pruneCrashReports, RendererConsoleTail, writeCrashReport, type CrashReportSource } from './crash-report.ts'
 import { OperationJournal } from './operation-journal.ts'
@@ -512,6 +512,8 @@ async function main(): Promise<void> {
   const appPreload = fileURLToPath(new URL('./preload-app.cjs', import.meta.url))
   const applicationUrl = `${SCHEME}://app/`
   let hostUrl: string | undefined
+  // The Host's own launch-token entry: only Web access hands it to another browser.
+  let hostLoginUrl: string | undefined
   let hostCookie: string | undefined
   let hostBoundPort: number | undefined
   const browserGuests = new DesktopBrowserGuests(() => hostUrl)
@@ -573,9 +575,10 @@ async function main(): Promise<void> {
     return {
       start: async () => {
         const ready = await host.start()
-        const cookie = await authenticateWebHost(ready.url)
+        const cookie = ready.authenticationCookie
         hostCookie = cookie
         hostUrl = ready.url
+        hostLoginUrl = ready.loginUrl
         hostBoundPort = Number(new URL(ready.url).port)
         void removeLegacyHostCookies(session.defaultSession.cookies, ready.url)
           .catch((error: unknown) => { console.error('desktop: legacy Host cookie cleanup failed', error) })
@@ -914,12 +917,13 @@ async function main(): Promise<void> {
     // The authenticated URL carries this process's launch token, so it is spent here and
     // never returned to the renderer.
     if (!startedWebAccess.enabled || hostUrl === undefined) throw new Error('dsh desktop: web access is not running')
-    return shell.openExternal(hostUrl)
+    if (hostLoginUrl === undefined) throw new Error('dsh desktop: web access has no authenticated address to open')
+    return shell.openExternal(hostLoginUrl)
   })
   ipcMain.handle(DESKTOP_IPC.webAccessCopyLink, async (event) => {
     assertProductSender(event)
     if (!startedWebAccess.enabled || hostUrl === undefined) throw new Error('dsh desktop: web access is not running')
-    const link = webAccessLink(startedWebAccess, hostUrl)
+    const link = hostLoginUrl === undefined ? null : webAccessLink(startedWebAccess, hostLoginUrl)
     if (link === null) throw new Error('dsh desktop: web access has no published address to copy')
     // Await the write: a clipboard failure must reach the row rather than report success.
     await clipboard.writeText(link)

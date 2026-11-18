@@ -7,7 +7,7 @@ import { formatFatalDiagnostic } from './fatal-diagnostic.ts'
 import { loadLayeredEnv, loadProfileDirectory, reportSkippedBundles } from '@deepseek-ai/dsh-app-boot'
 import { runProfile } from '@deepseek-ai/dsh/profile-boot'
 import type {} from '@deepseek-ai/dsh-client-connection'
-import type {} from '@deepseek-ai/dsh-host-webserver'
+import type { WebEntryUrl } from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-deepseek-account'
 import { localDragResource } from './file-drag.ts'
 
@@ -16,6 +16,8 @@ import { installDesktopQuitInspection } from './quit-inspection.ts'
 import { installPlatformSessionPublisher } from './platform-session.ts'
 import { packageManagerEnvironment } from './node-mode.ts'
 import { installOperationDiagnostics } from './operation-diagnostics.ts'
+import { DesktopAuthenticationEnd, receiveDesktopSecret } from './authentication.ts'
+import * as DesktopAuthentication from '@deepseek-ai/dsh-host-authentication-desktop'
 
 /**
  * The Web profile bind arguments Electron appended after the launcher-owned arguments.
@@ -31,7 +33,24 @@ export function hostBindArgs(argv: readonly string[]): string[] {
 
 async function main(): Promise<void> {
   const runId = randomUUID() as PluginOperationRunId
-  if (process.connected) process.send?.({ type: 'starting', runId }, (error) => { if (error !== null) console.error(error) })
+  const authentication = receiveDesktopSecret(process)
+  if (process.connected) process.send?.({ type: 'starting', runId }, (error) => {
+    if (error !== null) authentication.dispose()
+  })
+  const send = (message: object): Promise<void> => new Promise((resolve, reject) => {
+    if (!process.connected || process.send === undefined) { resolve(); return }
+    process.send(message, (error) => { if (error === null) resolve(); else reject(error) })
+  })
+  let secret: string
+  try {
+    secret = await authentication.secret
+    authentication.signal.throwIfAborted()
+  } catch (error) {
+    if (!(error instanceof DesktopAuthenticationEnd)) throw error
+    if (error.kind === 'shutdown') await send({ type: 'shutdown-complete' })
+    if (process.connected) process.disconnect()
+    return
+  }
   const runtimeDir = process.argv[2] as string
   const projectDir = process.argv[3] as string
   const bindArgs = hostBindArgs(process.argv)
@@ -61,10 +80,6 @@ async function main(): Promise<void> {
     updateTasks?: ReturnType<typeof installDesktopUpdateTaskControl>
     quitInspection?: ReturnType<typeof installDesktopQuitInspection>
   } = {}
-  const send = (message: object): Promise<void> => new Promise((resolve, reject) => {
-    if (!process.connected || process.send === undefined) { resolve(); return }
-    process.send(message, (error) => { if (error === null) resolve(); else reject(error) })
-  })
   const stop = (): Promise<void> => stopping ??= (async () => {
     for (const abort of dragReads.values()) abort.abort()
     await Promise.allSettled(dragTasks)
@@ -134,16 +149,41 @@ async function main(): Promise<void> {
       }
     })().catch((error: unknown) => { console.error(error) })
   })
+  const onAuthenticationEnd = (): void => { void stop() }
+  authentication.signal.addEventListener('abort', onAuthenticationEnd, { once: true })
+  if (authentication.signal.aborted) onAuthenticationEnd()
   process.once('disconnect', () => { void stop() })
   const { ctx } = await application
+  const canPublish = (): boolean => stopping === undefined && process.connected && !authentication.signal.aborted
+  if (!canPublish()) return
+  ctx.effect(() => () => {
+    authentication.signal.removeEventListener('abort', onAuthenticationEnd)
+    authentication.dispose()
+  }, 'desktop-host: authentication channel')
   installOperationDiagnostics(ctx, record => send({ type: 'plugin-operation', record }), 32, runId)
   control.updateTasks = installDesktopUpdateTaskControl(ctx)
   control.quitInspection = installDesktopQuitInspection(ctx)
   installPlatformSessionPublisher(ctx, (session) => {
     if (process.connected) process.send?.({ type: 'platform-session', session })
   })
-  const url = ctx.connection.authenticatedUrl(`${ctx.webServer.protocol}//127.0.0.1:${String(ctx.webServer.port)}`)
-  if (process.connected) process.send?.({ type: 'ready', url, injections: ctx.webServer.collectIndexInjections(ctx.connection.browserPeer) }, (error) => { if (error !== null) console.error(error) })
+  await ctx.plugin(DesktopAuthentication, { readSecret: () => secret }).await()
+  if (!canPublish()) return
+  const admission = ctx.connection.authentication.authenticate({
+    headers: { cookie: `dsh-desktop-session=${secret}` },
+  })
+  if ('rejection' in admission) throw new Error('Desktop authentication provider did not accept its startup credential')
+  const url = `${ctx.webServer.protocol}//127.0.0.1:${String(ctx.webServer.port)}/`
+  const injections = ctx.webServer.collectIndexInjections(admission.peer)
+  // The token provider contributes its authenticated entry for whichever root it is
+  // asked about. Web access hands that loopback entry to another browser, which must
+  // repeat the exchange there; the desktop window keeps using the clean URL, so its
+  // origin, cookie, and boot injections stay independent of the advertised root.
+  const entries: WebEntryUrl[] = []
+  ctx.emit(ctx.webServer, 'webserver/entry-url', url, entries)
+  const loginUrl = entries.find(entry => entry.open)?.url
+  if (!canPublish()) return
+  process.send?.({ type: 'ready', url, ...loginUrl === undefined ? {} : { loginUrl }, injections },
+    (error) => { if (error !== null) console.error(error) })
 }
 
 if (import.meta.main) {

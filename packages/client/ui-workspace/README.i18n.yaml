@@ -15,8 +15,8 @@
   en: d152484eb41ac6b4
   zh: 09388d293f9be9cb
 /deepseek-ai-dsh-client-ui-workspace/use-this-package:
-  en: 225b308f0757ff40
-  zh: b765a7bd76876328
+  en: 595aa740ebe7bca0
+  zh: ee662631cf5abbfa
 /deepseek-ai-dsh-client-ui-workspace/use-this-package/temporary-sessions:
   en: 40c16a1969e12204
   zh: ea8d8318c52f0464
@@ -27,14 +27,14 @@
   en: cd8635fa6516441d
   zh: c06e251fe3dd895b
 /deepseek-ai-dsh-client-ui-workspace/use-this-package/search:
-  en: 148f2ab562fecc09
-  zh: 9ba7c07999705b31
+  en: 1a1e90c2ed1fd3c1
+  zh: b57fedcec1f00367
 /deepseek-ai-dsh-client-ui-workspace/use-this-package/managing-sessions:
-  en: fe1df0ec8f7d3749
-  zh: f561606af703b9c7
+  en: bf22755485b9a9fa
+  zh: 40bfb0bb9606b0b1
 /deepseek-ai-dsh-client-ui-workspace/use-this-package/pending-interactions:
-  en: 9fb88260380bf093
-  zh: 3bace2b96ecd4a82
+  en: 27089341ac2cbcc4
+  zh: 63d818a53a7c20e9
 /deepseek-ai-dsh-client-ui-workspace/use-this-package/active-schedule-markers:
   en: 8df094a271026141
   zh: e812eaa31083db4a
@@ -42,11 +42,14 @@
   en: 8f170900a4096408
   zh: 85332e80adf39403
 /deepseek-ai-dsh-client-ui-workspace/understand-the-implementation/the-directory-flow-hole:
-  en: 868904dbfb5713f8
-  zh: 35d3c285ed770885
+  en: b4c44f1b6d96966d
+  zh: 96e9c8c003e2341a
+/deepseek-ai-dsh-client-ui-workspace/understand-the-implementation/the-reusable-workspace-picker:
+  en: 029ec1761656801e
+  zh: 524dfd341be0e62e
 /deepseek-ai-dsh-client-ui-workspace/understand-the-implementation/session-row-actions:
-  en: a5a092dbe0d3b57b
-  zh: 3e9fdf480715c54b
+  en: c9b9b287f117d792
+  zh: 81d84a0720d9c882
 /deepseek-ai-dsh-client-ui-workspace/understand-the-implementation/session-row-actions/packaged-client-plugin:
   en: 36934671b80b11ae
   zh: 8e0aea6162e35e77

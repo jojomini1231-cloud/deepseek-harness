@@ -26,6 +26,8 @@ The field is validated three times, each layer owning what it can enforce. The s
 
 The launch token still never crosses to the renderer. `status()` reports the published root as `publicAddress`, with no token, and a new `copyLink()` handler builds `<publicRoot>?token=<token>` and writes it to the system clipboard inside the main process, returning nothing.
 
+The token-bearing loopback URL comes from the Host, not from a shell-side reconstruction: the Host emits `webserver/entry-url` for its own root after startup and reports the token provider's entry beside the clean address as `loginUrl`. The window keeps the clean address for its origin, cookie, and boot injections, so advertising a root still does not couple them, and a Host that publishes no entry leaves Web access with no authenticated URL to hand out rather than an unauthenticated one.
+
 ## Alternatives considered
 
 **Two fields, `trustedHost` and `publicUrl`.** More expressive and closer to the flags, but it makes the half-configured states above representable and asks the operator to keep two values consistent by hand. A deployment needing a different fence authority from its advertised root has no reason to arise from the desktop shell's own listener.

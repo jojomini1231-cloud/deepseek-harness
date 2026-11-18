@@ -26,6 +26,8 @@ Web profile 本就为这两半各有一个旗标 —— `--trusted-host` 接受�
 
 启动令牌仍不会传给渲染进程。`status()` 以 `publicAddress` 上报公开根地址，不含令牌；新增的 `copyLink()` 处理器在主进程内构造 `<公开根地址>?token=<令牌>` 并写入系统剪贴板，不返回任何内容。
 
+携带令牌的回环 URL 由 Host 提供，而不是外壳自行重建：Host 在启动后为自己的根发出 `webserver/entry-url`，并在干净地址之外以 `loginUrl` 上报令牌 Provider 的条目。窗口继续使用干净地址作为其 origin、Cookie 与启动注入，因此公告根仍不与它们耦合；不发布任何条目的 Host 会让 Web access 没有可交付的已认证 URL，而不是交付一个未认证的 URL。
+
 ## Alternatives considered
 
 **用两个字段 `trustedHost` 与 `publicUrl`。** 表达力更强、也更贴近旗标，但它让上述半配置状态变得可表达，并要求操作者手工维持两个值一致。桌面壳自身的监听器没有理由出现「围栏 authority 与发布根地址不同」的部署。

@@ -55,7 +55,7 @@ root 作用域的单一 `shell.bottom` slot 横跨三列下方的整行。占用
 
 ### 主题呈现
 
-呈现器消费解析后的主题快照，并投影到 document：`html { color-scheme }` 驱动原生 UA 控件，依据当前配色方案设置 `body[data-ds-dark-theme]`，把主题的别名 token、`--dsh-content-font-size`、`--dsh-code-font-size`、`--dsh-terminal-font-size`（均写作纯像素值；视口宽度低于 600px 时正文下限 15px、代码下限 12px，低于下限的偏好被抬到下限而更大的偏好仍然生效，视口跨越该宽度时重新投影）以及每个非空的 `--dsh-font-family-<role>` 列表设为 body 上的内联变量，并持有一个 `<meta name="theme-color">`，其内容随计算后的 body 背景色更新。对呈现器执行 dispose（资源释放）时，它会连同其他全局写入一起移除自己的元数据节点。
+呈现器消费解析后的主题快照，并投影到 document：`html { color-scheme }` 驱动原生 UA 控件，依据当前配色方案设置 `body[data-ds-dark-theme]`，把主题的别名 token、`--dsh-content-font-size`、`--dsh-code-font-size`、`--dsh-terminal-font-size`（均写作纯像素值；视口宽度低于 600px 时正文下限 15px、代码下限 12px，低于下限的偏好被抬到下限而更大的偏好仍然生效，视口跨越该宽度时重新投影）以及每个非空的 `--dsh-font-family-<role>` 列表设为 body 上的内联变量，并持有一个 `<meta name="theme-color">`，其内容随计算后的 body 背景色更新。文档 head 中的 style 元素安装、编辑或移除时，它也会刷新该元数据。对呈现器执行 dispose（资源释放）时，它会停止观察，并连同其他全局写入一起移除自己的元数据节点。
 
 -----
 

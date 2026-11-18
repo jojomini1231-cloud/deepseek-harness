@@ -22,6 +22,12 @@ export function registerToasts(
   ctx.slots.registerFactory({ name: 'workspace.toast.content', scope: 'root' }, WorkspaceToast)
   ctx.slots.inject('workspace.toast', function* () {
     yield ctx.slots.register({
+      name: 'workspace.toast', key: 'readingFailed', locale: 'workspace',
+      inject: (): ToastDisplayInjected<'readingFailed'> => ({
+        display: (_notice, t) => ({ text: t('toast.readingFailed'), tone: 'warning' }),
+      }),
+    }, ToastEntry<PropsRuntime<'workspace.toast', 'readingFailed'>>)
+    yield ctx.slots.register({
       name: 'workspace.toast', key: 'deleted', locale: 'workspace',
       inject: (): ToastDisplayInjected<'deleted'> => ({
         display: (_notice, t) => ({ text: t('toast.deleted'), tone: 'success' }),
