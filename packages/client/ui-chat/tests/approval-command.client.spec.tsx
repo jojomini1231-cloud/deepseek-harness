@@ -4,7 +4,7 @@ import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { PartialArguments } from '@deepseek-ai/dsh-util-values'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { ApprovalCommand, commandOf } from '../src/client/chat/ApprovalCommand.tsx'
+import { ApprovalCommand, commandForCall, commandOf } from '../src/client/chat/ApprovalCommand.tsx'
 
 function props(
   nodes: readonly unknown[],
@@ -31,6 +31,19 @@ describe('commandOf', () => {
     expect(commandOf({ callId: 'c1', name: 'terminal_send', argsRaw: '{"sessionId":"pty-1","text":"pnpm run dev"}' })).toBe('pnpm run dev')
     expect(commandOf({ callId: 'c1', name: 'terminal_send', argsRaw: '{"sessionId":"pty-1","text":"","submit":true}' })).toBeUndefined()
     expect(commandOf({ callId: 'c1', name: 'write', argsRaw: '{"path":"notes.md","text":"draft"}' })).toBeUndefined()
+  })
+})
+
+describe('commandForCall', () => {
+  it('resolves a correlated command and tolerates an absent snapshot', () => {
+    expect(commandForCall(undefined, 'call-1')).toBeUndefined()
+    const snapshot = {
+      nodes: {
+        values: () => [{ kind: 'tool-call', data: { root: { phase: 'start', callId: 'call-1', name: 'bash', argsRaw: '{"command":"ls"}' } } }],
+      },
+    } as unknown as ChatSnapshot
+    expect(commandForCall(snapshot, 'call-1')).toBe('ls')
+    expect(commandForCall(snapshot, 'call-9')).toBeUndefined()
   })
 })
 

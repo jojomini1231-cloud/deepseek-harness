@@ -454,7 +454,7 @@ export function SidebarRoot({
       )}
 
       {/* Footer actions stack above Settings in both sidebar widths. */}
-      <div className={css.footArea}>
+      <div className={css.footArea} data-sidebar-foot="">
         <div className={css.footerActions}>
           {renderSlot('sidebar.footer.action', { wide })}
         </div>

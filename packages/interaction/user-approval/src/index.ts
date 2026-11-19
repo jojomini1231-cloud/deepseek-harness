@@ -20,6 +20,7 @@ declare module '@deepseek-ai/dsh-llm' {
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ProjectionDefinition, ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
+import type { ApprovalPayloadCall, ApprovalPayloadView } from './types.ts'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 
 declare module '@deepseek-ai/cordis' {
@@ -109,6 +110,95 @@ const approvalStateDefinition = {
   },
 } satisfies ProjectionDefinition<'approvalState', ApprovalState>
 
+interface ApprovalPayloadState {
+  /** In-flight `tool/call` records, oldest first. */
+  calls: ApprovalPayloadCall[]
+  /** Outstanding `approval/asked` records awaiting their `approval/decided`. */
+  asks: { id: string; callId: string | null }[]
+  /** Derived view, kept referentially stable so an unrelated call publishes nothing. */
+  requests: ApprovalPayloadView
+}
+
+/** Characters of one call's argument text the projection carries. */
+export const APPROVAL_PAYLOAD_CHARS = 4096
+/** In-flight calls kept before the oldest is dropped. */
+const CALL_LIMIT = 8
+/** Outstanding asks kept before the oldest is dropped. */
+const ASK_LIMIT = 8
+
+const payloadCallSchema = zod.object({
+  callId: zod.string(),
+  payload: zod.string(),
+  truncated: zod.boolean(),
+})
+
+/**
+ * Recompute the view and reuse the previous value when the same calls are still named.
+ * @param state - state after the fold step.
+ * @returns the state carrying a stable view reference.
+ */
+function settledPayload(state: ApprovalPayloadState): ApprovalPayloadState {
+  const named = new Set(state.asks.map(ask => ask.callId))
+  const requests = state.calls.filter(call => named.has(call.callId))
+  const previous = state.requests.requests
+  const unchanged = previous.length === requests.length
+    && previous.every((call, index) => call === requests[index])
+  return { ...state, requests: unchanged ? state.requests : { requests } }
+}
+
+/**
+ * Fold the payload of a pending approval so a client that never opened the
+ * Session can still show what the ask will run. `tool/call` records the raw
+ * arguments, `approval/asked` names one, and `approval/decided` or `tool/result`
+ * retire them, so a Session with nothing outstanding carries an empty view.
+ */
+export const approvalPayloadDefinition = {
+  key: 'approvalPayload',
+  stateVersion: 1,
+  stateSchema: zod.object({
+    calls: zod.array(payloadCallSchema),
+    asks: zod.array(zod.object({ id: zod.string(), callId: zod.string().nullable() })),
+    requests: zod.object({ requests: zod.array(payloadCallSchema) }),
+  }),
+  init: (): ApprovalPayloadState => ({ calls: [], asks: [], requests: { requests: [] } }),
+  apply(state: ApprovalPayloadState, event: SessionEvent): ApprovalPayloadState {
+    switch (event.type) {
+      case 'tool/call': {
+        const text = event.data.arguments
+        const call = {
+          callId: event.data.callId,
+          payload: text.length > APPROVAL_PAYLOAD_CHARS ? text.slice(0, APPROVAL_PAYLOAD_CHARS) : text,
+          truncated: text.length > APPROVAL_PAYLOAD_CHARS,
+        }
+        const calls = [...state.calls.filter(entry => entry.callId !== call.callId), call].slice(-CALL_LIMIT)
+        return settledPayload({ ...state, calls })
+      }
+      case 'tool/result': {
+        const done = event.data.message.toolCallId
+        const calls = state.calls.filter(call => call.callId !== done)
+        if (calls.length === state.calls.length) return state
+        const asks = state.asks.filter(ask => ask.callId !== done)
+        return settledPayload({ ...state, calls, asks })
+      }
+      case 'approval/asked': {
+        const asks = [...state.asks, { id: event.data.id, callId: event.data.callId ?? null }].slice(-ASK_LIMIT)
+        return settledPayload({ ...state, asks })
+      }
+      case 'approval/decided': {
+        const asks = state.asks.filter(ask => ask.id !== event.data.id)
+        if (asks.length === state.asks.length) return state
+        return settledPayload({ ...state, asks })
+      }
+      default:
+        return state
+    }
+  },
+  wire: {
+    viewSchema: zod.object({ requests: zod.array(payloadCallSchema) }),
+    view: (state: ApprovalPayloadState): ApprovalPayloadView => state.requests,
+  },
+} satisfies ProjectionDefinition<'approvalPayload', ApprovalPayloadState>
+
 /**
  * Append the sole durable representation of a session policy override. Invalid
  * values throw before the log changes; projected state follows the committed record.
@@ -174,6 +264,7 @@ export class ApprovalService extends Service {
 
   private approvalProjectionHandle!: ProjectionHandle<ApprovalState>
 
+
   constructor(ctx: Context, public config: Config) {
     super(ctx, 'approval')
   }
@@ -182,6 +273,7 @@ export class ApprovalService extends Service {
     this.approvalProjectionHandle = await this.ctx.sessionProjections.register(approvalStateDefinition)
     // Registration can finish after an unload has started. Do not add effects then.
     if (this.ctx.fiber.uid === null) return
+    await this.ctx.sessionProjections.register(approvalPayloadDefinition)
 
     const effective = (agent: Agent): ApprovalPolicy => this.effectivePolicy(agent.session)
 

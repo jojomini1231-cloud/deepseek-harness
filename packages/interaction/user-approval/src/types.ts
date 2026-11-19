@@ -91,3 +91,25 @@ declare module '@deepseek-ai/cordis' {
     ): Promise<ApprovalOutcome>
   }
 }
+/** One in-flight tool call whose arguments an outstanding ask may still name. */
+export interface ApprovalPayloadCall {
+  /** Call identity the ask names. */
+  readonly callId: string
+  /** Raw model-produced argument text, truncated to {@link APPROVAL_PAYLOAD_CHARS}. */
+  readonly payload: string
+  /** Whether {@link payload} is a prefix of the recorded arguments. */
+  readonly truncated: boolean
+}
+
+/** The client view: payloads for the asks outstanding in one Session right now. */
+export interface ApprovalPayloadView {
+  /** Ask-named payloads in ask order; empty when nothing awaits a decision. */
+  requests: ApprovalPayloadCall[]
+}
+
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionMap {
+    /** Payloads of the tool calls a Session is asking about right now. */
+    approvalPayload: ApprovalPayloadView
+  }
+}

@@ -17,6 +17,9 @@ Browser approval presentation over the Agent-scoped Remote Event waterfall. The 
 - [Dev Note](#dev-note)
 
 -----
+A request that arrives while its Session is in the background is still answerable without opening that Session. The plugin widens that row's hover card and fills it with the asker, its permission mode, one action sentence, the payload the request will run, the decision buttons, and a link to the asking Session; a sandbox escalation that reaches unrestricted host access asks a second time in that card, while a narrower escalation is a single click. It also registers a frame overlay: a count pill that clears the sidebar footer opens a right-edge drawer listing every pending request across Sessions, with the same per-request payload, batch reject, batch allow for requests that all stay inside the sandbox, and the same second step for the ones that do not.
+
+Both surfaces read the payload from the Host's `approvalPayload` Session projection, which folds the arguments of the calls a Session is asking about into its list row. Reading the projection rather than the assembled Conversation is what lets a request whose Session was never opened still disclose its payload; a background Session keeps no Conversation target. A request whose call has no recorded arguments simply offers no disclosure.
 
 Focus the approval detail region to approve with Enter or reject with Escape. The mounted plugin reserves both keys against editable shortcuts. Enter on the focused Reject button retains its native reject action. Input controls and IME candidates keep their own keys. Keyboard and pointer actions share one pending-request lock; a withdrawn or replaced request cannot accept another answer, and an earlier failed answer cannot unlock its replacement.
 

@@ -48,6 +48,7 @@ const ANCHORED: CardPosition = {}
  * @param props.disabled - suppress opening; turning true dismisses an open card.
  * @param props.grouped - share first-display dwell across the surrounding list and active portal.
  * Group replacement removes the previous card immediately, including a fading preview.
+ * @param props.width - compact-card width in px; omitted keeps the stylesheet's list-column width.
  * @param props.copyText - optional primary value copied by activation and
  * included in the card's accessible name.
  * @param props.copyLabel - localized accessible activation-label prefix.
@@ -56,7 +57,7 @@ const ANCHORED: CardPosition = {}
  */
 export function HoverCard({
   anchor, content, openDelayMs = 500, disabled = false, grouped = false,
-  copyText, copyLabel, copiedLabel, variant = 'compact', widthAnchorRef, inline = false, fitContent = false,
+  copyText, copyLabel, copiedLabel, variant = 'compact', width, widthAnchorRef, inline = false, fitContent = false,
 }: {
   anchor: ReactNode
   /** Inline media preview using the shared menu material and keyboard focus. */
@@ -67,6 +68,8 @@ export function HoverCard({
   disabled?: boolean
   grouped?: boolean
   variant?: 'compact' | 'preview'
+  /** Compact-card width in px; a wider card lets a filling slot lay out horizontally. */
+  width?: number | undefined
   widthAnchorRef?: RefObject<HTMLElement | null>
 } & ({ copyText?: string | undefined; copyLabel: string; copiedLabel: string } | {
   copyText?: undefined
@@ -286,7 +289,8 @@ export function HoverCard({
       data-closing={closing || undefined}
       style={{
         positionAnchor: compact ? anchorName : undefined,
-        left: pos.left, top: pos.top, width: pos.width, maxWidth: pos.maxWidth, maxHeight: pos.maxHeight,
+        left: pos.left, top: pos.top, width: pos.width ?? (width === undefined ? undefined : `${width}px`),
+        maxWidth: pos.maxWidth, maxHeight: pos.maxHeight,
         minHeight: copied && copyHeightRef.current !== null ? copyHeightRef.current : undefined,
         '--dsh-hover-preview-fade': `${PREVIEW_FADE_MS}ms`,
       } as CSSProperties}

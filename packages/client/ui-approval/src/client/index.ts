@@ -1,6 +1,8 @@
 /** Browser approval consumer over the existing scoped Remote Event waterfall. */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
+import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
+import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-api-session-controller/client'
 import type { ComposerChainProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
@@ -9,7 +11,12 @@ import type { TypertClientEventListener } from '@deepseek-ai/dsh-typert-protocol
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/client'
 import { ApprovalCard } from './ApprovalCard.tsx'
+import { ApprovalInbox } from './ApprovalInbox.tsx'
+import type { ApprovalInboxInjected } from './ApprovalInbox.tsx'
+import { ApprovalPeek } from './ApprovalPeek.tsx'
+import type { ApprovalPeekInjected } from './ApprovalPeek.tsx'
 import { ApprovalPanel } from './ApprovalPanel.tsx'
+import { approvalPayload } from './approval-detail.ts'
 import { PendingApproval } from './contract/slots.ts'
 import { en, ja, es, fr, de, ru, pt, zh } from './locales.ts'
 
@@ -24,7 +31,7 @@ export type {
 export type { ApprovalKey } from './locales.ts'
 
 /** Required services: Agent scopes, Remote Events, Session UI, Slot registry, and copy. */
-export const inject = ['sessions', 'remote', 'uiSession', 'slots', 'locale']
+export const inject = ['sessions', 'remote', 'uiSession', 'slots', 'locale', 'uiWorkspace']
 
 const NS = 'approval'
 
@@ -77,6 +84,7 @@ async function answerApproval(
  * @param ctx - Client root context.
  */
 export function apply(ctx: ClientContext): void {
+  const resolveDetail = approvalPayload(ctx)
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-approval: dictionaries')
   ctx.inject(['shortcuts'], (scope) => {
     const t = ctx.locale.bind(NS)
@@ -104,6 +112,30 @@ export function apply(ctx: ClientContext): void {
       resolveReason: (reason: NonNullable<PendingApproval['displayReason']>) => ctx.locale.resolveText(reason),
     }),
   }, ApprovalPanel))
+  // The sidebar row's hover card answers in place, so a background Session can
+  // be decided without opening it.
+  ctx.slots.inject('sidebar.session.row.hover', () => ctx.slots.register({
+    name: 'sidebar.session.row.hover',
+    id: 'approval.peek',
+    locale: NS,
+    inject: (): ApprovalPeekInjected => ({
+      hooks: { pending: ctx.uiSession.pendingInteractions },
+      resolveReason: reason => ctx.locale.resolveText(reason),
+      openSession: (sessionId) => { ctx.uiWorkspace.openSession(sessionId) },
+      resolveDetail,
+    }),
+  }, ApprovalPeek))
+  // The frame overlay drains approvals queued across every Session at once.
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: 'approval.inbox',
+    locale: NS,
+    inject: (): ApprovalInboxInjected => ({
+      hooks: { pending: ctx.uiSession.pendingInteractions },
+      resolveReason: reason => ctx.locale.resolveText(reason),
+      resolveDetail,
+    }),
+  }, ApprovalInbox))
   ctx.remote.$on('approval/request', function (request, next) {
     return answerApproval(ctx, this, request, next, registerPendingInteraction)
   })

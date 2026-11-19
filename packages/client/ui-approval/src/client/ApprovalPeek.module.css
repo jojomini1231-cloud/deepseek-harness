@@ -1,0 +1,181 @@
+/* Sidebar hover-card approval body. The card is 244px wide with 16px side
+ * padding, so every row here works at 212px. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Requesting tool and its permission tier share the line the card's title
+ * would own on a standalone card. */
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tool {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-hovercard-label-tertiary);
+  font-size: 11.5px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Full-bleed hairline: the card's own padding is 16px. */
+.rule {
+  height: 1px;
+  margin: 11px -16px;
+  background: var(--dsw-static-neutral-bluish-750);
+}
+
+.action {
+  margin: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--dsw-alias-hovercard-label-primary);
+  font-size: 13px;
+  line-height: 21px;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.perm {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+  color: var(--dsw-alias-hovercard-label-tertiary);
+  font-size: 11.5px;
+  line-height: 16px;
+}
+
+.perm code {
+  padding: 1.5px 6px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-static-neutral-bluish-800);
+  color: var(--dsw-alias-hovercard-label-secondary);
+  font-size: 11px;
+}
+
+/* Second step for unrestricted host access. */
+.warn {
+  margin: 11px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-static-neutral-bluish-900);
+  box-shadow: inset 0 0 0 1px var(--dsw-alias-hovercard-state-error);
+  color: var(--dsw-alias-hovercard-label-secondary);
+  font-size: 11.5px;
+  line-height: 18px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.actions > :last-child {
+  margin-inline-start: auto;
+}
+
+.disclose {
+  align-self: flex-start;
+  margin-top: 9px;
+  text-align: start;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-hovercard-label-tertiary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  padding: 0;
+}
+
+.payload {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  max-height: 168px;
+  overflow: auto;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-static-neutral-bluish-900);
+  color: var(--dsw-alias-hovercard-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* The card is a dark tooltip surface in every theme, so its buttons carry the
+ * contrast pair locally instead of the theme-dependent primary fill. */
+.act {
+  flex: 0 0 auto;
+  min-width: 96px;
+  padding: 0 16px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--dsw-radius-md);
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--dsw-static-neutral-bluish-750);
+  color: var(--dsw-alias-hovercard-label-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  line-height: 30px;
+}
+
+.actPrimary {
+  background: var(--dsw-static-neutral-bluish-00);
+  color: var(--dsw-static-neutral-bluish-900);
+  font-weight: 600;
+}
+
+@media (hover: hover) {
+  .act:hover {
+    box-shadow: inset 0 0 0 1px var(--dsw-static-neutral-bluish-700);
+    color: var(--dsw-alias-hovercard-label-primary);
+  }
+
+  .actPrimary:hover {
+    background: var(--dsw-static-neutral-bluish-50);
+    color: var(--dsw-static-neutral-bluish-900);
+  }
+}
+
+.act:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  margin-top: 9px;
+  color: var(--dsw-alias-hovercard-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dsw-alias-hovercard-label-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .link:hover {
+    color: var(--dsw-alias-hovercard-label-primary);
+    text-decoration: underline;
+  }
+}

@@ -13,6 +13,8 @@ const EXEMPT_FILES: Record<string, string> = {
   'packages/client/ui-primitives/src/ansi.ts': 'ANSI SGR palette mapping',
   'packages/client/web/src/boot-page.module.css': 'boot page paints before ui-theme loads',
   'packages/client/web/src/base.css': 'shell fallbacks before ui-theme loads',
+  'packages/client/ui-approval/src/client/ApprovalPeek.module.css':
+    'answers inside the always-dark hover card, whose nested surfaces and hairlines have no alias steps',
 }
 
 /** Alpha masks and box-shadow ink are geometry, not themed surface or label colors. */

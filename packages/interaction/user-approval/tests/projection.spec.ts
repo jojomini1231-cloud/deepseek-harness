@@ -5,6 +5,8 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ApprovalService, { setApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
+import type { ApprovalRequestId } from '@deepseek-ai/dsh-user-approval/types'
+import type { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { z } from 'zod'
 
@@ -152,12 +154,16 @@ describe('approval state', () => {
     const read = vi.spyOn(session, 'eventAt')
     const snapshot = vi.spyOn(session, 'snapshotEvents')
     expect(ctx.approval.overrideOf(session)).toBe('never')
+    // Both units seeded while the service loaded; a read never folds the log again.
+    const folds = snapshot.mock.calls.length
     const prompt = await ctx.systemPrompt.assemble({ agent: agentFor(session) })
     expect(prompt.contexts.find(entry => entry.name === 'approval:policy')?.text).toContain('Approval prompts are disabled')
     session.append('turn/start', { turn: 1 })
     await expect(ctx.approval.request({ agent: agentFor(session), toolName: 'echo' })).resolves.toBe('rejected')
     expect(read).not.toHaveBeenCalled()
-    expect(snapshot).not.toHaveBeenCalled()
+    // The payload unit folds this Session's existing log once on its first drive;
+    // no read of the approval state adds another.
+    expect(snapshot).toHaveBeenCalledTimes(Math.max(folds, 1))
   })
 
   it('fails activation when its projection registration fails', async () => {
@@ -230,5 +236,59 @@ describe('approval state', () => {
     const prompt = await ctx.systemPrompt.assemble({ agent: agentFor(session) })
     expect(prompt.contexts).not.toContainEqual(expect.objectContaining({ name: 'approval:policy' }))
     expect(errorLog).not.toHaveBeenCalled()
+  })
+})
+
+describe('approval payload', () => {
+  const CALL = 'call-1' as ToolCallId
+
+  it('carries the arguments of the call an ask names, and only while it is outstanding', async () => {
+    const { ctx } = await harness()
+    await ctx.plugin(ApprovalService)
+    const session = ctx.sessions.create()
+    session.append('turn/start', { turn: 1 })
+    session.append('tool/call', { turn: 1, step: 1, callId: CALL, name: 'bash', arguments: '{"cmd":"rm -rf .tmp"}' })
+    expect(ctx.sessionProjections.snapshot(session).values).toHaveProperty('approvalPayload', { requests: [] })
+
+    session.append('approval/asked', { id: 'ask-1' as ApprovalRequestId, toolName: 'bash', callId: CALL, reason: 'rm' })
+    expect(ctx.sessionProjections.snapshot(session).values).toHaveProperty('approvalPayload', {
+      requests: [{ callId: CALL, payload: '{"cmd":"rm -rf .tmp"}', truncated: false }],
+    })
+
+    session.append('approval/decided', { id: 'ask-1' as ApprovalRequestId, outcome: 'allowed-once' })
+    expect(ctx.sessionProjections.snapshot(session).values).toHaveProperty('approvalPayload', { requests: [] })
+  })
+
+  it('drops the payload once the call settles without a decision', async () => {
+    const { ctx } = await harness()
+    await ctx.plugin(ApprovalService)
+    const session = ctx.sessions.create()
+    session.append('turn/start', { turn: 1 })
+    session.append('tool/call', { turn: 1, step: 1, callId: CALL, name: 'bash', arguments: '{}' })
+    session.append('approval/asked', { id: 'ask-1' as ApprovalRequestId, toolName: 'bash', callId: CALL })
+    session.append('tool/result', {
+      turn: 1,
+      step: 1,
+      message: { id: 'm-1' as never, role: 'tool', source: { kind: 'tool', name: 'bash' } as never, toolCallId: CALL, content: [] },
+    }, { surfaceOp: 'append' })
+    expect(ctx.sessionProjections.snapshot(session).values).toHaveProperty('approvalPayload', { requests: [] })
+  })
+
+  it('keeps an ask that names no call out of the view and truncates oversized arguments', async () => {
+    const { ctx } = await harness()
+    await ctx.plugin(ApprovalService)
+    const session = ctx.sessions.create()
+    session.append('turn/start', { turn: 1 })
+    session.append('approval/asked', { id: 'ask-0' as ApprovalRequestId, toolName: 'bash' })
+    expect(ctx.sessionProjections.snapshot(session).values).toHaveProperty('approvalPayload', { requests: [] })
+
+    session.append('tool/call', { turn: 1, step: 1, callId: CALL, name: 'bash', arguments: 'x'.repeat(5_000) })
+    session.append('approval/asked', { id: 'ask-1' as ApprovalRequestId, toolName: 'bash', callId: CALL })
+    const view = ctx.sessionProjections.snapshot(session).values.approvalPayload as {
+      requests: { payload: string; truncated: boolean }[]
+    }
+    expect(view.requests).toHaveLength(1)
+    expect(view.requests[0]?.payload).toHaveLength(4_096)
+    expect(view.requests[0]?.truncated).toBe(true)
   })
 })

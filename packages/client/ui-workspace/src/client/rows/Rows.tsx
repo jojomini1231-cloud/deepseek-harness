@@ -26,6 +26,9 @@ import type { WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
 import css from './Rows.module.css'
 
+/** A Session awaiting approval widens its card so the answering surface lays out horizontally. */
+const APPROVAL_CARD_WIDTH = 424
+
 /** Sidebar-owned layout values needed by row copies mounted outside the sidebar. */
 const DRAG_PREVIEW_PROPERTIES = [
   '--dsh-sidebar-row-padding',
@@ -681,6 +684,7 @@ export function SessionNodeItem({
       />}
       openDelayMs={800}
       grouped
+      width={node.pendingInteraction === 'approval' ? APPROVAL_CARD_WIDTH : undefined}
       disabled={menuOpen || drag?.active === true}
       copyText={row.blank || row.title === '' ? undefined : row.title}
       copyLabel={t('copy')}

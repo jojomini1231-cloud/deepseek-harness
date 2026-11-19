@@ -4628,6 +4628,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     declaredBy: 'an entry in \'root\' (client-ui-layout), so it exists while that entry is mounted',
     occupants: [
       'client-ui-agent-team TeamDisableConfirmation id \'agent-team.disable\'',
+      'client-ui-approval ApprovalInbox id \'approval.inbox\'',
       'client-ui-chat QuotaNoticeHost id \'chat.quota-notice\'',
       'client-ui-connector-account ConnectorAccountToastEntry id \'connector-account.notice\'',
       'client-ui-context-menu MenuOverlay id \'context-menu\'',
@@ -5897,6 +5898,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     slotInject: '',
     declaredBy: 'an entry in \'sidebar.workspaces\' (client-ui-workspace), so it exists while that entry is mounted',
     occupants: [
+      'client-ui-approval ApprovalPeek id \'approval.peek\'',
       'client-ui-schedule SessionScheduleHover id \'schedule-tasks\'',
       'experimental-client-ui-forge SessionHoverForge id \'forge-panel.row\'',
     ],

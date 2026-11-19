@@ -1,11 +1,15 @@
 // @vitest-environment jsdom
 import { Context } from '@deepseek-ai/cordis'
 import { createScope, scopeOf } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { ApprovalPayloadView } from '@deepseek-ai/dsh-user-approval/types'
 import type { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApprovalCard } from '../src/client/ApprovalCard.tsx'
+import type { ApprovalInboxInjected } from '../src/client/ApprovalInbox.tsx'
+import type { ApprovalPeekInjected } from '../src/client/ApprovalPeek.tsx'
 import { ApprovalWarning } from '../src/client/ApprovalWarning.tsx'
 import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { FactoryComponentPropsOf } from '@deepseek-ai/dsh-client-ui-slots'
@@ -14,6 +18,15 @@ import type { ApprovalCardInput, ApprovalComposerProps, ApprovalInjected } from 
 import { PendingApproval } from '../src/client/contract/slots.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { apply as nodeApply } from '../src/index.ts'
+
+/** Injection face of the two compact surfaces registered beside the composer card. */
+type SecondaryInjection = ApprovalPeekInjected | ApprovalInboxInjected
+
+/** Slot options of a registration other than the composer takeover, as `apply` builds them. */
+interface SecondaryOptions {
+  readonly name: string
+  inject(): ApprovalInjected | SecondaryInjection
+}
 
 type ApprovalListener = (
   this: Context,
@@ -36,6 +49,13 @@ interface PluginBench {
   readonly disposeLocale: ReturnType<typeof vi.fn>
   readonly register: ReturnType<typeof vi.fn>
   readonly injectSlot: ReturnType<typeof vi.fn>
+  /** The pending-interaction source every compact surface reads. */
+  readonly pendingInteractions: { getSnapshot(): ReadonlyMap<SessionId, unknown> }
+  readonly openSession: ReturnType<typeof vi.fn>
+  /** Registrations other than the composer takeover, in apply order. */
+  readonly secondary: { options: SecondaryOptions; component: unknown }[]
+  /** Stand in for the Host list's per-Session projection block. */
+  projections(bySession: Record<string, ApprovalPayloadView>): void
   readonly shortcuts: ReturnType<typeof vi.fn<(entry: { label: () => string }) => () => void>>
   releasePending(): Promise<void>
   registration(): {
@@ -68,11 +88,13 @@ async function setupPlugin(): Promise<PluginBench> {
     pending.set(value, delegate)
     return () => { pending.delete(value) }
   })
+  const secondary: { options: SecondaryOptions; component: unknown }[] = []
   const register = vi.fn((
-    options: NonNullable<typeof registration>['options'],
+    options: NonNullable<typeof registration>['options'] & { name: string },
     component: unknown,
   ) => {
-    registration = { options, component }
+    if (options.name === 'conversation.composer') registration = { options, component }
+    else secondary.push({ options, component })
     return disposeSlot
   })
   const injectSlot = vi.fn((_name: string, mount: () => () => void) => {
@@ -85,8 +107,14 @@ async function setupPlugin(): Promise<PluginBench> {
       return () => {}
     },
   } as never)
-  ctx.provide('sessions', { scopeOf } as never)
-  ctx.provide('uiSession', { registerPendingInteraction } as never)
+  const projectionList: { getSnapshot: () => SessionListState } = {
+    getSnapshot: () => ({ ids: [], byId: {}, phase: 'ready', projectionsBySession: {} }),
+  }
+  ctx.provide('sessions', { scopeOf, list: projectionList } as never)
+  const pendingInteractions = { getSnapshot: () => new Map<SessionId, unknown>() }
+  ctx.provide('uiSession', { registerPendingInteraction, pendingInteractions } as never)
+  const openSession = vi.fn()
+  ctx.provide('uiWorkspace', { openSession } as never)
   ctx.provide('slots', { inject: injectSlot, register, registerFactory: vi.fn() } as never)
   const shortcuts = vi.fn((entry: { label: () => string }) => { entry.label(); return () => {} })
   ctx.provide('shortcuts', { registerFixed: shortcuts } as never)
@@ -99,15 +127,33 @@ async function setupPlugin(): Promise<PluginBench> {
   const fiber = ctx.plugin({ apply })
   await fiber.await()
   if (listener === undefined) throw new Error('approval listener was not registered')
+  /** Stand in for the Host list's per-Session projection block. */
+  const projections = (bySession: Record<string, ApprovalPayloadView>) => {
+    projectionList.getSnapshot = () => ({
+      ids: Object.keys(bySession) as SessionId[],
+      byId: {},
+      phase: 'ready',
+      projectionsBySession: Object.fromEntries(
+        Object.entries(bySession).map(([id, value]) => [
+          id,
+          { values: { approvalPayload: value }, state: 'ready' as const, error: null },
+        ]),
+      ),
+    })
+  }
   return {
     ctx,
     listener,
+    projections,
     pending: { getSnapshot: () => [...pending.keys()] },
     registerPendingInteraction,
     disposeSlot,
     disposeLocale,
     register,
     injectSlot,
+    pendingInteractions,
+    openSession,
+    secondary,
     shortcuts,
     async releasePending() {
       const delegates = [...pending.values()]
@@ -221,7 +267,7 @@ describe('approval Remote Event consumer', () => {
       .resolves.toBe('unavailable')
     expect(next).toHaveBeenCalledOnce()
     expect(bench.pending.getSnapshot()).toEqual([])
-    expect(bench.register).toHaveBeenCalledOnce()
+    expect(bench.register).toHaveBeenCalledTimes(3)
     expect(bench.shortcuts.mock.calls.map(([entry]) => entry.label())).toEqual(['allow', 'reject'])
   })
 
@@ -259,7 +305,7 @@ describe('approval Remote Event consumer', () => {
     await expect(result).resolves.toBe('allowed-once')
     expect(next).not.toHaveBeenCalled()
     expect(bench.pending.getSnapshot()).toEqual([])
-    expect(bench.register).toHaveBeenCalledOnce()
+    expect(bench.register).toHaveBeenCalledTimes(3)
     expect(bench.disposeSlot).not.toHaveBeenCalled()
     await scope.fiber.dispose()
   })
@@ -316,10 +362,42 @@ describe('approval Remote Event consumer', () => {
     await scope.fiber.dispose()
   })
 
+  it('hands both compact surfaces the shared pending source and copy resolver', async () => {
+    const bench = await setupPlugin()
+    expect(bench.secondary.map(entry => entry.options.name))
+      .toEqual(['sidebar.session.row.hover', 'shell.overlay'])
+    for (const entry of bench.secondary) {
+      const injected = entry.options.inject()
+      expect('hooks' in injected).toBe(true)
+      if (!('hooks' in injected)) continue
+      expect(injected.hooks.pending).toBe(bench.pendingInteractions)
+      expect(injected.resolveReason({ en: 'Localized prompt', zh: '本地化提示' })).toBe('Localized prompt')
+      if (!('openSession' in injected)) continue
+      injected.openSession('s1' as SessionId)
+      expect(bench.openSession).toHaveBeenCalledWith('s1')
+    }
+  })
+
+  it('resolves the payload both compact surfaces show from the Host projection', async () => {
+    const bench = await setupPlugin()
+    bench.projections({
+      's1': { requests: [{ callId: 'call-1', payload: 'echo hi', truncated: false }] },
+    })
+    for (const entry of bench.secondary) {
+      const injected = entry.options.inject()
+      if (!('resolveDetail' in injected)) continue
+      expect(injected.resolveDetail('s1' as SessionId, 'call-1' as ToolCallId)).toBe('echo hi')
+      expect(injected.resolveDetail('s1' as SessionId, 'call-2' as ToolCallId)).toBeUndefined()
+      expect(injected.resolveDetail('s1' as SessionId, undefined)).toBeUndefined()
+      // A Session the list does not carry answers nothing rather than throwing.
+      expect(injected.resolveDetail('s9' as SessionId, 'call-1' as ToolCallId)).toBeUndefined()
+    }
+  })
+
   it('removes stable registrations with the plugin lifetime', async () => {
     const bench = await setupPlugin()
     await bench.ctx.fiber.dispose()
-    expect(bench.disposeSlot).toHaveBeenCalledOnce()
+    expect(bench.disposeSlot).toHaveBeenCalledTimes(3)
     expect(bench.disposeLocale).toHaveBeenCalledOnce()
   })
 })
@@ -513,7 +591,7 @@ describe('ApprovalPanel', () => {
 
 describe('package entries', () => {
   it('declares its service edges and keeps the Host half inert', () => {
-    expect(inject).toEqual(['sessions', 'remote', 'uiSession', 'slots', 'locale'])
+    expect(inject).toEqual(['sessions', 'remote', 'uiSession', 'slots', 'locale', 'uiWorkspace'])
     expect(() => { nodeApply() }).not.toThrow()
   })
 })

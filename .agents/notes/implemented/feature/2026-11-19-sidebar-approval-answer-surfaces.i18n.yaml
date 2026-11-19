@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-11-19-sidebar-approval-answer-surfaces.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-11-19-sidebar-approval-answer-surfaces.md
+/agent-note-background-sessions-answer-approvals-from-the-sidebar-and-a-frame-queue:
+  en: abbf1ad711a4d3e1
+  zh: f62d324e452232d3
+/agent-note-background-sessions-answer-approvals-from-the-sidebar-and-a-frame-queue/problem:
+  en: b627d636455488bd
+  zh: f7e345f2fb0d2778
+/agent-note-background-sessions-answer-approvals-from-the-sidebar-and-a-frame-queue/decision:
+  en: 03bef9c06dbb9f1b
+  zh: 70f727438afb02aa
+/agent-note-background-sessions-answer-approvals-from-the-sidebar-and-a-frame-queue/alternatives-considered:
+  en: 622601b739237b6a
+  zh: a229636e9f34cc99
+/agent-note-background-sessions-answer-approvals-from-the-sidebar-and-a-frame-queue/consequences:
+  en: d85b8db5fa7814f1
+  zh: 96a952913bcba6dd
