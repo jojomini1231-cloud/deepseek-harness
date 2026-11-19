@@ -22,6 +22,7 @@
  * a signal the face composes from the tab's and the chip's own controller, so
  * closing a chip releases its preview without touching its siblings.
  */
+import { selectSessionDirectory } from '@deepseek-ai/dsh-api-session-controller/client/directories'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import {
@@ -80,7 +81,7 @@ export function FilesBody({
   const paneId = pane.id
   useEffect(() => tab.actions.bindCommands({ refresh: () => { refresh(paneId) } }), [tab.actions, paneId, refresh])
   const { signal } = tab
-  const cwd = useSessions(sessions => sessions.byId[sessionId]?.cwd)
+  const cwd = useSessions(sessions => selectSessionDirectory(sessions, sessionId))
   const state = useStore(store => store.byTab[tab.id])
   // The pane's tree, as its navigator draws it: listed at the Session's working directory.
   const autoRefresh = useStore((store) => {

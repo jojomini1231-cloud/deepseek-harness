@@ -21,6 +21,9 @@
       "path": "../../api/workspace-files/tsconfig.client.json"
     },
     {
+      "path": "../../api/session-controller/tsconfig.client.json"
+    },
+    {
       "path": "../../core/session"
     },
     {

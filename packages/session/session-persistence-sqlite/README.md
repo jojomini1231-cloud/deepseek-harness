@@ -60,6 +60,8 @@ An active JSONL writer retains ownership until it closes. A SQLite read open wai
 
 Direct append, live Session events and durability checkpoints use the same handle. `flush()` drains pending events; writer close and provider disposal finish admitted writes before releasing ownership. An automatic write failure retains its pending batch and pauses automatic writes; the next explicit checkpoint retries and reports any remaining failure.
 
+Concurrent writers share a transaction when their encoded batches are queued together. Each batch has its own savepoint: a batch-local failure rejects that batch while its peers commit, but an error that ends the transaction rejects the whole group. Routing publication follows commit and settles each batch independently. An unknown commit or rollback result makes the provider unusable until restart.
+
 ### Deleting a Session
 
 `delete(id)` removes the Trace, its routing record, and every Segment no remaining Trace reaches. A Segment a fork still inherits survives with its frames and ancestry rows, so deleting one branch leaves its source readable. An open write handle refuses the deletion; a created-but-unmaterialized Session is cancelled instead, leaving no stored footprint. A legacy JSONL identity this provider never imported stays the JSONL backend's to remove. The append-only triggers admit the deletion by being dropped and recreated inside the same transaction, so a rollback restores them and a committed delete keeps stored events append-only.
