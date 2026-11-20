@@ -1,9 +1,9 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
+import { LocalBashExecutor, candidateBashPaths, resolveBashPath } from '@deepseek-ai/dsh-bash-local'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import SubprocessRuntime from '@deepseek-ai/dsh-subprocess'
 import type { SubprocessHandle, SubprocessOutcome, SubprocessOutputReader } from '@deepseek-ai/dsh-subprocess'
@@ -559,5 +559,102 @@ describe('execute() projections under none policy', () => {
     controller.abort()
     await killed.done
     await expect(killed.result()).resolves.toMatchObject({ timedOut: false, aborted: true })
+  })
+})
+
+describe('resolveBashPath and candidateBashPaths (pure, every platform)', () => {
+  it('trusts an explicit configured path verbatim', () => {
+    expect(resolveBashPath('C:\\custom\\bash.exe')).toBe('C:\\custom\\bash.exe')
+    expect(resolveBashPath('bash')).toBe('bash')
+  })
+
+  it('falls through an empty configured path to platform resolution', () => {
+    expect(resolveBashPath('', { PATH: 'P:\\Tools' }, 'win32')).toBe('bash')
+  })
+
+  it('returns bash on non-Windows platforms regardless of the environment', () => {
+    expect(resolveBashPath(undefined, { ProgramFiles: 'P:\\Program Files' }, 'linux')).toBe('bash')
+    expect(resolveBashPath(undefined, { PATH: 'P:\\Store' }, 'darwin')).toBe('bash')
+  })
+
+  it('uses stable Windows roots when the environment omits every override', () => {
+    expect(candidateBashPaths({})).toEqual([
+      join('C:\\Program Files', 'Git', 'bin', 'bash.exe'),
+      join('C:\\Users\\Public', 'AppData', 'Local', 'Programs', 'Git', 'bin', 'bash.exe'),
+      join('C:\\Users\\Public', 'scoop', 'apps', 'git', 'current', 'bin', 'bash.exe'),
+      join('C:\\ProgramData\\chocolatey', 'bin', 'bash.exe'),
+    ])
+  })
+
+  it('lists well-known Git locations, then non-System32 PATH entries (quotes stripped)', () => {
+    const candidates = candidateBashPaths({
+      ProgramFiles: 'P:\\Program Files',
+      'ProgramFiles(x86)': 'X:\\Program Files (x86)',
+      USERPROFILE: 'U:\\me',
+      ChocolateyInstall: 'H:\\choco',
+      SystemRoot: 'S:\\Windows',
+      PATH: ';"Q:\\quoted store";S:\\Windows\\System32;s:\\windows\\system32',
+    })
+    expect(candidates).toEqual([
+      join('P:\\Program Files', 'Git', 'bin', 'bash.exe'),
+      join('X:\\Program Files (x86)', 'Git', 'bin', 'bash.exe'),
+      join('U:\\me', 'AppData', 'Local', 'Programs', 'Git', 'bin', 'bash.exe'),
+      join('U:\\me', 'scoop', 'apps', 'git', 'current', 'bin', 'bash.exe'),
+      join('H:\\choco', 'bin', 'bash.exe'),
+      join('Q:\\quoted store', 'bash.exe'),
+    ])
+  })
+
+  it('returns the first EXISTING win32 candidate, else bash', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-bash-resolve-'))
+    try {
+      const store = join(dir, 'store')
+      mkdirSync(store, { recursive: true })
+      writeFileSync(join(store, 'bash.exe'), '')
+      // The existing PATH entry wins over the non-existent Git installs.
+      expect(resolveBashPath(undefined, { ProgramFiles: join(dir, 'missing'), PATH: store }, 'win32'))
+        .toBe(join(store, 'bash.exe'))
+      // No candidate exists anywhere → the PATH-resolution fallback.
+      expect(resolveBashPath(undefined, { ProgramFiles: join(dir, 'missing'), PATH: join(dir, 'empty') }, 'win32'))
+        .toBe('bash')
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  it('accepts a link-shaped candidate whose target cannot be stat-ed', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-bash-resolve-link-'))
+    try {
+      const store = join(dir, 'store')
+      mkdirSync(store, { recursive: true })
+      const link = join(store, 'bash.exe')
+      symlinkSync(join(dir, 'no-such-target.exe'), link)
+      expect(resolveBashPath(undefined, { ProgramFiles: join(dir, 'missing'), PATH: store }, 'win32'))
+        .toBe(link)
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  it('skips a directory candidate and falls through to the PATH-resolution default', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-bash-resolve-dir-'))
+    try {
+      const store = join(dir, 'store')
+      mkdirSync(join(store, 'bash.exe'), { recursive: true })
+      expect(resolveBashPath(undefined, { ProgramFiles: join(dir, 'missing'), PATH: store }, 'win32')).toBe('bash')
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+})
+
+describe('argv seam (the executable a confining subclass wraps)', () => {
+  /** Exposes the protected argv hook so the spec can assert its content. */
+  class ProbingBashExecutor extends LocalBashExecutor {
+    static override inject = ['subprocess']
+    exposedArgv(spec: ShellExecSpec): string[] { return this.argv(spec) }
+  }
+
+  it('threads the resolved executable into the -c argv', async () => {
+    const ctx = new Context()
+    await ctx.plugin(LocalSubprocessRuntime)
+    await ctx.plugin(ProbingBashExecutor, { bashPath: '/custom/bash.exe' })
+    const bash = ctx.shell as ProbingBashExecutor
+    expect(bash.exposedArgv(bash.resolve({ command: 'echo hi' }))).toEqual(['/custom/bash.exe', '-c', 'echo hi'])
+    await ctx.fiber.dispose()
   })
 })

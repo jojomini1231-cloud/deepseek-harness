@@ -8,6 +8,9 @@ export type ShellSettingsLocaleKey =
   | 'timeoutMs' | 'timeoutMsHint' | 'maxOutputBytes' | 'maxOutputBytesHint'
   | 'overridden' | 'reset' | 'readOnly' | 'unavailable'
   | 'save' | 'saving' | 'saveFailed' | 'invalidNumber'
+  | 'choiceTitle' | 'choiceDescription' | 'choicePwsh' | 'choiceGitBash' | 'choiceUnavailable'
+  | 'choiceReadError' | 'choiceGitBashMissing'
+  | 'choiceResult.applied' | 'choiceResult.restart-required' | 'choiceResult.overridden' | 'choiceResult.failed'
 
 /** English copy. */
 export const en: Record<ShellSettingsLocaleKey, string> = {
@@ -25,6 +28,17 @@ export const en: Record<ShellSettingsLocaleKey, string> = {
   saving: 'Saving…',
   saveFailed: 'The deployment did not accept these values; they were left for you to correct.',
   invalidNumber: 'Enter a number, or leave blank to use the default.',
+  choiceTitle: 'Command-line shell',
+  choiceDescription: 'Choose the shell that runs commands on this Windows host.',
+  choicePwsh: 'PowerShell',
+  choiceGitBash: 'Git Bash',
+  choiceUnavailable: 'No shell is composed',
+  choiceReadError: 'Failed to read the current choice.',
+  choiceGitBashMissing: 'No Git Bash installation was found.',
+  'choiceResult.applied': 'Switched the command-line shell.',
+  'choiceResult.restart-required': 'The new shell takes effect after a restart.',
+  'choiceResult.overridden': 'Another profile layer overrides this shell choice.',
+  'choiceResult.failed': 'Switching the shell failed.',
 }
 
 /** Simplified Chinese copy. */
@@ -43,6 +57,17 @@ export const zh: Record<ShellSettingsLocaleKey, string> = {
   saving: '保存中…',
   saveFailed: '本部署没有接受这些值，已保留供你修改。',
   invalidNumber: '请填数字；留空表示使用默认值。',
+  choiceTitle: '命令行终端',
+  choiceDescription: '选择在这台 Windows 主机上执行命令所用的终端。',
+  choicePwsh: 'PowerShell',
+  choiceGitBash: 'Git Bash',
+  choiceUnavailable: '当前未组合任何终端',
+  choiceReadError: '读取当前选择失败。',
+  choiceGitBashMissing: '未找到 Git Bash 安装。',
+  'choiceResult.applied': '已切换命令行终端。',
+  'choiceResult.restart-required': '新终端将在重启后生效。',
+  'choiceResult.overridden': '该终端选择被其他配置层覆盖。',
+  'choiceResult.failed': '切换终端失败。',
 }
 
 /**
@@ -70,6 +95,17 @@ export const ja = {
   'saving': '保存中…',
   'saveFailed': 'デプロイがこれらの値を受け付けませんでした。修正のため残されています。',
   'invalidNumber': '数値を入力するか、空欄のままにするとデフォルトが使用されます。',
+  'choiceTitle': 'コマンドシェル',
+  'choiceDescription': 'この Windows ホストでコマンドを実行するシェルを選択します。',
+  'choicePwsh': 'PowerShell',
+  'choiceGitBash': 'Git Bash',
+  'choiceUnavailable': 'シェルが構成されていません',
+  'choiceReadError': '現在の選択の読み取りに失敗しました。',
+  'choiceGitBashMissing': 'Git Bash のインストールが見つかりません。',
+  'choiceResult.applied': 'コマンドシェルを切り替えました。',
+  'choiceResult.restart-required': '新しいシェルは再起動後に有効になります。',
+  'choiceResult.overridden': 'このシェル選択は他の構成層で上書きされています。',
+  'choiceResult.failed': 'シェルの切り替えに失敗しました。',
 } satisfies Record<keyof typeof en, string>
 
 /** Spanish dictionary, checked against the English keys. */
@@ -88,6 +124,17 @@ export const es = {
   saving: 'Guardando…',
   saveFailed: 'El despliegue no aceptó estos valores; quedaron para que usted los corrigiera.',
   invalidNumber: 'Ingrese un número o déjelo en blanco para usar el valor predeterminado.',
+  choiceTitle: 'Shell de comandos',
+  choiceDescription: 'Elige el shell que ejecuta los comandos en este host Windows.',
+  choicePwsh: 'PowerShell',
+  choiceGitBash: 'Git Bash',
+  choiceUnavailable: 'No hay ningún shell compuesto',
+  choiceReadError: 'No se pudo leer la elección actual.',
+  choiceGitBashMissing: 'No se encontró ninguna instalación de Git Bash.',
+  'choiceResult.applied': 'Se cambió el shell de comandos.',
+  'choiceResult.restart-required': 'El nuevo shell surte efecto tras reiniciar.',
+  'choiceResult.overridden': 'Otra capa del perfil anula esta elección de shell.',
+  'choiceResult.failed': 'No se pudo cambiar el shell.',
 } satisfies Record<keyof typeof en, string>
 
 /** French dictionary, checked against the English keys. */
@@ -106,6 +153,17 @@ export const fr = {
   saving: 'Sauvegarde…',
   saveFailed: "Le déploiement n'a pas accepté ces valeurs ; ils vous ont été laissés à corriger.",
   invalidNumber: 'Entrez un numéro ou laissez ce champ vide pour utiliser la valeur par défaut.',
+  choiceTitle: 'Shell de commandes',
+  choiceDescription: 'Choisit le shell qui exécute les commandes sur cet hôte Windows.',
+  choicePwsh: 'PowerShell',
+  choiceGitBash: 'Git Bash',
+  choiceUnavailable: 'Aucun shell composé',
+  choiceReadError: 'Échec de lecture du choix actuel.',
+  choiceGitBashMissing: "Aucune installation de Git Bash n'a été trouvée.",
+  'choiceResult.applied': 'Le shell de commandes a été changé.',
+  'choiceResult.restart-required': 'Le nouveau shell prend effet après un redémarrage.',
+  'choiceResult.overridden': 'Un autre calque du profil remplace ce choix de shell.',
+  'choiceResult.failed': 'Échec du changement de shell.',
 } satisfies Record<keyof typeof en, string>
 
 /** German dictionary, checked against the English keys. */
@@ -124,6 +182,17 @@ export const de = {
   saving: 'Speichern…',
   saveFailed: 'Die Bereitstellung hat diese Werte nicht akzeptiert. Sie mussten sie korrigieren.',
   invalidNumber: 'Geben Sie eine Zahl ein oder lassen Sie das Feld leer, um den Standardwert zu verwenden.',
+  choiceTitle: 'Befehls-Shell',
+  choiceDescription: 'Wählt die Shell, die Befehle auf diesem Windows-Host ausführt.',
+  choicePwsh: 'PowerShell',
+  choiceGitBash: 'Git Bash',
+  choiceUnavailable: 'Keine Shell zusammengesetzt',
+  choiceReadError: 'Die aktuelle Auswahl konnte nicht gelesen werden.',
+  choiceGitBashMissing: 'Keine Git-Bash-Installation gefunden.',
+  'choiceResult.applied': 'Die Befehls-Shell wurde gewechselt.',
+  'choiceResult.restart-required': 'Die neue Shell wird nach einem Neustart wirksam.',
+  'choiceResult.overridden': 'Eine andere Profilebene überschreibt diese Shell-Auswahl.',
+  'choiceResult.failed': 'Wechseln der Shell fehlgeschlagen.',
 } satisfies Record<keyof typeof en, string>
 
 /** Russian dictionary, checked against the English keys. */
@@ -142,6 +211,17 @@ export const ru = {
   saving: 'Сохранение…',
   saveFailed: 'Развертывание не приняло эти значения; их оставили вам на исправление.',
   invalidNumber: 'Введите число или оставьте поле пустым, чтобы использовать значение по умолчанию.',
+  choiceTitle: 'Командная оболочка',
+  choiceDescription: 'Выбор оболочки, выполняющей команды на этом узле Windows.',
+  choicePwsh: 'PowerShell',
+  choiceGitBash: 'Git Bash',
+  choiceUnavailable: 'Оболочка не скомпонована',
+  choiceReadError: 'Не удалось прочитать текущий выбор.',
+  choiceGitBashMissing: 'Установка Git Bash не найдена.',
+  'choiceResult.applied': 'Командная оболочка переключена.',
+  'choiceResult.restart-required': 'Новая оболочка вступит в силу после перезапуска.',
+  'choiceResult.overridden': 'Этот выбор оболочки переопределяется другим слоем профиля.',
+  'choiceResult.failed': 'Не удалось переключить оболочку.',
 } satisfies Record<keyof typeof en, string>
 
 /** Portuguese dictionary, checked against the English keys. */
@@ -160,4 +240,15 @@ export const pt = {
   saving: 'Salvando…',
   saveFailed: 'A implantação não aceitou esses valores; eles foram deixados para você corrigir.',
   invalidNumber: 'Insira um número ou deixe em branco para usar o padrão.',
+  choiceTitle: 'Shell de comandos',
+  choiceDescription: 'Escolhe o shell que executa comandos neste host Windows.',
+  choicePwsh: 'PowerShell',
+  choiceGitBash: 'Git Bash',
+  choiceUnavailable: 'Nenhum shell composto',
+  choiceReadError: 'Falha ao ler a escolha atual.',
+  choiceGitBashMissing: 'Nenhuma instalação do Git Bash foi encontrada.',
+  'choiceResult.applied': 'O shell de comandos foi alterado.',
+  'choiceResult.restart-required': 'O novo shell surte efeito após reiniciar.',
+  'choiceResult.overridden': 'Outra camada do perfil substitui esta escolha de shell.',
+  'choiceResult.failed': 'Falha ao alternar o shell.',
 } satisfies Record<keyof typeof en, string>

@@ -13,15 +13,21 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: the Plugins page's SlotMap merge (the 'plugins.item' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-api-remote-access/client'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import { ShellCard } from './ShellCard.tsx'
+import { ShellChoiceRow, ShellChoiceToast } from './ShellChoiceRow.tsx'
+import { ShellChoiceSource } from './shell-choice-source.ts'
 import { BASH_NS, PWSH_NS, ShellCardController } from './shell-card-controller.ts'
 import { en, ja, es, fr, de, ru, pt, zh, type ShellSettingsLocaleKey } from './locales.ts'
 
 export type { ShellCardProps } from './ShellCard.tsx'
 export type { ShellCardFace, ShellCardState, ShellSettings } from './shell-card-controller.ts'
 export type { ShellSettingsLocaleKey } from './locales.ts'
+export type { ShellChoiceRemote, ShellChoiceSnapshot, ShellExecutorChoice } from './shell-choice-source.ts'
+export type { ShellChoiceRowInjected, ShellChoiceToastInjected } from './ShellChoiceRow.tsx'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -34,7 +40,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export const NS = 'settings.shell'
 
 /** Required services (cordis fiber inject). */
-export const inject = ['slots', 'locale', 'configForms']
+export const inject = ['slots', 'locale', 'configForms', 'remote', 'remote.pluginManager', 'remoteAccess']
 
 /**
  * Mount the shell settings page while the Host serves its namespace.
@@ -50,4 +56,24 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.configForms.whileServed([BASH_NS, PWSH_NS], served => ctx.slots.inject('plugins.item', () => ctx.slots.register({
     name: 'plugins.item', id: 'shell', order: 40, label: () => t('title'), locale: NS, inject: () => (served.has(PWSH_NS) ? pwsh : bash).inject(),
   }, ShellCard))), 'ui-settings-shell: page')
+
+  // A Windows host composes exactly one executor pair; this row switches it.
+  // The Host says what is supported, so other platforms keep an empty slot.
+  const choice = new ShellChoiceSource(ctx.remote.pluginManager)
+  ctx.effect(() => () => { choice.dispose() }, 'ui-settings-shell: choice subscription')
+  ctx.effect(() => ctx.remoteAccess.whenAccess('pluginManager/getShellExecutorSelection', function* () {
+    // The Host announces its own composition changes — from this row, the
+    // Plugins page, or the CLI — and a read made while access was withdrawn
+    // may have failed without the row showing it.
+    void choice.refresh()
+    yield ctx.remote.$on('plugin-manager/changed', () => { void choice.refresh() })
+    yield ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+      name: 'settings.general.item', id: 'shell-executor', order: 25, locale: NS,
+      inject: () => ({ hooks: { choice: choice.store }, select: (value: 'pwsh' | 'git-bash') => choice.select(value) }),
+    }, ShellChoiceRow))
+    yield ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+      name: 'shell.overlay', id: 'shell-choice-toast', locale: NS,
+      inject: () => ({ hooks: { choice: choice.store }, dismiss: (sequence: number) => { choice.dismissNotice(sequence) } }),
+    }, ShellChoiceToast))
+  }), 'ui-settings-shell: choice row')
 }

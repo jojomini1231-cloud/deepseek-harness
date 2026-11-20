@@ -449,7 +449,7 @@ export interface Config {
 
 - `inject`: `subprocess`
 - `refs`: `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/shell/bash-local/src/index.ts:41`](../packages/shell/bash-local/src/index.ts)
+- `source`: [`packages/shell/bash-local/src/index.ts:42`](../packages/shell/bash-local/src/index.ts)
 
 ```ts config-catalog
 /** Validated plugin configuration with live command budgets. */
@@ -466,6 +466,13 @@ export interface Config {
   maxSpillBytes: Volatile<number>
   /** Grace period for kill escalation and inherited pipes; at most `MAX_TIMER_DELAY_MS`. */
   graceMs: Volatile<number>
+  /**
+   * Explicit bash executable. When omitted, well-known Git for Windows
+   * install locations are probed in order (machine, 32-bit, per-user, scoop,
+   * Chocolatey, then non-System32 PATH entries so the WSL launcher is never
+   * chosen), falling back to a bare `bash` resolved through PATH.
+   */
+  bashPath: Volatile<string | undefined>
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-bash-local -->
@@ -2986,7 +2993,7 @@ export interface PlanModeConfig {
 
 - `inject`: `loader` · `profileContext`
 - `refs`: [`NpmFileSource`](subsystems/boot.zh.md)
-- `source`: [`packages/boot/plugin-manager/src/index.ts:56`](../packages/boot/plugin-manager/src/index.ts)
+- `source`: [`packages/boot/plugin-manager/src/index.ts:57`](../packages/boot/plugin-manager/src/index.ts)
 
 ```ts config-catalog
 /** The pnpm executable, registries, and limits for diagnostics, lookups and connection checks. */

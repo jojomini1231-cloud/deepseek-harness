@@ -45,7 +45,7 @@ export type {
   PluginChange, PluginEntryId, PluginInfo, PluginInspectProblem, PluginInstallCancellation, PluginInstallFailureKind,
   PluginInstallLogChunk, PluginInstallProgress, PluginInstallRequestId, PluginRegistries, PluginSpecInspection,
   PluginUpdateProgress, PluginUpdateResult, PluginUpdateStep, PluginVersion, PluginVersionList, RegistryAttempt,
-  ReadOnlyReason, Registry, RestartReason,
+  ReadOnlyReason, Registry, RestartReason, ShellExecutorSelection,
 } from '@deepseek-ai/dsh-plugin-manager/types'
 export type { McpManagedServerStatus, McpManagedServerView } from '@deepseek-ai/dsh-mcp-manager/types'
 export type {} from '@deepseek-ai/dsh-plugin-manager/remote'

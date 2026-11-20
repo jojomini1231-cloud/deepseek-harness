@@ -2,13 +2,14 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
+import type { ShellExecutorSelection } from '@deepseek-ai/dsh-api-remotes/client'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { RemoteError, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply as settingsApply, inject as settingsInject } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { apply, inject, NS } from '../src/client/index.ts'
-import type { ShellCardFace } from '../src/client/index.ts'
+import type { ShellCardFace, ShellChoiceRowInjected } from '../src/client/index.ts'
 import { apply as hostApply } from '../src/index.ts'
 
 // These specs assert the shipped Chinese copy. The lane has no jsdom `window`,
@@ -33,9 +34,29 @@ async function bench(served?: string[]) {
   const describeSettings = vi.fn(() => Promise.resolve(served === undefined
     ? { ok: false, error: new RemoteError('gateway/internal', 'no provider', {}) }
     : { ok: true, value: { writable: true, hasDocument: true, namespaces: served.map(ns => view(ns)) } }))
-  const remote = new TestRemote(ctx, { settings: { describe: describeSettings } })
+  // The shell-choice row reads this before the spec can script a supported Host,
+  // so the default answers an unsupported one.
+  const unsupportedSelection = { supported: false } as ShellExecutorSelection
+  const getShellExecutorSelection = vi.fn(() => Promise.resolve({ ok: true as const, value: unsupportedSelection }))
+  const setShellExecutor = vi.fn(() => Promise.resolve({
+    ok: true as const,
+    value: { changed: true, application: 'applied' as const, stage: 'enable' as const, target: 'bash-sandbox', enabled: true },
+  }))
+  const remote = new TestRemote(ctx, {
+    settings: { describe: describeSettings },
+    pluginManager: { getShellExecutorSelection, setShellExecutor },
+  })
+  // Every action is granted: the callback installs at once and the disposer
+  // tears its batch down in reverse, as the real gate does.
+  const remoteAccess = {
+    whenAccess(_action: string, callback: () => Iterable<() => void>): () => void {
+      const batch = [...callback()]
+      return () => { for (const disposer of batch.reverse()) disposer() }
+    },
+  }
+  ctx.provide('remoteAccess', remoteAccess)
   await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, describeSettings, remote }
+  return { ctx, slots: ctx.get('slots') as SlotRegistry, describeSettings, remote, getShellExecutorSelection, setShellExecutor }
 }
 
 /** The Plugins page's item slot, as its owner declares it. */
@@ -52,7 +73,41 @@ describe('ui-settings-shell apply', () => {
   })
 
   it('declares the services it uses', () => {
-    expect(inject).toEqual(['slots', 'locale', 'configForms'])
+    expect(inject).toEqual(['slots', 'locale', 'configForms', 'remote', 'remote.pluginManager', 'remoteAccess'])
+  })
+
+  it('registers the Windows shell-choice row and its toast while the Host reports the choice', async () => {
+    const { ctx, slots, getShellExecutorSelection, setShellExecutor } = await bench(['bash-sandbox'])
+    slots.register({
+      name: 'root',
+      children: {
+        'settings.general.item': { kind: 'list', scope: 'root' },
+        'shell.overlay': { kind: 'list', scope: 'root' },
+      },
+    } as never, () => null)
+
+    getShellExecutorSelection.mockResolvedValue({ ok: true, value: { supported: true, active: 'pwsh', gitBashPath: 'C:\\Git\\bin\\bash.exe' } })
+    await ctx.plugin({ inject: [...inject], apply }).await()
+
+    await vi.waitFor(() => { expect(slots.entries('settings.general.item')).toHaveLength(1) })
+    const row = slots.entries('settings.general.item')[0]!
+    expect(row.options).toMatchObject({ id: 'shell-executor', order: 25 })
+    expect(row.locale).toBe(NS)
+    const raw = row.inject?.() ?? {}
+    // The seat's declared face is untyped here, so the spec validates the
+    // shape it reads instead of asserting the whole object.
+    const face: ShellChoiceRowInjected = {
+      hooks: raw.hooks as ShellChoiceRowInjected['hooks'],
+      select: raw.select as ShellChoiceRowInjected['select'],
+    }
+    await vi.waitFor(() => { expect(face.hooks.choice.getSnapshot().state).toMatchObject({ supported: true, active: 'pwsh' }) })
+
+    await face.select('git-bash')
+    expect(setShellExecutor).toHaveBeenCalledWith('git-bash')
+    expect(face.hooks.choice.getSnapshot().notice).toMatchObject({ outcome: 'applied' })
+
+    const toast = slots.entries('shell.overlay')[0]!
+    expect(toast.options).toMatchObject({ id: 'shell-choice-toast' })
   })
 
   it('registers the shell page while the Host serves the namespace, titled in the active locale', async () => {

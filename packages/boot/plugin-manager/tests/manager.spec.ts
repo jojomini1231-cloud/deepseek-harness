@@ -717,6 +717,103 @@ it('turns a plugin off and on without leaving a patch override the bundle alread
   expect(readFileSync(join(dir, 'cordis.patch.yml'), 'utf8')).not.toContain('id: managed')
 })
 
+/** The Windows shell choice reads the process platform at call time, so suites stub it around the calls under test. */
+function stubPlatform(value: NodeJS.Platform): () => void {
+  const descriptor = Object.getOwnPropertyDescriptor(process, 'platform')!
+  Object.defineProperty(process, 'platform', { ...descriptor, value, configurable: true })
+  return () => { Object.defineProperty(process, 'platform', descriptor) }
+}
+const shellRows = [
+  { id: 'pwsh-sandbox', name: './plugin.mjs', config: { service: 'pwshExecutorProbe' } },
+  { id: 'tool-pwsh', name: './plugin.mjs', config: { service: 'pwshToolProbe' } },
+  { id: 'bash-sandbox', name: './plugin.mjs', config: { service: 'bashExecutorProbe' }, disabled: true },
+  { id: 'tool-bash', name: './plugin.mjs', config: { service: 'bashToolProbe' }, disabled: true },
+] as const
+
+it('switches the Windows shell executor and its tool rows together', async () => {
+  const { ctx, manager, dir, bundle } = await fixture()
+  onTestFinished(stubPlatform('win32'))
+  // Before the shell rows are composed the choice is supported but has no active executor.
+  expect(await manager.getShellExecutorSelection()).toMatchObject({ supported: true })
+  expect((await manager.getShellExecutorSelection()).active).toBeUndefined()
+  bundle('shells', [...shellRows])
+  await manager.setBundleEnabled('shells', true)
+  const programFiles = join(dir, 'git-install')
+  mkdirSync(join(programFiles, 'Git', 'bin'), { recursive: true })
+  writeFileSync(join(programFiles, 'Git', 'bin', 'bash.exe'), '')
+  const previousProgramFiles = process.env.ProgramFiles
+  process.env.ProgramFiles = programFiles
+  onTestFinished(() => {
+    if (previousProgramFiles === undefined) delete process.env.ProgramFiles
+    else process.env.ProgramFiles = previousProgramFiles
+  })
+  const gitBashPath = join(programFiles, 'Git', 'bin', 'bash.exe')
+  expect(await manager.getShellExecutorSelection()).toMatchObject({ supported: true, active: 'pwsh', gitBashPath })
+  expect(ctx.get('pwshExecutorProbe')).toBe(true)
+  expect(await manager.setShellExecutor('git-bash')).toMatchObject({ changed: true, application: 'applied', enabled: true })
+  expect(await manager.getShellExecutorSelection()).toMatchObject({ supported: true, active: 'git-bash', gitBashPath })
+  expect(ctx.get('bashExecutorProbe')).toBe(true)
+  expect(ctx.get('bashToolProbe')).toBe(true)
+  expect(ctx.get('pwshExecutorProbe')).toBeUndefined()
+  expect(ctx.get('pwshToolProbe')).toBeUndefined()
+  expect(readFileSync(join(dir, 'cordis.patch.yml'), 'utf8').match(/id: pwsh-sandbox|id: tool-pwsh|id: bash-sandbox|id: tool-bash/g)).toHaveLength(4)
+  expect(await manager.setShellExecutor('pwsh')).toMatchObject({ changed: true, application: 'applied' })
+  expect(await manager.getShellExecutorSelection()).toMatchObject({ supported: true, active: 'pwsh', gitBashPath })
+  expect(ctx.get('pwshExecutorProbe')).toBe(true)
+  expect(ctx.get('pwshToolProbe')).toBe(true)
+  expect(ctx.get('bashExecutorProbe')).toBeUndefined()
+})
+
+it('reports the shell choice unsupported off Windows and refuses the switch', async () => {
+  const { manager, dir } = await fixture()
+  onTestFinished(stubPlatform('linux'))
+  const readPatch = () => existsSync(join(dir, 'cordis.patch.yml')) ? readFileSync(join(dir, 'cordis.patch.yml'), 'utf8') : null
+  const before = readPatch()
+  expect(await manager.getShellExecutorSelection()).toEqual({ supported: false })
+  expect(await manager.setShellExecutor('pwsh')).toMatchObject({ changed: false, application: 'failed', error: { code: 'unsupported-platform' } })
+  expect(readPatch()).toBe(before)
+})
+
+it('refuses the shell switch when the profile composes neither executor', async () => {
+  const { manager, dir } = await fixture()
+  onTestFinished(stubPlatform('win32'))
+  const readPatch = () => existsSync(join(dir, 'cordis.patch.yml')) ? readFileSync(join(dir, 'cordis.patch.yml'), 'utf8') : null
+  const before = readPatch()
+  expect(await manager.setShellExecutor('git-bash')).toMatchObject({ changed: false, application: 'failed', error: { code: 'unknown-plugin' } })
+  expect(readPatch()).toBe(before)
+})
+
+it('refuses the shell switch without writing when an executor row is read-only', async () => {
+  const { ctx, manager, bundle, profile, dir } = await fixture('startup')
+  onTestFinished(stubPlatform('win32'))
+  bundle('extra', [
+    { id: 'pwsh-sandbox', name: '@deepseek-ai/dsh-host-plugin-inventory', disabled: true },
+    { id: 'tool-pwsh', name: './plugin.mjs' },
+    { id: 'bash-sandbox', name: './plugin.mjs', disabled: true },
+    { id: 'tool-bash', name: './plugin.mjs', disabled: true },
+  ])
+  await reconcileProfilePatches(ctx, readProfilePatches('test', profile), 'test')
+  const manifest = readFileSync(join(dir, 'package.json'), 'utf8')
+  const patch = readFileSync(profile.patchPath, 'utf8')
+  const protectedRow = (await manager.listPlugins()).find(row => row.moduleName === '@deepseek-ai/dsh-host-plugin-inventory')
+  expect(protectedRow).toMatchObject({ readOnlyReason: 'management-required' })
+  expect(await manager.setShellExecutor('pwsh')).toMatchObject({ changed: false, application: 'failed', error: { code: 'management-required' } })
+  expect(readFileSync(join(dir, 'package.json'), 'utf8')).toBe(manifest)
+  expect(readFileSync(profile.patchPath, 'utf8')).toBe(patch)
+})
+
+it('reports an overlay overriding a saved shell switch', async () => {
+  const { manager, dir, bundle, overlayPath } = await fixture('live', true)
+  onTestFinished(stubPlatform('win32'))
+  bundle('shells', [...shellRows])
+  await manager.setBundleEnabled('shells', true)
+  writeFileSync(overlayPath, JSON.stringify([{ id: 'bash-sandbox', disabled: true }]))
+  expect(await manager.setShellExecutor('git-bash')).toMatchObject({ changed: true, application: 'overridden' })
+  // The overlay disables the just-enabled pair, so neither executor composes.
+  expect((await manager.getShellExecutorSelection()).active).toBeUndefined()
+  expect(readFileSync(join(dir, 'cordis.patch.yml'), 'utf8')).toContain('id: bash-sandbox')
+})
+
 it('retains installed dependencies when toggling a bundle and appends it when re-enabled', async () => {
   const { manager, dir, bundle } = await fixture()
   bundle('third', [])

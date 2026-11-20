@@ -39,6 +39,8 @@ kind: "package-reference"
 
 插件开关只更新 profile 的 `cordis.patch.yml` 中最后一条匹配覆盖项的 `disabled`；没有匹配项时追加。匹配依据是条目 id，以及覆盖项声明的模块名称。如果组合包层和其余 profile patch 已使条目处于所请求的状态，仅含 `id` 与 `disabled` 的覆盖项会被移除，也不会追加覆盖项，因此 profile patch 只记录与组合包不同的设置。该比较不计入 home 和单次启动 patch；它们在 profile patch 之后应用，不决定 profile patch 记录什么。组合包开关修改 `package.json` 的有序 `dsh.profile.bundles` 列表。关闭保留依赖；开启追加到列表末尾，可能改变配置优先级。安装新组合包默认启用。home 和单次启动 patch 保留更高优先级。
 
+`getShellExecutorSelection()` 报告本 Host 是否提供 Windows shell 选择——`supported` 仅在 win32 上为 true——并给出组合中的 `active` 执行器（`'pwsh'` 或 `'git-bash'`，两者都未组合时为 undefined）与找到安装时解析出的 Git Bash 路径。`setShellExecutor(choice)` 在一次 profile 变更中同时翻转 pwsh 两行与 bash 两行：先写入另一侧的执行器与工具行，确保任何时刻只组合一个 `ctx.shell` 提供方。在非 Windows 上失败为 `unsupported-platform`；profile 未组合任何一对时为 `unknown-plugin`；行只读时为该行自身的只读原因。写入遵循上一段的开关规则；会话被分享时两个端点均为 owner-only。Windows Host 上的[shell 设置行](../../client/ui-settings-shell/README.zh.md)驱动这两个端点。
+
 组合包的平台声明会在保存启用选择前检查。Host 不受支持时返回 `unsupported-platform`。组合包仍保留显示信息，并允许取消选择。包操作后的自动启用执行同一检查。给模型的下一步说明会提示用户在受支持的 Host 上运行该组合包。
 
 `listBundles` 保留默认隐藏的组合包，根据各包的展示声明和 Host 平台支持范围生成 `listedByDefault`。不支持的组合包默认不出现在主列表或“更多”中；profile 显式安装的依赖和已保存的选择仍可管理，显示平台原因并允许关闭。官方离线目录携带同一份包级平台声明，因此无需解析提供方代码或查询注册表，也能检查未安装的条目。这些检查不改变选择或激活状态。声明不是布尔值时返回元数据诊断，因为启动器不读取该声明。已选择但无法加载的组合包仍会出现在 `listBundles` 中，携带 `error`，且没有带 `entryId` 的行；`enabled` 表示保存的选择，不代表加载成功。插件页面将其标记为未运行，并允许取消选择。损坏的组合包无法启用。管理组合包的文件变得不可读后仍受保护。

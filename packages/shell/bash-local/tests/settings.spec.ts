@@ -24,3 +24,18 @@ it('uses changed budgets for later commands without remounting the executor', as
   await live.replace({})
   expect(ctx.shell.resolve({ command: 'echo ok' }).timeoutMs).toBe(120_000)
 })
+
+it('resolves a changed bash path for later commands without remounting the executor', async () => {
+  const ctx = new Context()
+  onTestFinished(() => ctx.fiber.dispose())
+  await ctx.plugin(LocalSubprocessRuntime)
+  const live = await liveConfig(ctx, LocalBashExecutor, {})
+  const executor = ctx.shell as LocalBashExecutor
+  const before = live.fiber
+  const initial = executor.bashPath
+  await live.update({ bashPath: '/opt/git/bin/bash.exe' })
+  expect(live.entry.fiber === before).toBe(true)
+  expect(executor.bashPath).toBe('/opt/git/bin/bash.exe')
+  await live.replace({})
+  expect(executor.bashPath).toBe(initial)
+})

@@ -2921,6 +2921,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'Saved and runtime outcomes, including higher-priority overrides.',
       },
       {
+        signature: '@Remote async getShellExecutorSelection(): Promise<ShellExecutorSelection>',
+        description: 'Report the Windows shell-executor choice and the Git Bash it would spawn.',
+        parameters: [],
+        returns: 'Whether this host offers the choice, the composed executor, and the detected Git Bash path.',
+      },
+      {
+        signature: '@Remote setShellExecutor(choice: \'pwsh\' | \'git-bash\'): Promise<ChangeResult>',
+        description: 'Switch the Windows shell executor, flipping the executor and tool rows of both sides together.',
+        parameters: [{ name: 'choice', description: 'The executor to compose: `\'pwsh\'` or `\'git-bash\'`.' }],
+        returns: 'Saved and runtime outcomes, including higher-priority overrides.',
+      },
+      {
         signature: '@Remote setBundleEnabled(name: string, enabled: boolean): Promise<ChangeResult>',
         description: 'Select or remove a bundle layer while retaining installed dependencies.',
         parameters: [{ name: 'name', description: 'Bundle package name.' }, { name: 'enabled', description: 'Whether the bundle contributes its patch layer.' }],
@@ -10525,6 +10537,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ShellExecution',
     declaration: 'export interface ShellExecution extends ShellProcess {\n    result(): Promise<ShellRunResult>;\n}',
+  },
+  {
+    name: 'ShellExecutorSelection',
+    declaration: 'export interface ShellExecutorSelection {\n    readonly supported: boolean;\n    readonly active?: \'pwsh\' | \'git-bash\';\n    readonly gitBashPath?: string;\n}',
   },
   {
     name: 'ShellExpiryPolicy',

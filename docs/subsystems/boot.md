@@ -20,6 +20,8 @@ The [boot package group](../../packages/boot/README.md) owns launcher-provided p
 
 `ChangeResult.changed` reports a disk edit independently of `application`: `applied`, `restart-required`, `overridden` or `failed`. Optional `error` carries a localizable code and external diagnostic. `packageResult` records the run's exit status, bounded output, truncation flag and complete diagnostic log path, plus `timedOut` when the manager terminated a run that stopped printing or the GitHub connection check hit its deadline; a terminated run records the coerced status 1 because its process returned none. A terminated run is classified `timeout` whatever exit status the signal left behind, so installation and removal report failure instead of success and no further registry is asked. `pendingBuilds` lists undecided packages across the profile; `approvedBuilds` records the names granted permission by this operation; `registries` lists the registries an installation asked, in order; `bundle` and `version` name the package a finished installation added and its manifest version; `failedAt` says whether the last failed run could not reach the registry it asked or the host a git or tarball spec is fetched from.
 
+`ShellExecutorSelection` reports the Windows shell choice: `supported` is true only on a win32 Host, `active` is the composed executor (`'pwsh'` or `'git-bash'`, undefined when neither is composed), and `gitBashPath` is the resolved Git Bash executable when an installation is found. `setShellExecutor` flips the two pwsh rows and the two bash rows in one profile change, writing the other side's executor and tool rows first, so exactly one `ctx.shell` provider stays composed.
+
 ## Market records
 
 [Plugin Market](../../packages/boot/plugin-market/README.md) reads index format 1, validated by [`dsh-plugin-market-index`](../../packages/util/plugin-market-index/README.md).
@@ -361,6 +363,17 @@ Manage profile files and apply their declared reload lifecycle.
  * @returns Saved and runtime outcomes, including higher-priority overrides.
  */
 @Remote setPluginEnabled(id: PluginEntryId, enabled: boolean): Promise<ChangeResult>
+
+/** Report the Windows shell-executor choice and the Git Bash it would spawn.
+ * @returns Whether this host offers the choice, the composed executor, and the detected Git Bash path.
+ */
+@Remote async getShellExecutorSelection(): Promise<ShellExecutorSelection>
+
+/** Switch the Windows shell executor, flipping the executor and tool rows of both sides together.
+ * @param choice The executor to compose: `'pwsh'` or `'git-bash'`.
+ * @returns Saved and runtime outcomes, including higher-priority overrides.
+ */
+@Remote setShellExecutor(choice: 'pwsh' | 'git-bash'): Promise<ChangeResult>
 
 /** Select or remove a bundle layer while retaining installed dependencies.
  * @param name Bundle package name.

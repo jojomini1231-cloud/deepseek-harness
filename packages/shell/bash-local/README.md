@@ -1,5 +1,5 @@
 ---
-description: "The default POSIX Bash executor for deployments and maintainers choosing, configuring, or debugging unconfined command execution over the shell seam."
+description: "The default Bash executor for POSIX and Windows Git Bash, for deployments and maintainers choosing, configuring, or debugging unconfined command execution over the shell seam."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-bash-local` is the default Bash executor for POSIX: every command runs as a fresh, non-login `bash -c` process with no rc files, so no shell state survives between calls. It applies configured budgets — working directory, timeout, output caps — to each command, classifies timeouts and cancellations, and returns bounded output with spill-file recovery when a stream overflows. Commands run with the harness process's own authority: this executor confines nothing, so compose `dsh-bash-sandbox` when commands need the sandbox capability. The model-facing `bash` tool talks to it once it is mounted.
+`dsh-bash-local` is the default Bash executor: every command runs as a fresh, non-login `bash -c` process with no rc files, so no shell state survives between calls. On Windows it spawns Git for Windows' bash, resolved from well-known install locations or an explicit `bashPath`. It applies the configured budgets, classifies timeouts and cancellations, and returns bounded output with spill-file recovery when a stream overflows. Commands run with the harness process's own authority: this executor confines nothing, so compose `dsh-bash-sandbox` when commands need the sandbox capability. The model-facing `bash` tool talks to it once it is mounted.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount this executor when a composition needs Bash command execution on POSIX without confinement. It registers as `ctx.shell`, and the model-facing `bash` tool works over it immediately: an agent calls the tool, and the command runs as a fresh `bash -c` process with the budgets below.
+Mount this executor when a composition needs Bash command execution without confinement — POSIX shells directly, and Windows through Git for Windows' bash. It registers as `ctx.shell`, and the model-facing `bash` tool works over it immediately: an agent calls the tool, and the command runs as a fresh `bash -c` process with the budgets below.
 
 ### Minimal configuration
 
@@ -47,6 +47,7 @@ Load the executor with the budgets you want; every field has a default, so the s
 | `maxOutputBytes` | `64,000` | Per-stream in-memory output cap; overflow spills to a temp file |
 | `maxSpillBytes` | `67,108,864` | Per-stream full-output spill cap |
 | `graceMs` | `3,000` | Grace period for kill escalation and post-exit pipe draining |
+| `bashPath` | probed | Explicit bash executable; when omitted, well-known Git for Windows install locations are probed in order (machine, 32-bit, per-user, scoop, Chocolatey, then non-System32 PATH entries), falling back to a bare `bash` |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-bash-local) is the exhaustive source for every accepted field and its JSDoc.
 
@@ -88,12 +89,13 @@ The executor is a Service Provider for the `ctx.shell` seam built on the subproc
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: `LocalBashExecutor`, `Config`, settings-section wiring |
-| `tests/executor.spec.ts` | Exercised behavior: budgets, classification, background handles, ownership |
+| [`src/resolve.ts`](src/resolve.ts) | Git Bash candidate discovery for Windows and the `bashPath` resolution order |
+| `tests/executor.spec.ts` | Exercised behavior: budgets, classification, background handles, ownership, `bashPath` resolution |
 | `tests/settings.spec.ts` | Settings layering over the composition entry |
 
 ### Main flow
 
-A call runs through three steps: `resolve()` fills `workdir`/`timeoutMs`/`onExpiry`/`stdoutMaxBytes` from config and the request (capping per-call overrides); `execute` wires the deadline per expiry policy — `'kill'` fuses the clamped timeout with the caller's abort signal, `'none'` arms nothing — and spawns `['bash', '-c', command]` through `ctx.subprocess` with explicit byte caps and the `graceMs`; the settled outcome is classified first-cause — only the executor's own timeout reports `timedOut`, an upstream cancel reports `aborted`, a self-signaled command reports neither — and `result()` projects it into a `ShellRunResult` with collected output.
+A call runs through three steps: `resolve()` fills `workdir`/`timeoutMs`/`onExpiry`/`stdoutMaxBytes` from config and the request (capping per-call overrides); `execute` wires the deadline per expiry policy — `'kill'` fuses the clamped timeout with the caller's abort signal, `'none'` arms nothing — and spawns `[bashPath, '-c', command]` through `ctx.subprocess` with explicit byte caps and the `graceMs`, where `bashPath` is the resolved bash executable (a configured path, the first existing Git for Windows candidate, or a bare `bash`); the settled outcome is classified first-cause — only the executor's own timeout reports `timedOut`, an upstream cancel reports `aborted`, a self-signaled command reports neither — and `result()` projects it into a `ShellRunResult` with collected output.
 
 The foreground deadline starts before argv preparation and retains the same signal and remaining budget through execution. Preparation timeout returns empty output, `timedOut: true`, and null `exitCode` and `signal`; caller cancellation before process publication still rejects. Late preparation success or failure cannot trigger a spawn.
 
@@ -138,7 +140,7 @@ These limits define when this executor is a poor fit. They are current package c
 
 - **Unconfined by itself** — commands run with the harness process's authority; deployments needing confinement compose `dsh-bash-sandbox`, while per-call allow/deny/ask policy belongs on the tools' `pre-execute` waterfall.
 - **No persistent shell or PTY** — every call starts a fresh non-login `bash -c`; cwd-only persistence and interactive terminal sessions remain deferred until a real workflow requires them.
-- **POSIX-only** — the `bash` binary is hardcoded and the underlying service's group semantics are POSIX; Windows is unsupported.
+- **Windows requires Git for Windows** — the bash executable is resolved from well-known Git install locations or an explicit `bashPath`, and `System32` PATH entries are excluded so the WSL launcher masquerading as `bash.exe` is never chosen; without an install the executor still spawns a bare `bash` resolved through PATH.
 - **A background provider-failure note is the whole stderr stream** — `SubprocessHandle.done` can reject before or after target execution begins, and the subprocess service buffers no output for a target that never reported, so the executor serves the stage-neutral `subprocess failed before reporting an outcome: …` as the observed stderr stream (offset readers re-read it at their own offsets) and folds it into exactly one `readOutput()` delta; a consuming reader that discards that delta recovers it only through `observed.stderr`.
 
 <a id="dev-note"></a>

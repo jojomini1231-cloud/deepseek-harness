@@ -1,5 +1,5 @@
 ---
-description: "面向部署方与维护者的默认 POSIX Bash 执行器说明，用于选择、配置或排查基于 shell seam 的非隔离命令执行。"
+description: "面向部署方与维护者的默认 Bash 执行器说明（POSIX 与 Windows Git Bash），用于选择、配置或排查基于 shell seam 的非隔离命令执行。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-bash-local` 是 POSIX 上的默认 Bash 执行器：每条命令都以全新的非登录 `bash -c` 进程运行，不读取 rc 文件，因此调用之间不会残留任何 shell 状态。它会为每条命令应用已配置的预算——工作目录、超时、输出上限——对超时与取消进行分类，并在流溢出时返回有界输出与 spill 文件恢复。命令以 harness 进程自身的权限运行：本执行器不做任何隔离，需要沙箱能力时请组合 `dsh-bash-sandbox`。挂载后，面向模型的 `bash` 工具会与它对接。
+`dsh-bash-local` 是默认 Bash 执行器：每条命令都以全新的非登录 `bash -c` 进程运行，不读取 rc 文件，因此调用之间不会残留任何 shell 状态。在 Windows 上，它会按常见安装位置或显式 `bashPath` 解析并 spawn Git for Windows 的 bash。它会应用已配置的预算，对超时与取消进行分类，并在流溢出时返回有界输出与 spill 文件恢复。命令以 harness 进程自身的权限运行：本执行器不做任何隔离，需要沙箱能力时请组合 `dsh-bash-sandbox`。挂载后，面向模型的 `bash` 工具会与它对接。
 
 ## 目录
 
@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-当组合需要在 POSIX 上执行 Bash 命令且不需要隔离时，挂载此执行器。它注册为 `ctx.shell`，面向模型的 `bash` 工具会立即基于它工作：agent（智能体）调用工具，命令即以全新 `bash -c` 进程按下面的预算运行。
+当组合需要执行 Bash 命令且不需要隔离时，挂载此执行器——POSIX shell 直接运行，Windows 则通过 Git for Windows 的 bash。它注册为 `ctx.shell`，面向模型的 `bash` 工具会立即基于它工作：agent（智能体）调用工具，命令即以全新 `bash -c` 进程按下面的预算运行。
 
 ### 最小配置
 
@@ -47,6 +47,7 @@ kind: "package-reference"
 | `maxOutputBytes` | `64,000` | 每流内存输出上限；溢出后 spill 到临时文件 |
 | `maxSpillBytes` | `67,108,864` | 每流完整输出的 spill 上限 |
 | `graceMs` | `3,000` | 终止升级与退出后管道排空的宽限时间 |
+| `bashPath` | 自动探测 | 显式 bash 可执行文件；缺省时按序探测常见 Git for Windows 安装位置（机器、32 位、按用户、scoop、Chocolatey，再是非 System32 的 PATH 条目），最后回退为裸 `bash` |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-bash-local)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
@@ -88,12 +89,13 @@ if (result.timedOut) console.log('timed out after', result.timeoutMs)
 | 文件 | 职责 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：`LocalBashExecutor`、`Config`、设置段接线 |
-| `tests/executor.spec.ts` | 已演练的行为：预算、分类、后台句柄、归属 |
+| [`src/resolve.ts`](src/resolve.ts) | Windows 的 Git Bash 候选发现与 `bashPath` 解析顺序 |
+| `tests/executor.spec.ts` | 已演练的行为：预算、分类、后台句柄、归属、`bashPath` 解析 |
 | `tests/settings.spec.ts` | 设置段叠加在组合条目之上 |
 
 ### 主要流程
 
-一次调用分三步：`resolve()` 从配置与请求填充 `workdir`/`timeoutMs`/`onExpiry`/`stdoutMaxBytes`（并限制每次调用的覆盖值）；`execute` 按到期策略布置 deadline——`'kill'` 把钳位后的超时与调用方的中止信号融合为一个 deadline，`'none'` 不布置任何 deadline——再以显式字节上限与 `graceMs` 通过 `ctx.subprocess` spawn `['bash', '-c', command]`；结算的 subprocess 结果被分类——只有执行器自身的超时报告 `timedOut`，上游取消报告 `aborted`，自身因信号终止的命令两者皆不报告——并投影为带收集输出的 `ShellRunResult`。
+一次调用分三步：`resolve()` 从配置与请求填充 `workdir`/`timeoutMs`/`onExpiry`/`stdoutMaxBytes`（并限制每次调用的覆盖值）；`execute` 按到期策略布置 deadline——`'kill'` 把钳位后的超时与调用方的中止信号融合为一个 deadline，`'none'` 不布置任何 deadline——再以显式字节上限与 `graceMs` 通过 `ctx.subprocess` spawn `[bashPath, '-c', command]`，其中 `bashPath` 是解析出的 bash 可执行文件（配置路径、首个存在的 Git for Windows 候选，或裸 `bash`）；结算的 subprocess 结果被分类——只有执行器自身的超时报告 `timedOut`，上游取消报告 `aborted`，自身因信号终止的命令两者皆不报告——并投影为带收集输出的 `ShellRunResult`。
 
 前台 deadline 从 argv 准备开始，并在准备与执行之间保持同一信号和剩余预算。准备阶段超时返回空输出、`timedOut: true`，且 `exitCode` 和 `signal` 均为 `null`；调用方在发布进程前取消仍会拒绝调用。准备晚到的成功或失败不会触发 spawn。
 
@@ -138,7 +140,7 @@ if (result.timedOut) console.log('timed out after', result.timeoutMs)
 
 - **自身不提供隔离**——命令以 harness 进程的权限运行；需要隔离的部署组合 `dsh-bash-sandbox`，每次调用的 allow/deny/ask 策略则属于工具的 `pre-execute` waterfall（瀑布式事件）。
 - **没有持久 shell 或 PTY**——每次调用都启动全新的非登录 `bash -c`；仅持久化 cwd 与交互式终端会话均继续延期，直到真实工作流需要它们。
-- **仅支持 POSIX**——`bash` 二进制已硬编码，底层服务的进程组语义也是 POSIX 的；不支持 Windows。
+- **Windows 需要 Git for Windows**——bash 可执行文件按常见 Git 安装位置或显式 `bashPath` 解析，并排除 System32 的 PATH 条目，确保绝不选中伪装成 `bash.exe` 的 WSL launcher；没有安装时执行器仍 spawn 由 PATH 解析的裸 `bash`。
 - **后台提供方失败提示就是整条 stderr 流**——`SubprocessHandle.done` 可能在目标命令开始执行前或后被拒绝，而 subprocess 服务不会为从未上报结果的目标命令 缓冲任何输出，因此执行器把不声明失败阶段的 `subprocess failed before reporting an outcome: …` 作为观测到的 stderr 流提供（偏移读取方按各自偏移重读），并只折入恰好一个 `readOutput()` 增量；丢弃了该增量的消耗式读取方只能经 `observed.stderr` 恢复它。
 
 <a id="dev-note"></a>

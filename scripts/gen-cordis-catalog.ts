@@ -365,6 +365,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   BundleDetail: 'boot.md',
   NpmFileSource: 'boot.md',
   ChangeResult: 'boot.md',
+  ShellExecutorSelection: 'boot.md',
   InstallBundleOptions: 'boot.md',
   PluginEntryId: 'boot.md',
   BundleRowInfo: 'boot.md',

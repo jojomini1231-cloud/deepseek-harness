@@ -78,6 +78,9 @@
       "path": "../../util/timeout"
     },
     {
+      "path": "../../shell/bash-local"
+    },
+    {
       "path": "../../client/connection/tsconfig.host.json"
     }
   ]

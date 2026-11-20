@@ -25,6 +25,20 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 /** Reasons a profile control cannot modify its target. */
 export type ReadOnlyReason = 'management-required' | 'unaddressable'
 
+/**
+ * The Windows shell-executor choice the general settings row switches. The
+ * choice flips two profile patch rows per side — the executor and its tool —
+ * because a context composes at most one `ctx.shell` implementation.
+ */
+export interface ShellExecutorSelection {
+  /** Whether this host runs the Windows choice; other hosts keep their default executor. */
+  readonly supported: boolean
+  /** The executor the profile composes; absent when neither executor row runs. */
+  readonly active?: 'pwsh' | 'git-bash'
+  /** The Git Bash the choice would spawn; absent when no well-known install exists. */
+  readonly gitBashPath?: string
+}
+
 /** A package whose declared DSH requirements reject the running DSH version, without an exemption for the exact pair. */
 export interface IncompatiblePlugin {
   name: string

@@ -20,6 +20,8 @@
 
 `ChangeResult.changed` 报告磁盘修改，独立于 `application`：`applied`、`restart-required`、`overridden` 或 `failed`。可选的 `error` 包含可本地化的错误码和外部诊断。`packageResult` 记录运行的退出状态、有界输出、截断标志及完整诊断日志路径；当管理器终止了一个停止打印的运行，或 GitHub 连接检查到达期限，还记录 `timedOut`；被终止的运行记录强制填入的状态 1，因为它的进程没有返回任何状态。被终止的运行不论信号留下什么退出状态都归类为 `timeout`，因此安装与删除都报告失败而非成功，也不会再询问下一个注册表。`pendingBuilds` 列出整个 profile 尚未决定的包；`approvedBuilds` 记录本次操作授予权限的包名；`registries` 按顺序列出一次安装问过的注册表；`bundle` 与 `version` 给出完成的安装新增的包及其清单版本；`failedAt` 说明最后一次失败的运行连不上的是所问的注册表，还是 git 或 tarball spec 自身拉取的主机。
 
+`ShellExecutorSelection` 报告 Windows shell 选择：`supported` 仅在 win32 Host 上为 true；`active` 是组合中的执行器（`'pwsh'` 或 `'git-bash'`，两者都未组合时为 undefined）；`gitBashPath` 是找到安装时解析出的 Git Bash 可执行文件。`setShellExecutor` 在一次 profile 变更中同时翻转 pwsh 两行与 bash 两行，先写入另一侧的执行器与工具行，确保任何时刻只组合一个 `ctx.shell` 提供方。
+
 ## 市场记录
 
 [Plugin Market](../../packages/boot/plugin-market/README.zh.md) 读取第 1 版索引格式，校验由 [`dsh-plugin-market-index`](../../packages/util/plugin-market-index/README.zh.md) 完成。
@@ -361,6 +363,17 @@ Manage profile files and apply their declared reload lifecycle.
  * @returns Saved and runtime outcomes, including higher-priority overrides.
  */
 @Remote setPluginEnabled(id: PluginEntryId, enabled: boolean): Promise<ChangeResult>
+
+/** Report the Windows shell-executor choice and the Git Bash it would spawn.
+ * @returns Whether this host offers the choice, the composed executor, and the detected Git Bash path.
+ */
+@Remote async getShellExecutorSelection(): Promise<ShellExecutorSelection>
+
+/** Switch the Windows shell executor, flipping the executor and tool rows of both sides together.
+ * @param choice The executor to compose: `'pwsh'` or `'git-bash'`.
+ * @returns Saved and runtime outcomes, including higher-priority overrides.
+ */
+@Remote setShellExecutor(choice: 'pwsh' | 'git-bash'): Promise<ChangeResult>
 
 /** Select or remove a bundle layer while retaining installed dependencies.
  * @param name Bundle package name.

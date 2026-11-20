@@ -34,6 +34,7 @@ import { officialBundleInstallTarget } from './official-install-target.ts'
 import { dependencySpec, InvalidInstallSpecError, parseInstallSpec, pinnedGitOrigin, type ParsedInstallSpec } from './install-spec.ts'
 import { attributeFailure, normalizeRegistry, NPMMIRROR_REGISTRY, registryPlan } from './registry.ts'
 import { flatten, writePluginEnabled } from './patch.ts'
+import { existingBashPath } from '@deepseek-ai/dsh-bash-local'
 import { incompatiblePlugin, ManagementFailure } from './failure.ts'
 import { PluginManagerError, readProfileState } from './error.ts'
 import { approveBuilds, recordPendingBuilds } from './build-approval.ts'
@@ -44,7 +45,7 @@ import type {
   BundleDetail, BundleInfo, BundleRowInfo, ChangeResult, InspectOptions, InstallBundleOptions, ListVersionsOptions, ManagementError,
   PackageResult, PluginChange, PluginEntryId, PluginInfo, PluginInstallCancellation, PluginInstallProgress, PluginInstallRequestId,
   PluginRegistries, PluginSpecInspection, PluginUpdateResult, PluginUpdateStep, PluginVersion, PluginVersionList, Registry,
-  RegistryAttempt, UpdateBundleOptions,
+  RegistryAttempt, ShellExecutorSelection, UpdateBundleOptions,
   PluginOperation, PluginOperationId,
 } from './types.ts'
 export type * from './types.ts'
@@ -312,6 +313,16 @@ function exemptionOperationIdentity(packageVersion: string, runtimeVersion: stri
 /** Unusable file metadata must not discard the rest of an operation record. */
 function diagnosticVersion(value: unknown): string | undefined {
   return typeof value === 'string' && value.length <= 128 ? value : undefined
+}
+
+/**
+ * The inventory row of one shell patch row: addressable rows carry the patch
+ * row id as `patchId`, while read-only rows keep only their Loader entry id,
+ * which an include group prefixes with `include:`.
+ */
+function shellRow(rows: PluginInfo[], id: PluginEntryId): PluginInfo | undefined {
+  return rows.find(item => item.patchId === id
+    || item.entryId === id || item.entryId === pluginEntryId(`include:${id}`))
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -944,6 +955,68 @@ export class PluginManager extends TypertRemoteService {
       const current = (await this.listPlugins()).find(item => item.entryId === id)
       return current?.enabled !== enabled && this.ownerContext.get('hmr') !== undefined ? 'overridden' : undefined
     }), { stage: 'enable', target: id, enabled }, 'plugin')
+  }
+
+  /** Report the Windows shell-executor choice and the Git Bash it would spawn.
+   * @returns Whether this host offers the choice, the composed executor, and the detected Git Bash path.
+   */
+  @Remote
+  async getShellExecutorSelection(): Promise<ShellExecutorSelection> {
+    if (process.platform !== 'win32') return { supported: false }
+    const active = this.shellExecutorOf(await this.listPlugins())
+    const gitBashPath = existingBashPath()
+    return {
+      supported: true,
+      ...(active !== undefined ? { active } : {}),
+      ...(gitBashPath !== undefined ? { gitBashPath } : {}),
+    }
+  }
+
+  /** Switch the Windows shell executor, flipping the executor and tool rows of both sides together.
+   * @param choice The executor to compose: `'pwsh'` or `'git-bash'`.
+   * @returns Saved and runtime outcomes, including higher-priority overrides.
+   */
+  @Remote
+  setShellExecutor(choice: 'pwsh' | 'git-bash'): Promise<ChangeResult> {
+    const executorId = pluginEntryId(choice === 'pwsh' ? 'pwsh-sandbox' : 'bash-sandbox')
+    const toolId = pluginEntryId(choice === 'pwsh' ? 'tool-pwsh' : 'tool-bash')
+    const otherExecutorId = pluginEntryId(choice === 'pwsh' ? 'bash-sandbox' : 'pwsh-sandbox')
+    const otherToolId = pluginEntryId(choice === 'pwsh' ? 'tool-bash' : 'tool-pwsh')
+    return this.change(result => this.configure(async () => {
+      if (process.platform !== 'win32') throw new ManagementFailure('unsupported-platform')
+      const rows = await this.listPlugins()
+      const row = (id: PluginEntryId) => {
+        const found = shellRow(rows, id)
+        if (found === undefined) throw new ManagementFailure('unknown-plugin')
+        if (found.readOnlyReason !== undefined) throw new ManagementFailure(found.readOnlyReason)
+        return found
+      }
+      // Resolve every row before the first write so a missing or read-only
+      // side leaves both pairs as they were.
+      const executor = row(executorId)
+      const tool = row(toolId)
+      const otherExecutor = row(otherExecutorId)
+      const otherTool = row(otherToolId)
+      // Disable the running pair first so the swap never composes two
+      // implementations of the one-service `ctx.shell` interface.
+      for (const plugin of [otherExecutor, otherTool]) {
+        await writePluginEnabled(this.profile, plugin.patchId, plugin.moduleName, false)
+      }
+      for (const plugin of [executor, tool]) {
+        await writePluginEnabled(this.profile, plugin.patchId, plugin.moduleName, true)
+      }
+      Object.assign(result, await this.reload([executor.patchId, tool.patchId]))
+      const active = this.shellExecutorOf(await this.listPlugins())
+      return active !== choice && this.ownerContext.get('hmr') !== undefined ? 'overridden' : undefined
+    }), { stage: 'enable', target: executorId, enabled: true }, 'plugin')
+  }
+
+  /** The composed executor for one inventory, or undefined when neither row runs. */
+  private shellExecutorOf(rows: PluginInfo[]): 'pwsh' | 'git-bash' | undefined {
+    const enabled = (id: PluginEntryId) => shellRow(rows, id)?.enabled === true
+    if (enabled(pluginEntryId('pwsh-sandbox'))) return 'pwsh'
+    if (enabled(pluginEntryId('bash-sandbox'))) return 'git-bash'
+    return undefined
   }
 
   /** Select or remove a bundle layer while retaining installed dependencies.

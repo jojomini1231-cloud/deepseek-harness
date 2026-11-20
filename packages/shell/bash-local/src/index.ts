@@ -16,6 +16,7 @@ import { ShellExecutor } from '@deepseek-ai/dsh-shell'
 import type { ShellExecRequest, ShellExecSpec, ShellExecution, ShellProcess, ShellProcessRead, ShellRunResult, CollectedOutput } from '@deepseek-ai/dsh-shell'
 import type { SubprocessCollect, SubprocessHandle, SubprocessOutputReader, SubprocessSpawnSpec } from '@deepseek-ai/dsh-subprocess'
 import { clampTimeout, deadline, MAX_TIMER_DELAY_MS, timeoutOf } from '@deepseek-ai/dsh-timeout'
+import { resolveBashPath } from './resolve.ts'
 
 /**
  * Model-friendly environment overrides: disable colors, pagers, and
@@ -51,7 +52,18 @@ export interface Config {
   maxSpillBytes: Volatile<number>
   /** Grace period for kill escalation and inherited pipes; at most `MAX_TIMER_DELAY_MS`. */
   graceMs: Volatile<number>
+  /**
+   * Explicit bash executable. When omitted, well-known Git for Windows
+   * install locations are probed in order (machine, 32-bit, per-user, scoop,
+   * Chocolatey, then non-System32 PATH entries so the WSL launcher is never
+   * chosen), falling back to a bare `bash` resolved through PATH.
+   */
+  bashPath: Volatile<string | undefined>
 }
+
+// Resolution lives in its own dependency-free module so the repository's
+// coverage-gate probe shares the exact definition the suites use.
+export { candidateBashPaths, existingBashPath, resolveBashPath } from './resolve.ts'
 
 /** Project a settled collect-mode reader into the final CollectedOutput shape. */
 function finalOutput(reader: SubprocessOutputReader): CollectedOutput {
@@ -104,10 +116,29 @@ export class LocalBashExecutor extends ShellExecutor {
     maxOutputBytes: z.number().default(64_000).volatile(),
     maxSpillBytes: z.number().default(DEFAULT_MAX_SPILL_BYTES).volatile(),
     graceMs: z.number().default(DEFAULT_GRACE_MS).volatile(),
+    bashPath: z.string().volatile(),
   })
 
   constructor(ctx: Context, readonly config: Config) {
     super(ctx)
+    this.declaredBashPath = config.bashPath.get()
+    this.resolvedBashPath = resolveBashPath(this.declaredBashPath)
+  }
+
+  /** The declared executable the current {@link bashPath} was resolved from. */
+  private declaredBashPath: string | undefined
+
+  /** The bash executable resolved from the current config. */
+  private resolvedBashPath: string
+
+  /** The bash executable every command runs through; a changed declared path is probed again on the next read. */
+  get bashPath(): string {
+    const declared = this.config.bashPath.get()
+    if (declared !== this.declaredBashPath) {
+      this.resolvedBashPath = resolveBashPath(declared)
+      this.declaredBashPath = declared
+    }
+    return this.resolvedBashPath
   }
 
   /**
@@ -184,8 +215,17 @@ export class LocalBashExecutor extends ShellExecutor {
     return { stdout, stderr }
   }
 
+  /**
+   * The bash invocation argv for one resolved spec — the argv-level seam a
+   * confining subclass wraps through `ctx.sandbox.confine` (the bash twin of
+   * `dsh-pwsh-local`'s `argv` hook; see `@deepseek-ai/dsh-bash-sandbox`).
+   */
+  protected argv(spec: ShellExecSpec): string[] {
+    return [this.bashPath, '-c', spec.command]
+  }
+
   async execute(spec: ShellExecSpec): Promise<ShellExecution> {
-    return this.executeArgv(spec, ['bash', '-c', spec.command])
+    return this.executeArgv(spec, this.argv(spec))
   }
 
   /**
@@ -272,7 +312,6 @@ export class LocalBashExecutor extends ShellExecutor {
       ? Promise.resolve({ exitCode: null, signal: null })
       : running !== undefined ? running.done
       // The original throw is preserved for callers even when it was not an Error.
-      // eslint-disable-next-line prefer-promise-reject-errors
         : Promise.reject(spawnThrow())
 
     // A provider rejection produces no process output, so the subprocess
