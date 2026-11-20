@@ -203,6 +203,7 @@ flowchart TD
     pkg_client_ui_schedule["client-ui-schedule"]
     pkg_client_ui_secret_mask["client-ui-secret-mask"]
     pkg_client_ui_session["client-ui-session"]
+    pkg_client_ui_session_notifications["client-ui-session-notifications"]
     pkg_client_ui_session_panel["client-ui-session-panel"]
     pkg_client_ui_session_status["client-ui-session-status"]
     pkg_client_ui_settings["client-ui-settings"]
@@ -1693,6 +1694,7 @@ flowchart TD
 | [`client-ui-schedule`](../packages/client/ui-schedule) | `client` | — |
 | [`client-ui-secret-mask`](../packages/client/ui-secret-mask) | `client` | — |
 | [`client-ui-session`](../packages/client/ui-session) | `client` | — |
+| [`client-ui-session-notifications`](../packages/client/ui-session-notifications) | `client` | — |
 | [`client-ui-session-panel`](../packages/client/ui-session-panel) | `client` | — |
 | [`client-ui-session-status`](../packages/client/ui-session-status) | `client` | — |
 | [`client-ui-settings`](../packages/client/ui-settings) | `client` | — |

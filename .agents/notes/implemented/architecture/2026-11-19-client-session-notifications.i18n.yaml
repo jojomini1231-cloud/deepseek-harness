@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for 2026-11-19-client-session-notifications.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-19-client-session-notifications.md
+/agent-note-browser-session-notifications:
+  en: 50cb86066ab12e06
+  zh: 84bbad72f9efd27d
+/agent-note-browser-session-notifications/problem:
+  en: 8c204431ac2334a4
+  zh: 2ef8db64d19fceb1
+/agent-note-browser-session-notifications/decision:
+  en: eee297cbdae83d08
+  zh: 58279b6d2e69e07b
+/agent-note-browser-session-notifications/decision/transition-rules:
+  en: 564a1ede8a158e35
+  zh: 24888c6fd112b288
+/agent-note-browser-session-notifications/decision/suppression:
+  en: d721dfc076afd374
+  zh: 93eec7b2be7caa9e
+/agent-note-browser-session-notifications/decision/permission:
+  en: e431a7d2e9104832
+  zh: 4f1a482a827fee31
+/agent-note-browser-session-notifications/alternatives-considered:
+  en: 2bfaa5aff2d0e4c0
+  zh: 37ff02918d2a9afb
+/agent-note-browser-session-notifications/consequences:
+  en: 9f9a4a82f978e69e
+  zh: 13b8a93cd73f1569

@@ -90,7 +90,7 @@ Web 和桌面端共享[代码工作工具偏好](../../packages/client/ui-settin
 
 ## 阅读提醒
 
-[会话状态](../../packages/client/ui-session-status/README.zh.md)在宿主内存中保存使用者的阅读确认和手动未读标记。其宿主 Remote 服务发送重连快照和已保存的更新；其前端插件把这些记录汇入 `ctx.uiSession.sessionStatus` 状态表，并在可见且聚焦的主视图中确认已加载的完成内容。阅读状态不改变模型历史。
+[会话状态](../../packages/client/ui-session-status/README.zh.md)在宿主内存中保存使用者的阅读确认和手动未读标记。其宿主 Remote 服务发送重连快照和已保存的更新；其前端插件把这些记录汇入 `ctx.uiSession.sessionStatus` 状态表，并在可见且聚焦的主视图中确认已加载的完成内容。阅读状态不改变模型历史。 [`ui-session-notifications`](../../packages/client/ui-session-notifications/README.zh.md) 读取同一张状态表，为新的待交互请求或新出现的未读结果发送操作系统通知；页面可见且窗口聚焦时保持静默。
 
 ### SessionReadState
 

@@ -109,6 +109,7 @@ Every package below exports a Cordis plugin that a bundle patch can name in a Lo
 | `@deepseek-ai/dsh-client-ui-schedule` | no | Host task management page and Session reminder catalog |
 | `@deepseek-ai/dsh-client-ui-secret-mask` | no | Web display masking for recognized credentials in sent user text |
 | `@deepseek-ai/dsh-client-ui-session` | no | Session Controller adapter for React and session-scoped slots |
+| `@deepseek-ai/dsh-client-ui-session-notifications` | yes | Operating-system notifications for a Session awaiting user input and for an unread turn outcome |
 | `@deepseek-ai/dsh-client-ui-session-panel` | no | Floating Session panel opened from the Session header, composed of sections that plugins register |
 | `@deepseek-ai/dsh-client-ui-session-status` | no | Client Session status table over Host reading records: running state, the effective pending interaction, and read or unread reminders shared by clients of one Host |
 | `@deepseek-ai/dsh-client-ui-settings` | no | Settings domain base plugin: shared configuration forms and the canonical settings slot-type contract |

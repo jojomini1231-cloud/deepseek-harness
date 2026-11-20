@@ -670,6 +670,30 @@ export interface Config {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-client-ui-plugin-manager -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-client-ui-session-notifications -->
+<a id="deepseek-aidsh-client-ui-session-notifications"></a>
+
+## `@deepseek-ai/dsh-client-ui-session-notifications`
+
+- `refs`: `Volatile` (`@deepseek-ai/cordis`)
+- `source`: [`packages/client/ui-session-notifications/src/index.ts:7`](../packages/client/ui-session-notifications/src/index.ts)
+
+```ts config-catalog
+/** Notification switches synced to the browser. */
+export type Config = SessionNotificationsConfig
+
+/** Which Session events raise an operating-system notification, and when the browser may raise it. */
+export interface SessionNotificationsConfig {
+  /** Raise a notification when a Session starts awaiting user input. */
+  notifyPendingInteraction: Volatile<boolean>
+  /** Raise a notification when an unread turn outcome (completed or failed) appears. */
+  notifyCompletion: Volatile<boolean>
+  /** Suppress notifications while the visible, focused browser window would already show the change. */
+  notifyOnlyWhenUnfocused: Volatile<boolean>
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-client-ui-session-notifications -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-client-ui-settings-account -->
 <a id="deepseek-aidsh-client-ui-settings-account"></a>
 
@@ -5373,7 +5397,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-workspace-changes`
 
 - `inject`: `subprocess` · `fs`
-- `source`: [`packages/deliverables/workspace-changes/src/index.ts:39`](../packages/deliverables/workspace-changes/src/index.ts)
+- `source`: [`packages/deliverables/workspace-changes/src/index.ts:40`](../packages/deliverables/workspace-changes/src/index.ts)
 
 ```ts config-catalog
 /** Snapshot, capture, comparison, and history bounds. Invalid values fail plugin load. */

@@ -90,7 +90,7 @@ There is no monolithic Client `Runtime`, `HostFrame`, `events.mux`, `events.host
 
 ## Reading reminders
 
-[Session status](../../packages/client/ui-session-status/README.md) holds read acknowledgements and explicit unread marks in Host memory, outside the conversation log. Its Host Remote service sends complete reconnect baselines and committed changes; its Client plugin folds them into the `ctx.uiSession.sessionStatus` status table and acknowledges loaded completions in the visible, focused main view. Reading state does not change model history.
+[Session status](../../packages/client/ui-session-status/README.md) holds read acknowledgements and explicit unread marks in Host memory, outside the conversation log. Its Host Remote service sends complete reconnect baselines and committed changes; its Client plugin folds them into the `ctx.uiSession.sessionStatus` status table and acknowledges loaded completions in the visible, focused main view. Reading state does not change model history. [`ui-session-notifications`](../../packages/client/ui-session-notifications/README.md) reads the same table and raises an operating-system notification for a new pending interaction or a newly unread outcome, leaving the page silent while its window is visible and focused.
 
 ### SessionReadState
 

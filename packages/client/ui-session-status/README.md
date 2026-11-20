@@ -98,7 +98,7 @@ Reading state has these operational limits:
 - **Web profiles only** — the row lives in the Web bundle, so profiles without it run no reading service.
 - **Metadata and transport failures** — a failed metadata lookup leaves reading state unchanged. A terminal stream or protocol failure disables reading commands until the page reloads; ordinary carrier loss reconnects automatically.
 - **Unloaded and archived Sessions** — records for Sessions unloaded from memory remain until the service stops; reclaiming them requires a Session deletion lifecycle. Archived rows hide their unread styling and status, read as read, and offer no reading mark in the row menu or shortcut.
-- **Main-view visibility** — main-view retention does not distinguish every settings or auxiliary panel, so acknowledgement can run, and the status table hides the open Session's unacknowledged completion, while such a panel covers the Conversation; that refinement belongs to the notification work.
+- **Main-view visibility** — main-view retention does not distinguish every settings or auxiliary panel, so acknowledgement can run, and the status table hides the open Session's unacknowledged completion, while such a panel covers the Conversation; [`ui-session-notifications`](../ui-session-notifications/README.md) inherits that limitation when it decides whether to notify.
 - **No message counts or read receipts for other people** — the state belongs to the Host's owner and records Session-level reminders. LiveShare viewers cannot read or change it.
 
 <a id="dev-note"></a>
