@@ -23,6 +23,7 @@ import type {} from '@deepseek-ai/dsh-api-workspace-files/remote'
 import type { WorkspaceFileParams } from '@deepseek-ai/dsh-api-workspace-files/client'
 import { DocumentPreview } from './DocumentPreview.tsx'
 import type { DocumentPreviewInjected } from './document/contract.ts'
+import { SummaryPreview, SummaryTitle } from './SummaryPreview.tsx'
 import { TextPreview } from './TextPreview.tsx'
 import { TextTitle } from './TextTitle.tsx'
 import { WorkbenchPreview } from './WorkbenchPreview.tsx'
@@ -72,6 +73,11 @@ declare module '@deepseek-ai/dsh-client-ui-sidebar-right/client' {
   interface SidebarRightResourceParamsMap {
     /** File line navigation supported by the text preview. */
     file: WorkspaceFileParams
+  }
+
+  interface SidebarRightTabParamsMap {
+    /** Transient Markdown supplied when a compaction row is opened. */
+    'compaction-summary': { readonly summaryMarkdown: string }
   }
 }
 
@@ -142,4 +148,16 @@ export function apply(ctx: ClientContext, config: SyncedConfig<DocumentPreviewCo
   registerOffice(ctx, config.office.get() ?? OFFICE_DEFAULTS)
   registerExcel(ctx, config.excel.get() ?? EXCEL_DEFAULTS)
   registerCode(ctx)
+  const summaryId = '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/compaction'
+  const t = ctx.locale.bind('documentMarkdown')
+  ctx.effect(() => ctx.sidebarRightTabs.register({
+    id: summaryId, kind: 'compaction-summary',
+    priority: 'builtin', title: () => t('summary.title'),
+  }), 'ui-sidebar-documentpreview: compaction summaries')
+  ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+    name: 'sidebar.right.pane.tab', key: summaryId, locale: 'documentMarkdown',
+  }, SummaryPreview)), 'ui-sidebar-documentpreview: summary body')
+  ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register({
+    name: 'sidebar.right.pane.tab.title', key: summaryId, locale: 'documentMarkdown',
+  }, SummaryTitle)), 'ui-sidebar-documentpreview: summary title')
 }

@@ -35,6 +35,8 @@ kind: "package-reference"
 <a id="what-it-registers"></a>
 ## 注册了什么
 
+压缩摘要标签显示所选聊天行提供的 Markdown。切换会话时保留标签，刷新页面后标签关闭，从原行重新打开即可再次读取对应事件。
+
 图片拖放回调通过图片入口的注入接口从 [ui-file-drag](../ui-file-drag/README.zh.md) 获取。
 
 - **可复用的预览** —— `ctx.slots.registerFactory({ name: 'sidebar.document.preview', scope: 'session', ... })` 声明四个文档 slot，并渲染一个文件。`text` tab 正文为自身地址渲染它。对于[文件工作台](../ui-sidebar-files/README.zh.md#the-workbench)，本包填充单项 slot `sidebar.right.tab.files.preview`，工作台的内容栏为某个 chip 显示的文件渲染该 slot，填充组件以该 slot 的 `{ address, viewKey, navigation, signal, paneId }` 渲染该 Factory，且不传 `useTabInfo`。它的输入是 `{ address, viewKey, navigation, signal, bindRefresh?, refreshShortcut?, paneId?, useTabInfo? }`：地址与视图生命周期归宿主所有，读取、渲染器选择、工具栏与各 slot 归 Factory 所有。`viewKey` 为渲染器状态分桶，因此两个宿主看同一个文件（或一个宿主看两个文件）时，滚动、缩放、换行与查看器选择各自独立。
@@ -49,7 +51,7 @@ kind: "package-reference"
 <a id="addresses"></a>
 ## 地址
 
-tab 使用 `fileAddressFor` 构造的 Session 地址，携带相对或绝对路径。路由在地址及其内容身份中保留 `.` 与 `..` 路径段，由 Host 解析。`hostFileOf(address)` 仅从地址取得 Session，不接收外部 Session 参数，也不借用当前或 Tab Session。Host 通过 Session 文件系统解析文件及关联路径，由该后端控制读取权限。任何 UI（包括 Global 组件）都共享同一完整地址的元数据。[Workspace Files README](../../api/workspace-files/README.zh.md) 定义这些规则；渲染器选择不改变导航地址。
+tab 使用 `fileAddressFor` 构造的 Session 地址，携带绝对路径；打开方不知道 Session 的目录时携带相对路径。路由在地址及其内容身份中保留 `.` 与 `..` 路径段，由 Host 解析。`hostFileOf(address)` 仅从地址取得 Session，不接收外部 Session 参数，也不借用当前或 Tab Session。Host 通过 Session 文件系统解析文件及关联路径，由该后端控制读取权限。任何 UI（包括 Global 组件）都共享同一完整地址的元数据。[Workspace Files README](../../api/workspace-files/README.zh.md) 定义这些规则；渲染器选择不改变导航地址。
 
 全部文本分页加载完成后，Markdown 图片通过已鉴权的 `/api/file` 路由读取绝对文件路径，以及相对于源文档所在目录的路径。相对图片等待 Host 返回文档绝对路径。URL 转义只解码一次；查询参数与片段后缀不计入文件名。HTTP(S) 图片保留原始 URL，加载失败的图片显示 alt 文本。本地图片要求应用基址为 HTTP(S) URL；图片文件不加入自动刷新依赖。
 

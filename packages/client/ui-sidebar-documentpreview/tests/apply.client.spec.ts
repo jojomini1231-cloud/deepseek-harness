@@ -19,6 +19,7 @@ import { apply, inject } from '../src/client/index.ts'
 import { OfficeFontAction } from '../src/client/office/OfficeFontAction.tsx'
 import { OfficeBody } from '../src/client/office/OfficeBody.tsx'
 import { DocumentPreview } from '../src/client/DocumentPreview.tsx'
+import { SummaryPreview, SummaryTitle } from '../src/client/SummaryPreview.tsx'
 import { TextPreview } from '../src/client/TextPreview.tsx'
 import { TextTitle } from '../src/client/TextTitle.tsx'
 import { WorkbenchPreview } from '../src/client/WorkbenchPreview.tsx'
@@ -102,6 +103,7 @@ describe('ui-sidebar-documentpreview apply', () => {
     ])
     expect(tabs.get(TEXTPREVIEW_KIND)?.priority).toBe('fallback')
     expect(tabs.get(TEXTPREVIEW_KIND)?.id).toBe(TEXTPREVIEW_ID)
+    expect(tabs.get('compaction-summary')?.title('')).toBe('summary.title')
     expect(dictionaries.get('sidebarDocumentPreview')).toEqual({ zh, en, ja, es, fr, de, ru, pt })
     // The seat key is the implementation's id, not the kind: an extension may
     // take the kind over, and the seat must still find this body.
@@ -119,6 +121,8 @@ describe('ui-sidebar-documentpreview apply', () => {
       ['sidebar.right.tab.document.office.pdf', '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/office', 'sidebarPdf', LazyPdfBody],
       ['sidebar.right.tab.document', '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/excel', 'sidebarExcel', LazyExcelBody],
       ['sidebar.right.tab.document', '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/code', 'sidebarCodePreview', CodeBody],
+      ['sidebar.right.pane.tab', '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/compaction', 'documentMarkdown', SummaryPreview],
+      ['sidebar.right.pane.tab.title', '@deepseek-ai/dsh-client-ui-sidebar-documentpreview/compaction', 'documentMarkdown', SummaryTitle],
     ])
     // The reusable preview, not the thin tab body, owns the renderer slots, the store, and the face.
     expect(Object.keys(factories[0]!.children!)).toEqual([
@@ -145,6 +149,7 @@ describe('ui-sidebar-documentpreview apply', () => {
     const { tabs, registered, factories, dictionaries, fiber } = await boot()
     await fiber.dispose()
     expect(tabs.get(TEXTPREVIEW_KIND)).toBeUndefined()
+    expect(tabs.get('compaction-summary')).toBeUndefined()
     expect(registered).toEqual([])
     expect(factories).toEqual([])
     expect(dictionaries.size).toBe(0)

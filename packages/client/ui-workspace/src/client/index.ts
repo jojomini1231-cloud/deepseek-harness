@@ -78,9 +78,8 @@ import { en, ja, es, fr, de, ru, pt, zh, type WorkspaceKey } from './locales.ts'
 export type { StartSessionOptions, UiWorkspace } from './navigation.ts'
 export type {
   DirectoryFlowOwnerProps, DirectoryFlowSlotName, DirectoryPickingHooks, DirectoryPickingInjected,
-  MenuOpenState, RowToast, SessionRenameTarget, SessionRowOwnerProps, UseMenuOpenState, WorkspaceBrowserInjected,
-  SessionRowActionOwnerProps, SessionRowScheduleOwnerProps,
-  WorkspaceBrowserProps,
+  MenuOpenState, RowToast, SessionDragType, SessionRenameTarget, SessionRowActionOwnerProps, SessionRowOwnerProps,
+  SessionRowScheduleOwnerProps, UseMenuOpenState, WorkspaceBrowserInjected, WorkspaceBrowserProps,
   WorkspacePickerInjected, WorkspacePickerInput, WorkspacePickerProps,
 } from './contract/slots.ts'
 export type { WorkspaceKey } from './locales.ts'

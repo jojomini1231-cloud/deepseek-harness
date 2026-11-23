@@ -35,6 +35,8 @@ The `sidebar.document.preview` Factory is this package's reusable face: a host n
 <a id="what-it-registers"></a>
 ## What it registers
 
+The compaction summary tab shows the Markdown supplied by the selected Chat row. It stays open across Session switches and closes on reload. Reopen the row to read the same event again.
+
 Image drag actions arrive through the image entry’s inject face from [ui-file-drag](../ui-file-drag/README.md).
 
 - **The reusable preview** — `ctx.slots.registerFactory({ name: 'sidebar.document.preview', scope: 'session', ... })` declares the four document seats and renders one file. The `text` tab body renders it for the tab's address. For the [Files workbench](../ui-sidebar-files/README.md#the-workbench), this package fills the single `sidebar.right.tab.files.preview` seat, which the workbench's content column renders for the file a chip shows, and the filler renders the Factory with the seat's `{ address, viewKey, navigation, signal, paneId }` and no `useTabInfo`. Its input is `{ address, viewKey, navigation, signal, bindRefresh?, refreshShortcut?, paneId?, useTabInfo? }`: the host owns the address and the view's lifetime, and the Factory owns reading, renderer selection, the toolbar, and the seats. `viewKey` buckets renderer state, so two hosts on one file (or two files in one host) keep their scroll, zoom, wrap, and viewer choice apart.
@@ -49,7 +51,7 @@ Document implementations register metadata with `ctx.documentPreviews.register({
 <a id="addresses"></a>
 ## Addresses
 
-A tab uses the Session address built by `fileAddressFor`, carrying a relative or absolute path. Routing preserves `.` and `..` path segments in the address and its content identity; the Host resolves them. `hostFileOf(address)` takes the Session only from that address, with no external Session argument; neither current nor Tab Session is borrowed. The Host resolves file and related paths through the Session filesystem, whose backend controls read authority. Metadata for the same complete address is shared by every UI, including Global components. The [Workspace Files README](../../api/workspace-files/README.md) owns these rules; renderer selection does not change the navigation address.
+A tab uses the Session address built by `fileAddressFor`, carrying an absolute path, or a relative one while the opener does not know the Session's directory. Routing preserves `.` and `..` path segments in the address and its content identity; the Host resolves them. `hostFileOf(address)` takes the Session only from that address, with no external Session argument; neither current nor Tab Session is borrowed. The Host resolves file and related paths through the Session filesystem, whose backend controls read authority. Metadata for the same complete address is shared by every UI, including Global components. The [Workspace Files README](../../api/workspace-files/README.md) owns these rules; renderer selection does not change the navigation address.
 
 After all text pages load, Markdown images use the authenticated `/api/file` route for absolute file paths and paths relative to the source document's directory. Relative images wait for the Host's absolute document path. URL escapes are decoded once; query and fragment suffixes are excluded from the filename. HTTP(S) images retain their authored URLs, and failed image loads show alt text. Local images require an HTTP(S) application base URL; image files are not added to automatic-refresh dependencies.
 
