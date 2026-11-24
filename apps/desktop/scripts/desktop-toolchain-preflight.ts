@@ -18,6 +18,13 @@ import { scrubWindowsSigningEnvironment } from './windows-sign.mjs'
 
 const run = promisify(execFile)
 
+/** Names an explicit PowerShell 7 executable for a host that installs it outside the default locations. */
+const PWSH_OVERRIDE = 'DSH_DESKTOP_PWSH'
+
+/** Behaviour the packaging sequence needs from PowerShell: version 7 and Authenticode cmdlets. */
+const PWSH_PROBE_ARGUMENTS = ['-NoProfile', '-NonInteractive', '-Command',
+  '$ErrorActionPreference="Stop"; if ($PSVersionTable.PSVersion.Major -lt 7) { throw "PowerShell 7 or newer is required" }; Import-Module "$PSHOME/Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1" -ErrorAction Stop; Get-Command Get-AuthenticodeSignature -ErrorAction Stop | Out-Null']
+
 /** One tool the packaging run requires, and what went wrong with it. */
 export interface DesktopToolchainProbeFailure {
   readonly tool: string
@@ -45,16 +52,46 @@ async function probeTar(): Promise<string | undefined> {
   }
 }
 
+/**
+ * Candidate PowerShell 7 executables in resolution order.
+ *
+ * A machine can install PowerShell 7 without putting it on the inherited `PATH`: winget and the
+ * Microsoft Store expose `pwsh.exe` as an app-execution alias under `WindowsApps`, and the MSI
+ * installs under `Program Files`. A packaging run started from a shell with a stale `PATH` would
+ * otherwise reject a host that can in fact build the installer.
+ * @param environment - Packaging environment supplying the override and the Windows install roots.
+ * @returns Executable name or absolute paths, most explicit first.
+ */
+export function powerShellCandidates(environment: NodeJS.ProcessEnv): readonly string[] {
+  const candidates: string[] = []
+  const override = environment[PWSH_OVERRIDE]?.trim()
+  if (override !== undefined && override !== '') candidates.push(override)
+  candidates.push('pwsh')
+  const programFiles = environment.ProgramFiles
+  if (programFiles !== undefined) candidates.push(join(programFiles, 'PowerShell', '7', 'pwsh.exe'))
+  const localAppData = environment.LOCALAPPDATA
+  if (localAppData !== undefined) candidates.push(join(localAppData, 'Microsoft', 'WindowsApps', 'pwsh.exe'))
+  return [...new Set(candidates)]
+}
+
+async function probePowerShell(environment: NodeJS.ProcessEnv): Promise<string | undefined> {
+  const problems: string[] = []
+  for (const candidate of powerShellCandidates(environment)) {
+    try {
+      await run(candidate, PWSH_PROBE_ARGUMENTS, { env: scrubWindowsSigningEnvironment(environment), windowsHide: true, timeout: 20_000 })
+      return undefined
+    }
+    catch (error) {
+      problems.push(`${candidate}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  return `PowerShell 7 with Authenticode support must be on PATH, in a standard install location, or named by ${PWSH_OVERRIDE}; tried ${problems.join('; ')}`
+}
+
 async function probeWindowsInstallerToolchain(environment: NodeJS.ProcessEnv): Promise<DesktopToolchainProbeFailure[]> {
   const failures: DesktopToolchainProbeFailure[] = []
-  try {
-    await run('pwsh', ['-NoProfile', '-NonInteractive', '-Command',
-      '$ErrorActionPreference="Stop"; if ($PSVersionTable.PSVersion.Major -lt 7) { throw "PowerShell 7 or newer is required" }; Import-Module "$PSHOME/Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1" -ErrorAction Stop; Get-Command Get-AuthenticodeSignature -ErrorAction Stop | Out-Null'],
-    { env: scrubWindowsSigningEnvironment(environment), windowsHide: true, timeout: 20_000 })
-  }
-  catch (error) {
-    failures.push({ tool: 'pwsh', detail: `PowerShell 7 with Authenticode support must be available on PATH: ${error instanceof Error ? error.message : String(error)}` })
-  }
+  const powerShell = await probePowerShell(environment)
+  if (powerShell !== undefined) failures.push({ tool: 'pwsh', detail: powerShell })
   const programFiles = environment['ProgramFiles(x86)']
   const vswhere = programFiles === undefined
     ? undefined

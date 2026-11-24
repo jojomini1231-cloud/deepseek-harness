@@ -3,6 +3,7 @@
 import { spawn } from 'node:child_process'
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
+import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import {
   desktopBuildRecordFilename,
@@ -19,6 +20,8 @@ import { withMacOSSigningKeychain } from './macos-signing-keychain.mjs'
 import { macOSDownloadEnvironment, resolveMacOSPackageSettings } from './macos-package-settings.mjs'
 import { resolveWindowsPackageSettings } from './windows-package-settings.mjs'
 import { packagingErrorDetails, packagingStep } from './packaging-step.mjs'
+import { resolvePackagingTempDirectory } from './packaging-temp-directory.mjs'
+import { runVersionCheck } from '../../../scripts/verify-version-sync.ts'
 import { notarizeMacOS } from './notarize-macos.mjs'
 import { resolveMacOSNotarizationEnvironment } from './desktop-release-environment.mjs'
 import { DESKTOP_BUILD_VERSION_ENV, resolveDesktopBuildVersion, validateDesktopBuildVersion } from './desktop-build-version.mjs'
@@ -367,6 +370,21 @@ async function resolveRequestedBuildVersion(
   })
 }
 
+/**
+ * Reject a checkout whose released manifests disagree on the version the packing step enforces.
+ *
+ * `packFamilyMembers` refuses members that do not share one version, but it runs after the build,
+ * so a drifted manifest costs a full build before the run fails. This check is the same corpus the
+ * repository's pre-merge gate uses, and it runs before anything is built.
+ * @throws when the root version and a released manifest disagree.
+ */
+function requireReleasesVersionSync(): void {
+  const versions = runVersionCheck(REPOSITORY_ROOT)
+  if (!versions.ok) {
+    throw new Error(`desktop package: released manifests disagree on the version:\n${versions.lines.join('\n')}`)
+  }
+}
+
 async function main(): Promise<void> {
   const invocation = parseDesktopPackageInvocation(process.argv.slice(2))
   const { target } = invocation
@@ -378,6 +396,21 @@ async function main(): Promise<void> {
     : loadDesktopPackageEnvironment(target.platform, process.env, APP_ROOT, {
       unsigned: invocation.unsigned, prepareOnly: invocation.prepareOnly,
     })
+  // electron-builder's NSIS step writes its preprocessor output through `!tempfile` and reads it
+  // back by name; a temporary directory this user cannot list fails that step at the very end of
+  // the run, so the first usable candidate is chosen before any child process starts.
+  const temporary = resolvePackagingTempDirectory([
+    { label: 'TEMP', directory: environment.TEMP },
+    { label: 'TMP', directory: environment.TMP },
+    { label: 'the system temporary directory', directory: tmpdir() },
+    { label: 'the build temporary directory', directory: join(APP_ROOT, '.desktop-build', 'tmp') },
+  ])
+  environment.TEMP = temporary.directory
+  environment.TMP = temporary.directory
+  environment.TMPDIR = temporary.directory
+  if (temporary.failures.length > 0) {
+    process.stdout.write(`desktop package: packaging subprocesses use ${temporary.directory} for temporary files; unusable: ${temporary.failures.join('; ')}\n`)
+  }
   const productVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
   // Release settings come from the selected configuration files, so the version this run publishes is an
   // argument; the environment variable below only carries it to the child processes that build.
@@ -385,6 +418,7 @@ async function main(): Promise<void> {
   environment[DESKTOP_BUILD_VERSION_ENV] = buildVersion
   if (invocation.check) {
     validateDesktopPackageEnvironment(environment, target, invocation)
+    requireReleasesVersionSync()
     await requireDesktopToolchain(target.platform, environment)
     process.stdout.write(`desktop package: ${target.name} would publish ${buildVersion}; local configuration and toolchain valid, signing and notarization were not attempted\n`)
     return
@@ -406,6 +440,7 @@ async function main(): Promise<void> {
   let success = false
   try {
     await packagingStep(run.directory, 'configuration', async () => { validateDesktopPackageEnvironment(environment, target, invocation) }, secrets)
+    await packagingStep(run.directory, 'versions', async () => { requireReleasesVersionSync() }, secrets)
     await packagingStep(run.directory, 'toolchain', () => requireDesktopToolchain(target.platform, environment), secrets)
     if (target.platform === 'darwin') {
       const settings = resolveMacOSPackageSettings(environment)
