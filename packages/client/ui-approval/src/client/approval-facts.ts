@@ -14,7 +14,7 @@ import type { ApprovalPresentationRequest } from './contract/slots.ts'
 /** Audit reason written by `approveEscalation`; the mode vocabulary is closed upstream. */
 const ESCALATION_REASON = /^escalate sandbox to ([a-z][a-z-]*): ([\s\S]+)$/
 
-/** Sandbox modes that grant unrestricted host access and therefore need a second step. */
+/** Sandbox modes that grant unrestricted host access, so their cards carry the danger tier. */
 const DANGER_MODES: ReadonlySet<string> = new Set(['danger-full-access'])
 
 /** What a compact approval surface shows, already reduced to one line plus a tier. */
@@ -23,8 +23,7 @@ export interface ApprovalFacts {
   readonly action: string
   /**
    * Sandbox mode this request escalates to, empty when the asker is outside the
-   * sandbox layer. `danger` stays the tier; this names the permission a second
-   * step is about.
+   * sandbox layer. `danger` stays the tier; this names the permission it grants.
    */
   readonly mode: string
   /** Whether granting this request reaches unrestricted host access. */

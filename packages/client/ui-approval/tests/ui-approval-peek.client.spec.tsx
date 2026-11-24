@@ -26,14 +26,16 @@ const COPY: Record<string, string> = {
   'peek.open': 'Open session',
   'peek.payloadShow': 'Show raw payload',
   'peek.payloadHide': 'Hide raw payload',
-  'peek.cancel': 'Cancel',
-  'peek.confirmAllow': 'Allow anyway',
-  'peek.confirm': 'Runs with {mode}',
   'inbox.title': 'Waiting for approval',
   'inbox.count': '{count} waiting',
   'inbox.denyAll': 'Reject all',
   'inbox.allowAll': 'Allow all',
   'inbox.needsReview': 'Full access needs a decision',
+  'inbox.confirmAll': '{count} of these requests reach unrestricted host access',
+  'inbox.confirmAllowAll': 'Allow all anyway',
+  'inbox.cancel': 'Cancel',
+  'inbox.session': 'Session · {title}',
+  'inbox.untitledSession': 'Untitled session',
 }
 
 const t = (key: string, params?: Record<string, string | number>): string => {
@@ -71,17 +73,28 @@ function peekProps(
   } as ApprovalPeekProps
 }
 
+/** Session list snapshot holding the titles the queue reads names from. */
+const sessionsWith = (titles: Record<string, string> = {}) => ({
+  byId: Object.fromEntries(Object.entries(titles).map(([id, displayTitle]) => [id, { displayTitle }])),
+})
+
 function inboxProps(
   approvals: readonly PendingApproval[],
   resolveDetail: (sessionId: SessionId, callId: string | undefined) => string | undefined = () => undefined,
+  titles: Record<string, string> = {},
 ): ApprovalInboxProps {
   return {
     t,
     usePending: hook(mapOf(...approvals)),
+    useSessions: hook(sessionsWith(titles)),
     resolveReason: (reason: NonNullable<PendingApproval['displayReason']>) => reason.en,
     resolveDetail,
   } as ApprovalInboxProps
 }
+
+/** Session line of every queued card, in queue order. */
+const sessionLines = (container: HTMLElement): readonly string[] =>
+  [...container.querySelectorAll('[data-approval-session]')].map(node => node.textContent ?? '')
 
 afterEach(() => { cleanup() })
 
@@ -157,19 +170,12 @@ describe('ApprovalPeek', () => {
     await expect(pending.result).resolves.toBe('rejected')
   })
 
-  it('asks a second time before granting unrestricted host access', async () => {
+  it('grants unrestricted host access in one click', async () => {
     const pending = danger()
     render(<ApprovalPeek {...peekProps([pending])} />)
 
     expect(screen.getByText('Full access')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
-
-    expect(screen.getByText('Runs with danger-full-access')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByText('Runs with danger-full-access')).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Allow anyway' }))
 
     await expect(pending.result).resolves.toBe('allowed-once')
   })
@@ -213,15 +219,14 @@ describe('ApprovalPeek', () => {
     await expect(pending.result).resolves.toBe('rejected')
   })
 
-  it('returns to the first step when settlement fails', async () => {
+  it('keeps offering the decision when settlement fails', async () => {
     const pending = danger()
     vi.spyOn(pending, 'answer').mockRejectedValue(new Error('settled elsewhere'))
     render(<ApprovalPeek {...peekProps([pending])} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Allow anyway' }))
 
-    await expect.poll(() => screen.queryByText('Runs with danger-full-access')).toBeNull()
+    await expect.poll(() => screen.queryByRole('button', { name: 'Allow once' })).not.toBeNull()
   })
 })
 
@@ -244,6 +249,27 @@ describe('ApprovalInbox', () => {
     }
   })
 
+  it('names the Session that owns each queued request', () => {
+    const { container } = render(<ApprovalInbox {...inboxProps(
+      [write('s1'), write('s2')],
+      () => undefined,
+      { s1: 'Fix the login redirect', s2: 'Rebuild the docs site' },
+    )} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '2 waiting' }))
+    expect(sessionLines(container)).toEqual([
+      'Session · Fix the login redirect',
+      'Session · Rebuild the docs site',
+    ])
+  })
+
+  it('marks a queued request whose Session has no name yet', () => {
+    const { container } = render(<ApprovalInbox {...inboxProps([write('s3')])} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '1 waiting' }))
+    expect(sessionLines(container)).toEqual(['Session · Untitled session'])
+  })
+
   it('drains one queued request from the panel', async () => {
     const pending = write()
     render(<ApprovalInbox {...inboxProps([pending])} />)
@@ -256,43 +282,56 @@ describe('ApprovalInbox', () => {
     await expect(pending.result).resolves.toBe('rejected')
   })
 
-  it('confirms unrestricted access before granting it', async () => {
+  it('grants unrestricted access from its row in one click', async () => {
     const pending = danger()
     render(<ApprovalInbox {...inboxProps([pending])} />)
 
     fireEvent.click(screen.getByRole('button', { name: '1 waiting' }))
     fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
-    expect(screen.getByText('Runs with danger-full-access')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByText('Runs with danger-full-access')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Allow anyway' }))
 
     await expect(pending.result).resolves.toBe('allowed-once')
   })
 
-  it('clears the second step when settlement fails', async () => {
+  it('keeps the row answerable when settlement fails', async () => {
     const pending = danger()
     vi.spyOn(pending, 'answer').mockRejectedValue(new Error('settled elsewhere'))
     render(<ApprovalInbox {...inboxProps([pending])} />)
 
     fireEvent.click(screen.getByRole('button', { name: '1 waiting' }))
     fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Allow anyway' }))
 
-    await expect.poll(() => screen.queryByText('Runs with danger-full-access')).toBeNull()
+    await expect.poll(() => screen.queryByRole('button', { name: 'Allow once' })).not.toBeNull()
   })
 
-  it('keeps a queue with unrestricted access out of the batch grant', async () => {
+  it('confirms before granting unrestricted access to the whole queue', async () => {
     const pending = danger()
+    const answer = vi.spyOn(pending, 'answer')
     render(<ApprovalInbox {...inboxProps([pending])} />)
 
     fireEvent.click(screen.getByRole('button', { name: '1 waiting' }))
-    const allowAll = screen.getByRole('button', { name: 'Allow all' })
-    expect((allowAll as HTMLButtonElement).disabled).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Reject all' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Allow all' }))
 
-    await expect(pending.result).resolves.toBe('rejected')
+    expect(screen.getByText('1 of these requests reach unrestricted host access')).toBeTruthy()
+    expect(answer).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByText('1 of these requests reach unrestricted host access')).toBeNull()
+    expect(answer).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Allow all' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Allow all anyway' }))
+
+    await expect(pending.result).resolves.toBe('allowed-once')
+  })
+
+  it('drops the batch confirmation on the first Escape', () => {
+    render(<ApprovalInbox {...inboxProps([danger()])} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '1 waiting' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Allow all' }))
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByText('1 of these requests reach unrestricted host access')).toBeNull()
+    expect(screen.getByRole('dialog', { name: 'Waiting for approval' })).toBeTruthy()
   })
 
   it('opens the payload of one queued request', () => {
@@ -350,16 +389,12 @@ describe('ApprovalInbox', () => {
     await expect(second.result).resolves.toBe('allowed-once')
   })
 
-  it('closes the second step, then the panel, on Escape', () => {
+  it('closes the panel on Escape', () => {
     render(<ApprovalInbox {...inboxProps([danger()])} />)
 
     fireEvent.click(screen.getByRole('button', { name: '1 waiting' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
     fireEvent.keyDown(document, { key: 'Escape' })
-    expect(screen.queryByText('Runs with danger-full-access')).toBeNull()
-    expect(screen.getByRole('dialog', { name: 'Waiting for approval' })).toBeTruthy()
 
-    fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('dialog', { name: 'Waiting for approval' })).toBeNull()
   })
 

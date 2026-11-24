@@ -58,15 +58,14 @@ function pendingApprovalOf(
  * Answer one pending approval from the sidebar.
  *
  * The card body is one of several answer surfaces, so a settlement that loses a
- * race is expected: the losing surface only stops offering the buttons, and the
- * pending snapshot removes the card by itself.
+ * race is expected: the pending snapshot removes the card by itself. A rejected
+ * settlement leaves the card in place, so the reader can decide again.
  * @param approval - request to settle.
  * @param outcome - the user's decision.
- * @param clear - drops the local second-step state of this surface.
  */
-function settle(approval: PendingApproval, outcome: ApprovalDecision, clear: () => void): void {
+function settle(approval: PendingApproval, outcome: ApprovalDecision): void {
   if (!approval.answerable) return
-  void approval.answer(outcome).catch(() => { clear() })
+  void approval.answer(outcome).catch(() => undefined)
 }
 
 /**
@@ -81,14 +80,11 @@ export function ApprovalPeek(props: ApprovalPeekProps) {
   const { sessionId, t, usePending, resolveReason, openSession, resolveDetail } = props
   const pending = usePending(map => map)
   const approval = useMemo(() => pendingApprovalOf(pending, sessionId), [pending, sessionId])
-  const [armed, setArmed] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   if (approval === undefined) return null
   const facts = presentApproval(approval, resolveReason, t('escalation', { toolName: approval.toolName }))
-  const confirming = armed === approval.key
   const detail = resolveDetail(sessionId, approval.callId)
   const open = expanded === approval.key
-  const clear = (): void => { setArmed(null) }
   return (
     <div className={css.root} data-approval-peek="">
       <div className={css.head}>
@@ -121,7 +117,6 @@ export function ApprovalPeek(props: ApprovalPeekProps) {
           {open && <pre className={css.payload} onClick={(event) => { event.stopPropagation() }}>{detail}</pre>}
         </>
       )}
-      {confirming && <p className={css.warn}>{t('peek.confirm', { mode: facts.mode })}</p>}
       <div className={css.rule} />
       <div className={css.actions}>
         <button
@@ -129,25 +124,20 @@ export function ApprovalPeek(props: ApprovalPeekProps) {
           className={css.act}
           onClick={(event) => {
             event.stopPropagation()
-            if (confirming) clear()
-            else settle(approval, 'rejected', clear)
+            settle(approval, 'rejected')
           }}
         >
-          {confirming ? t('peek.cancel') : t('reject')}
+          {t('reject')}
         </button>
         <button
           type="button"
           className={`${css.act} ${css.actPrimary}`}
           onClick={(event) => {
             event.stopPropagation()
-            if (!confirming && facts.danger) {
-              setArmed(approval.key)
-              return
-            }
-            settle(approval, 'allowed-once', clear)
+            settle(approval, 'allowed-once')
           }}
         >
-          {confirming ? t('peek.confirmAllow') : facts.danger ? t('allowOnce') : t('allow')}
+          {facts.danger ? t('allowOnce') : t('allow')}
         </button>
       </div>
       <div className={css.foot}>

@@ -44,21 +44,22 @@ export type ApprovalInboxProps =
 interface QueueRow {
   readonly approval: PendingApproval
   readonly facts: ApprovalFacts
+  /** Name of the Session that owns the request. */
+  readonly sessionTitle: string
 }
 
 /**
  * Answer one queued request.
  *
  * Losing a settlement race is expected because the Session's own composer can
- * answer at the same time: the losing surface only clears its local step, and
- * the pending snapshot drops the row.
+ * answer at the same time: the pending snapshot drops the row on every surface.
+ * A rejected settlement leaves the row in place, so the reader can decide again.
  * @param approval - request to settle.
  * @param outcome - the user's decision.
- * @param clear - drops the local second-step state of this queue.
  */
-function settle(approval: PendingApproval, outcome: ApprovalDecision, clear: () => void): void {
+function settle(approval: PendingApproval, outcome: ApprovalDecision): void {
   if (!approval.answerable) return
-  void approval.answer(outcome).catch(() => { clear() })
+  void approval.answer(outcome).catch(() => undefined)
 }
 
 /**
@@ -89,42 +90,49 @@ function useFootClearance(): number | undefined {
 
 /**
  * Render the pending-approval count pill and its queue drawer.
- * @param props - approval copy and the pending-interaction hook.
+ *
+ * Every row names its own Session: the queue spans Sessions, so with several
+ * waiting the tool and the action alone do not say where a decision lands. The
+ * name comes from the Session list, not from the request, so a rename follows.
+ * @param props - approval copy, the pending-interaction hook, and the Session list.
  * @returns the pill and, while open, the drawer; nothing when no approval is pending.
  */
 export function ApprovalInbox(props: ApprovalInboxProps) {
-  const { t, usePending, resolveReason, resolveDetail } = props
+  const { t, usePending, useSessions, resolveReason, resolveDetail } = props
   const pending = usePending(map => map)
+  const listed = useSessions(state => state.byId)
   const rows = useMemo<readonly QueueRow[]>(
     () => [...pending.values()]
       .filter((value): value is PendingApproval => value instanceof PendingApproval)
       .map(approval => ({
         approval,
         facts: presentApproval(approval, resolveReason, t('escalation', { toolName: approval.toolName })),
+        sessionTitle: listed[approval.sessionId]?.displayTitle ?? t('inbox.untitledSession'),
       })),
-    [pending, resolveReason, t],
+    [pending, listed, resolveReason, t],
   )
   const clearance = useFootClearance()
   const [open, setOpen] = useState(false)
-  const [armed, setArmed] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
-  // Derived, not synchronized: a drained queue hides the drawer and its second step.
+  const [batchArmed, setBatchArmed] = useState(false)
+  // Derived, not synchronized: a drained queue hides the drawer.
   const showing = open && rows.length > 0
-  const confirming = armed !== null && rows.some(row => row.approval.key === armed) ? armed : null
+  const dangerCount = rows.filter(row => row.facts.danger).length
+  // Derived, not synchronized: closing the drawer or draining the queue drops the step.
+  const confirming = showing && batchArmed && dangerCount > 0
+  const close = (): void => { setBatchArmed(false); setOpen(false) }
   useEffect(() => {
     if (!showing) return
     const onKey = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape' || event.defaultPrevented) return
       event.preventDefault()
-      if (confirming !== null) setArmed(null)
-      else setOpen(false)
+      if (confirming) setBatchArmed(false)
+      else close()
     }
     document.addEventListener('keydown', onKey, true)
     return () => { document.removeEventListener('keydown', onKey, true) }
   }, [showing, confirming])
   if (rows.length === 0) return null
-  const danger = rows.some(row => row.facts.danger)
-  const clear = (): void => { setArmed(null) }
   return (
     <>
       <button
@@ -134,22 +142,25 @@ export function ApprovalInbox(props: ApprovalInboxProps) {
         style={clearance === undefined ? undefined : { bottom: clearance }}
         aria-expanded={showing}
         aria-label={t('inbox.count', { count: rows.length })}
-        onClick={() => { setOpen(!showing) }}
+        onClick={() => { if (showing) close(); else setOpen(true) }}
       >
         <span className={css.pillCount} aria-hidden="true">{rows.length}</span>
         <span className={css.pillLabel}>{t('inbox.title')}</span>
       </button>
       {showing && (
         <>
-          <div className={css.scrim} onClick={() => { setOpen(false) }} />
+          <div className={css.scrim} onClick={close} />
           <aside className={css.drawer} data-approval-inbox="" role="dialog" aria-label={t('inbox.title')}>
             <div className={css.head}>
               <h2 className={css.heading}>{t('inbox.title')}</h2>
               <span className={css.badge}>{rows.length}</span>
             </div>
             <div className={css.body}>
-              {rows.map(({ approval, facts }) => (
-                <div key={approval.key} className={confirming === approval.key ? `${css.item} ${css.itemArmed}` : css.item}>
+              {rows.map(({ approval, facts, sessionTitle }) => (
+                <div key={approval.key} className={css.item}>
+                  <div className={css.itemSession} data-approval-session="" title={sessionTitle}>
+                    {t('inbox.session', { title: sessionTitle })}
+                  </div>
                   <div className={css.itemHead}>
                     <span className={css.itemTool}>{approval.toolName}</span>
                     <Tag tone={facts.danger ? 'danger' : 'info'}>
@@ -181,57 +192,61 @@ export function ApprovalInbox(props: ApprovalInboxProps) {
                       </>
                     )
                   })()}
-                  {confirming === approval.key && (
-                    <p className={css.warn}>{t('peek.confirm', { mode: facts.mode })}</p>
-                  )}
                   <div className={css.itemActions}>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        if (confirming === approval.key) clear()
-                        else settle(approval, 'rejected', clear)
-                      }}
-                    >
-                      {confirming === approval.key ? t('peek.cancel') : t('reject')}
+                    <Button variant="outline" onClick={() => { settle(approval, 'rejected') }}>
+                      {t('reject')}
                     </Button>
-                    <Button
-                      variant="primary"
-                      onClick={() => {
-                        if (confirming !== approval.key && facts.danger) {
-                          setArmed(approval.key)
-                          return
-                        }
-                        settle(approval, 'allowed-once', clear)
-                      }}
-                    >
-                      {confirming === approval.key
-                        ? t('peek.confirmAllow')
-                        : facts.danger ? t('allowOnce') : t('allow')}
+                    <Button variant="primary" onClick={() => { settle(approval, 'allowed-once') }}>
+                      {facts.danger ? t('allowOnce') : t('allow')}
                     </Button>
                   </div>
                 </div>
               ))}
             </div>
             <div className={css.foot}>
-              <span className={css.note}>{danger ? t('inbox.needsReview') : ''}</span>
+              {confirming && (
+                <p className={css.warn} data-approval-batch-confirm="">
+                  {t('inbox.confirmAll', { count: dangerCount })}
+                </p>
+              )}
+              <span className={css.note}>{dangerCount > 0 && !confirming ? t('inbox.needsReview') : ''}</span>
               <span className={css.spacer} />
-              <Button
-                variant="outline"
-                onClick={() => {
-                  for (const { approval } of rows) settle(approval, 'rejected', clear)
-                }}
-              >
-                {t('inbox.denyAll')}
-              </Button>
-              <Button
-                variant="primary"
-                disabled={danger}
-                onClick={() => {
-                  for (const { approval } of rows) settle(approval, 'allowed-once', clear)
-                }}
-              >
-                {t('inbox.allowAll')}
-              </Button>
+              {confirming ? (
+                <>
+                  <Button variant="outline" onClick={() => { setBatchArmed(false) }}>
+                    {t('inbox.cancel')}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      setBatchArmed(false)
+                      for (const { approval } of rows) settle(approval, 'allowed-once')
+                    }}
+                  >
+                    {t('inbox.confirmAllowAll')}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      for (const { approval } of rows) settle(approval, 'rejected')
+                    }}
+                  >
+                    {t('inbox.denyAll')}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      if (dangerCount > 0) { setBatchArmed(true); return }
+                      for (const { approval } of rows) settle(approval, 'allowed-once')
+                    }}
+                  >
+                    {t('inbox.allowAll')}
+                  </Button>
+                </>
+              )}
             </div>
           </aside>
         </>

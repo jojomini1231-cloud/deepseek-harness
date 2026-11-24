@@ -133,8 +133,16 @@
   background: var(--dsw-specific-input-major);
 }
 
-.itemArmed {
-  border-color: var(--dsw-alias-state-error-secondary);
+/* The queue spans Sessions, so each card names the Session the decision lands in
+ * before naming the tool that asked. */
+.itemSession {
+  overflow: hidden;
+  margin-bottom: 2px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .itemHead {
@@ -181,17 +189,6 @@
   font-size: 11px;
 }
 
-.warn {
-  margin: 10px 0 0;
-  padding: 8px 10px;
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-state-warn-tertiary);
-  box-shadow: inset 0 0 0 1px var(--dsw-alias-state-error-secondary);
-  color: var(--dsw-alias-label-primary);
-  font-size: 11.5px;
-  line-height: 18px;
-}
-
 .disclose {
   align-self: flex-start;
   margin-top: 8px;
@@ -229,6 +226,7 @@
 
 .foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   flex: none;
@@ -236,8 +234,26 @@
   border-top: 0.5px solid var(--dsw-alias-border-l2);
 }
 
+/* The batch grant of unrestricted access asks once, above the buttons. */
+.warn {
+  flex: 1 0 100%;
+  margin: 0 0 2px;
+  padding: 8px 10px;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-state-warn-tertiary);
+  box-shadow: inset 0 0 0 1px var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-label-primary);
+  font-size: 11.5px;
+  line-height: 18px;
+}
+
 .note {
+  min-width: 0;
   color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
   line-height: 15px;
+}
+
+.spacer {
+  flex: 1;
 }

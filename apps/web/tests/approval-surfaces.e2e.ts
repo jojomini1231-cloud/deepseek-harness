@@ -71,12 +71,15 @@ describe.skipIf(MODE === 'record')('web e2e: approval answer surfaces', () => {
     await pill.waitFor({ timeout: 15_000 })
     expect(await pill.getAttribute('aria-label')).toBe('1 awaiting decision')
 
-    // The queue lists the same request and may grant it in one step: the ask is
-    // an ordinary write, not an unrestricted one.
+    // The queue lists the same request and grants it in one click.
     await pill.click()
     const panel = page.locator('[data-approval-inbox]')
     await panel.waitFor({ timeout: 5_000 })
     expect(await panel.innerText()).toContain(ACTION)
+    // The queue spans Sessions, so the card names the one the decision lands in.
+    const sessionLine = panel.locator('[data-approval-session]')
+    expect(await sessionLine.count()).toBe(1)
+    expect(await sessionLine.innerText()).toContain('Write a file named notes.txt')
     expect(await panel.getByRole('button', { name: 'Allow all' }).isDisabled()).toBe(false)
     await page.keyboard.press('Escape')
     await panel.waitFor({ state: 'detached', timeout: 5_000 })
