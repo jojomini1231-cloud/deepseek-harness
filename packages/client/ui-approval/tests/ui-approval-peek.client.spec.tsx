@@ -411,4 +411,17 @@ describe('ApprovalInbox', () => {
     fireEvent.click(backdrop as Element)
     expect(screen.queryByRole('dialog', { name: 'Waiting for approval' })).toBeNull()
   })
+
+  it('leaves the next request behind the pill after the queue drains', () => {
+    const view = render(<ApprovalInbox {...inboxProps([write()])} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '1 waiting' }))
+    expect(screen.getByRole('dialog', { name: 'Waiting for approval' })).toBeTruthy()
+
+    view.rerender(<ApprovalInbox {...inboxProps([])} />)
+    view.rerender(<ApprovalInbox {...inboxProps([write('s2')])} />)
+
+    expect(screen.queryByRole('dialog', { name: 'Waiting for approval' })).toBeNull()
+    expect(screen.getByRole('button', { name: '1 waiting' })).toBeTruthy()
+  })
 })

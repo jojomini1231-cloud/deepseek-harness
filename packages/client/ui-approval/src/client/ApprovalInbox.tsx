@@ -132,7 +132,14 @@ export function ApprovalInbox(props: ApprovalInboxProps) {
     document.addEventListener('keydown', onKey, true)
     return () => { document.removeEventListener('keydown', onKey, true) }
   }, [showing, confirming])
-  if (rows.length === 0) return null
+  // A drained queue closes the drawer, so the next request waits behind the pill.
+  const drained = rows.length === 0
+  useEffect(() => {
+    if (!drained) return
+    setBatchArmed(false)
+    setOpen(false)
+  }, [drained])
+  if (drained) return null
   return (
     <>
       <button

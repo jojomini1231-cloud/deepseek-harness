@@ -71,6 +71,9 @@ describe.skipIf(MODE === 'record')('web e2e: approval answer surfaces', () => {
     await pill.waitFor({ timeout: 15_000 })
     expect(await pill.getAttribute('aria-label')).toBe('1 awaiting decision')
 
+    // A new request waits behind the pill instead of opening the drawer itself.
+    expect(await page.locator('[data-approval-inbox]').count()).toBe(0)
+
     // The queue lists the same request and grants it in one click.
     await pill.click()
     const panel = page.locator('[data-approval-inbox]')
